@@ -15,9 +15,7 @@ from tqdm import tqdm
 from transformers import (AutoModelForCausalLM, AutoTokenizer,
                           PreTrainedTokenizerBase)
 
-from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
-
-
+from vllm.layers.quantization import QUANTIZATION_METHODS
 
 
 def sample_requests(
@@ -132,7 +130,6 @@ def run_vllm(
     llm.generate(prompts, sampling_params, use_tqdm=True)
     end = time.perf_counter()
     return end - start
-
 
 
 def main(args):
