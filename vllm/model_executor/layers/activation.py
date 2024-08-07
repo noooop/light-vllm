@@ -6,8 +6,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from vllm.distributed import (divide, get_tensor_model_parallel_rank,
-                              get_tensor_model_parallel_world_size)
 from vllm.model_executor.custom_op import CustomOp
 from vllm.model_executor.layers.quantization import QuantizationConfig
 from vllm.model_executor.utils import set_weight_attrs
@@ -30,15 +28,6 @@ class SiluAndMul(CustomOp):
 
     def forward_cuda(self, x: torch.Tensor) -> torch.Tensor:
         from vllm import _custom_ops as ops
-
-        d = x.shape[-1] // 2
-        output_shape = (x.shape[:-1] + (d, ))
-        out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
-        ops.silu_and_mul(out, x)
-        return out
-
-    def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
-        from vllm._ipex_ops import ipex_ops as ops
 
         d = x.shape[-1] // 2
         output_shape = (x.shape[:-1] + (d, ))
@@ -80,18 +69,6 @@ class GeluAndMul(CustomOp):
             ops.gelu_tanh_and_mul(out, x)
         return out
 
-    def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
-        from vllm._ipex_ops import ipex_ops as ops
-
-        d = x.shape[-1] // 2
-        output_shape = (x.shape[:-1] + (d, ))
-        out = torch.empty(output_shape, dtype=x.dtype, device=x.device)
-        if self.approximate == "none":
-            ops.gelu_and_mul(out, x)
-        elif self.approximate == "tanh":
-            ops.gelu_tanh_and_mul(out, x)
-        return out
-
     def extra_repr(self) -> str:
         return f'approximate={repr(self.approximate)}'
 
@@ -106,13 +83,6 @@ class NewGELU(CustomOp):
 
     def forward_cuda(self, x: torch.Tensor) -> torch.Tensor:
         from vllm import _custom_ops as ops
-
-        out = torch.empty_like(x)
-        ops.gelu_new(out, x)
-        return out
-
-    def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
-        from vllm._ipex_ops import ipex_ops as ops
 
         out = torch.empty_like(x)
         ops.gelu_new(out, x)
@@ -155,9 +125,6 @@ class QuickGELU(CustomOp):
         ops.gelu_quick(out, x)
         return out
 
-    # TODO implement forward_xpu for QuickGELU
-    # def forward_xpu(self, x: torch.Tensor) -> torch.Tensor:
-
 
 class ReLUSquaredActivation(CustomOp):
     """
@@ -182,18 +149,13 @@ class ScaledActivation(nn.Module):
         self,
         act_module: nn.Module,
         intermediate_size: int,
-        input_is_parallel: bool = True,
+
         params_dtype: Optional[torch.dtype] = None,
     ):
         super().__init__()
         self.act = act_module
-        self.input_is_parallel = input_is_parallel
-        if input_is_parallel:
-            tp_size = get_tensor_model_parallel_world_size()
-            intermediate_size_per_partition = divide(intermediate_size,
-                                                     tp_size)
-        else:
-            intermediate_size_per_partition = intermediate_size
+
+        intermediate_size_per_partition = intermediate_size
         if params_dtype is None:
             params_dtype = torch.get_default_dtype()
         self.scales = nn.Parameter(
@@ -205,11 +167,6 @@ class ScaledActivation(nn.Module):
 
     def weight_loader(self, param: nn.Parameter, loaded_weight: torch.Tensor):
         param_data = param.data
-        if self.input_is_parallel:
-            tp_rank = get_tensor_model_parallel_rank()
-            shard_size = param_data.shape[0]
-            start_idx = tp_rank * shard_size
-            loaded_weight = loaded_weight.narrow(0, start_idx, shard_size)
         assert param_data.shape == loaded_weight.shape
         param_data.copy_(loaded_weight)
 

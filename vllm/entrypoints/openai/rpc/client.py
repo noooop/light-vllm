@@ -12,9 +12,7 @@ from vllm.entrypoints.openai.rpc import (RPC_REQUEST_TYPE,
                                          VLLM_RPC_SUCCESS_STR, RPCAbortRequest,
                                          RPCGenerateRequest, RPCUtilityRequest)
 from vllm.inputs import PromptInputs
-from vllm.lora.request import LoRARequest
 from vllm.outputs import EmbeddingRequestOutput, RequestOutput
-from vllm.prompt_adapter.request import PromptAdapterRequest
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 
@@ -100,8 +98,8 @@ class AsyncEngineRPCClient:
 
         return response
 
-    async def get_tokenizer(self, lora_request: LoRARequest):
-        return await self.tokenizer.get_lora_tokenizer_async(lora_request)
+    async def get_tokenizer(self):
+        return await self.tokenizer.get_lora_tokenizer_async()
 
     async def get_decoding_config(self) -> DecodingConfig:
         return self.decoding_config
@@ -187,9 +185,7 @@ class AsyncEngineRPCClient:
         inputs: PromptInputs,
         sampling_params: SamplingParams,
         request_id: str,
-        lora_request: Optional[LoRARequest] = None,
         trace_headers: Optional[Mapping[str, str]] = None,
-        prompt_adapter_request: Optional[PromptAdapterRequest] = None
     ) -> AsyncIterator[RequestOutput]:
         """Send an RPCGenerateRequest to the RPCServer and stream responses."""
 
@@ -202,9 +198,7 @@ class AsyncEngineRPCClient:
                         inputs=inputs,
                         sampling_params=sampling_params,
                         request_id=request_id,
-                        lora_request=lora_request,
-                        trace_headers=trace_headers,
-                        prompt_adapter_request=prompt_adapter_request))
+                        trace_headers=trace_headers))
             ])
 
             # Stream back the results from the RPC Server.

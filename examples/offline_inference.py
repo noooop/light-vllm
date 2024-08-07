@@ -1,3 +1,7 @@
+import os
+
+os.environ["VLLM_USE_MODELSCOPE"] = "True"
+
 from vllm import LLM, SamplingParams
 
 # Sample prompts.
@@ -11,7 +15,7 @@ prompts = [
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 
 # Create an LLM.
-llm = LLM(model="facebook/opt-125m")
+llm = LLM(model="Qwen/Qwen2-7B-Instruct")
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.
 outputs = llm.generate(prompts, sampling_params)

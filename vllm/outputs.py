@@ -2,7 +2,6 @@ import time
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-from vllm.lora.request import LoRARequest
 from vllm.sequence import (PromptLogprobs, RequestMetrics, SampleLogprobs,
                            SequenceGroup, SequenceStatus)
 
@@ -33,7 +32,6 @@ class CompletionOutput:
     logprobs: Optional[SampleLogprobs]
     finish_reason: Optional[str] = None
     stop_reason: Union[int, str, None] = None
-    lora_request: Optional[LoRARequest] = None
 
     def finished(self) -> bool:
         return self.finish_reason is not None
@@ -75,7 +73,6 @@ class RequestOutput:
         outputs: The output sequences of the request.
         finished: Whether the whole request is finished.
         metrics: Metrics associated with the request.
-        lora_request: The LoRA request that was used to generate the output.
     """
 
     def __init__(
@@ -87,7 +84,6 @@ class RequestOutput:
         outputs: List[CompletionOutput],
         finished: bool,
         metrics: Optional[RequestMetrics] = None,
-        lora_request: Optional[LoRARequest] = None,
     ) -> None:
         self.request_id = request_id
         self.prompt = prompt
@@ -96,7 +92,6 @@ class RequestOutput:
         self.outputs = outputs
         self.finished = finished
         self.metrics = metrics
-        self.lora_request = lora_request
 
     @classmethod
     def from_seq_group(cls, seq_group: SequenceGroup) -> "RequestOutput":
@@ -147,8 +142,7 @@ class RequestOutput:
                    prompt_logprobs,
                    outputs,
                    finished,
-                   seq_group.metrics,
-                   lora_request=seq_group.lora_request)
+                   seq_group.metrics)
 
     def __repr__(self) -> str:
         return (f"RequestOutput(request_id={self.request_id}, "
@@ -157,8 +151,7 @@ class RequestOutput:
                 f"prompt_logprobs={self.prompt_logprobs}, "
                 f"outputs={self.outputs}, "
                 f"finished={self.finished}, "
-                f"metrics={self.metrics}, "
-                f"lora_request={self.lora_request})")
+                f"metrics={self.metrics}, ")
 
 
 class EmbeddingRequestOutput:

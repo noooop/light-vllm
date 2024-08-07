@@ -6,9 +6,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 
 import torch
 
-from vllm.distributed import broadcast_tensor_dict, get_pp_group, get_tp_group
 from vllm.logger import init_logger
-from vllm.lora.request import LoRARequest
 from vllm.platforms import current_platform
 from vllm.sequence import (ExecuteModelRequest, IntermediateTensors,
                            SamplerOutput)
@@ -80,41 +78,6 @@ class WorkerBase(ABC):
         """
         raise NotImplementedError
 
-    @abstractmethod
-    def add_lora(self, lora_request: LoRARequest) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def remove_lora(self, lora_id: int) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def pin_lora(self, lora_id: int) -> bool:
-        raise NotImplementedError
-
-    @abstractmethod
-    def list_loras(self) -> Set[int]:
-        raise NotImplementedError
-
-
-class LoraNotSupportedWorkerBase(WorkerBase):
-    """Partial implementation of WorkerBase that raises exceptions when LoRA
-    methods are invoked.
-    """
-
-    def add_lora(self, lora_request: LoRARequest) -> bool:
-        raise ValueError(f"{type(self)} does not support LoRA")
-
-    def remove_lora(self, lora_id: int) -> bool:
-        raise ValueError(f"{type(self)} does not support LoRA")
-
-    def pin_lora(self, lora_id: int) -> bool:
-        return ValueError(
-            f"{type(self)} does not support LoRA")  # type: ignore
-
-    def list_loras(self) -> Set[int]:
-        raise ValueError(f"{type(self)} does not support LoRA")
-
 
 @dataclasses.dataclass(frozen=True)
 class WorkerInput:
@@ -175,17 +138,6 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
     @property
     @abstractmethod
-    def do_metadata_broadcast(self) -> bool:
-        """
-        Used by the default `execute_model` to check whether broadcast is
-        needed to transfer request inputs from the driver worker to other
-        workers in the TP group. If WorkerBase subclass only supports
-        single-worker execution, then this method should return False.
-        """
-        raise NotImplementedError
-
-    @property
-    @abstractmethod
     def kv_cache(self) -> Optional[List[List[torch.Tensor]]]:
         """
         Gets the list of kv caches to pass to the worker's model runner. Each
@@ -219,44 +171,18 @@ class LocalOrDistributedWorkerBase(WorkerBase):
     ) -> Optional[List[SamplerOutput]]:
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
-        if self.is_driver_worker:
-            if execute_model_req is None:
-                if self.do_metadata_broadcast:
-                    # This signals that there's no more requests to process for
-                    # now. All workers are running infinite loop with
-                    # broadcast_tensor_dict, and it stops the loop when the
-                    # driver broadcasts an empty input. Send an empty input to
-                    # notify all other workers to stop their execution loop.
-                    broadcast_tensor_dict({}, src=0)
-                return None
 
-            worker_input: WorkerInput = self.prepare_worker_input(
-                execute_model_req=execute_model_req)
-            model_input: ModelRunnerInputBase = (
-                self.model_runner.prepare_model_input(
-                    execute_model_req.seq_group_metadata_list,
-                    execute_model_req.virtual_engine,
-                    execute_model_req.finished_requests_ids))
-            num_steps = execute_model_req.num_steps
+        if execute_model_req is None:
+            return None
 
-            if self.do_metadata_broadcast:
-                broadcast_data = worker_input.as_broadcastable_tensor_dict()
-                broadcast_data.update(
-                    model_input.as_broadcastable_tensor_dict())
-                broadcast_data["num_steps"] = num_steps
-                broadcast_tensor_dict(broadcast_data, src=0)
-        else:
-            assert self.do_metadata_broadcast
-            broadcast_data = broadcast_tensor_dict(src=0)
-            if not broadcast_data:
-                return None
-
-            num_steps = broadcast_data.pop("num_steps")
-            worker_input = WorkerInput.from_broadcasted_tensor_dict(
-                broadcast_data)
-            model_input = (
-                self.model_runner.
-                make_model_input_from_broadcasted_tensor_dict(broadcast_data))
+        worker_input: WorkerInput = self.prepare_worker_input(
+            execute_model_req=execute_model_req)
+        model_input: ModelRunnerInputBase = (
+            self.model_runner.prepare_model_input(
+                execute_model_req.seq_group_metadata_list,
+                execute_model_req.virtual_engine,
+                execute_model_req.finished_requests_ids))
+        num_steps = execute_model_req.num_steps
 
         self.execute_worker(worker_input)
 
@@ -265,23 +191,12 @@ class LocalOrDistributedWorkerBase(WorkerBase):
             return []
 
         intermediate_tensors = None
-        if not get_pp_group().is_first_rank:
-            intermediate_tensors = IntermediateTensors(
-                get_pp_group().recv_tensor_dict(
-                    all_gather_group=get_tp_group()))
 
         output = self.model_runner.execute_model(
             model_input, self.kv_cache[worker_input.virtual_engine]
             if self.kv_cache is not None else None, intermediate_tensors,
             num_steps)
 
-        if not get_pp_group().is_last_rank:
-            # output is IntermediateTensors
-            get_pp_group().send_tensor_dict(output.tensors,
-                                            all_gather_group=get_tp_group())
-            return [None]
-
-        # output is List[SamplerOutput]
         return output
 
     def _execute_model_spmd(

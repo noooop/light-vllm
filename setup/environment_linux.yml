@@ -1,0 +1,15 @@
+name: light_vllm_v0.1
+channels:
+  - conda-forge
+  - pytorch
+  - nvidia
+  - defaults
+dependencies:
+  - python=3.11
+  - anaconda
+  - pip
+  - pip:
+      - torch==2.4.0
+      - torchvision==0.19
+      - transformers==4.43.2
+      - modelscope==1.17.0

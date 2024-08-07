@@ -16,10 +16,9 @@ class Detokenizer:
     def __init__(self, tokenizer_group: BaseTokenizerGroup):
         self.tokenizer_group = tokenizer_group
 
-    def get_tokenizer_for_seq(self,
-                              sequence: Sequence) -> "PreTrainedTokenizer":
+    def get_tokenizer(self) -> "PreTrainedTokenizer":
         """Returns the HF tokenizer to use for a given sequence."""
-        return self.tokenizer_group.get_lora_tokenizer(sequence.lora_request)
+        return self.tokenizer_group.get_tokenizer()
 
     def decode_prompt_logprobs_inplace(self, seq_group: SequenceGroup,
                                        prompt_logprobs: List[Optional[Dict[
@@ -44,7 +43,7 @@ class Detokenizer:
         # Only prompt, without the generated token.
         all_token_ids = seq.get_token_ids()
         prompt_token_ids = all_token_ids[:-1]
-        tokenizer = self.get_tokenizer_for_seq(seq)
+        tokenizer = self.get_tokenizer()
         prefix_offset = 0
         read_offset = 0
         next_iter_prefix_offset = 0
@@ -109,7 +108,7 @@ class Detokenizer:
         """
         all_input_ids = seq.get_token_ids()
         token_id_generated_this_iteration = all_input_ids[-1]
-        tokenizer = self.get_tokenizer_for_seq(seq)
+        tokenizer = self.get_tokenizer()
 
         # Convert prompt token IDs to tokens if necessary.
         # Do it here so that we don't have to repeat this

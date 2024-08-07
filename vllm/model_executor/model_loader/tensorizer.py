@@ -13,7 +13,7 @@ from torch import nn
 from transformers import PretrainedConfig
 
 import vllm.envs as envs
-from vllm.config import ModelConfig, ParallelConfig
+from vllm.config import ModelConfig
 from vllm.engine.arg_utils import EngineArgs
 from vllm.engine.llm_engine import LLMEngine
 from vllm.logger import init_logger
@@ -422,9 +422,6 @@ def serialize_vllm_model(
         encryption_params = EncryptionParams(key=key)
 
     output_file = tensorizer_args.tensorizer_uri
-    if tensorizer_config._is_sharded:
-        from vllm.distributed import get_tensor_model_parallel_rank
-        output_file = output_file % get_tensor_model_parallel_rank()
 
     with _write_stream(output_file, **tensorizer_args.stream_params) as stream:
         serializer = TensorSerializer(stream, encryption=encryption_params)

@@ -233,87 +233,16 @@ class cmake_build_ext(build_ext):
 
 def _is_cuda() -> bool:
     has_cuda = torch.version.cuda is not None
-    return (VLLM_TARGET_DEVICE == "cuda" and has_cuda
-            and not (_is_neuron() or _is_tpu()))
+    return (VLLM_TARGET_DEVICE == "cuda" and has_cuda)
 
-
-def _is_hip() -> bool:
-    return (VLLM_TARGET_DEVICE == "cuda"
-            or VLLM_TARGET_DEVICE == "rocm") and torch.version.hip is not None
-
-
-def _is_neuron() -> bool:
-    torch_neuronx_installed = True
-    try:
-        subprocess.run(["neuron-ls"], capture_output=True, check=True)
-    except (FileNotFoundError, PermissionError, subprocess.CalledProcessError):
-        torch_neuronx_installed = False
-    return torch_neuronx_installed or VLLM_TARGET_DEVICE == "neuron"
-
-
-def _is_tpu() -> bool:
-    return VLLM_TARGET_DEVICE == "tpu"
-
-
-def _is_cpu() -> bool:
-    return VLLM_TARGET_DEVICE == "cpu"
-
-
-def _is_openvino() -> bool:
-    return VLLM_TARGET_DEVICE == "openvino"
-
-
-def _is_xpu() -> bool:
-    return VLLM_TARGET_DEVICE == "xpu"
 
 
 def _build_custom_ops() -> bool:
-    return _is_cuda() or _is_hip() or _is_cpu()
+    return _is_cuda()
 
 
 def _build_core_ext() -> bool:
-    return not _is_neuron() and not _is_tpu()
-
-
-def get_hipcc_rocm_version():
-    # Run the hipcc --version command
-    result = subprocess.run(['hipcc', '--version'],
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.STDOUT,
-                            text=True)
-
-    # Check if the command was executed successfully
-    if result.returncode != 0:
-        print("Error running 'hipcc --version'")
-        return None
-
-    # Extract the version using a regular expression
-    match = re.search(r'HIP version: (\S+)', result.stdout)
-    if match:
-        # Return the version string
-        return match.group(1)
-    else:
-        print("Could not find HIP version in the output")
-        return None
-
-
-def get_neuronxcc_version():
-    import sysconfig
-    site_dir = sysconfig.get_paths()["purelib"]
-    version_file = os.path.join(site_dir, "neuronxcc", "version",
-                                "__init__.py")
-
-    # Check if the command was executed successfully
-    with open(version_file, "rt") as fp:
-        content = fp.read()
-
-    # Extract the version using a regular expression
-    match = re.search(r"__version__ = '(\S+)'", content)
-    if match:
-        # Return the version string
-        return match.group(1)
-    else:
-        raise RuntimeError("Could not find HIP version in the output")
+    return True
 
 
 def get_nvcc_cuda_version() -> Version:
@@ -355,26 +284,6 @@ def get_vllm_version() -> str:
         if cuda_version != MAIN_CUDA_VERSION:
             cuda_version_str = cuda_version.replace(".", "")[:3]
             version += f"+cu{cuda_version_str}"
-    elif _is_hip():
-        # Get the HIP version
-        hipcc_version = get_hipcc_rocm_version()
-        if hipcc_version != MAIN_CUDA_VERSION:
-            rocm_version_str = hipcc_version.replace(".", "")[:3]
-            version += f"+rocm{rocm_version_str}"
-    elif _is_neuron():
-        # Get the Neuron version
-        neuron_version = str(get_neuronxcc_version())
-        if neuron_version != MAIN_CUDA_VERSION:
-            neuron_version_str = neuron_version.replace(".", "")[:3]
-            version += f"+neuron{neuron_version_str}"
-    elif _is_openvino():
-        version += "+openvino"
-    elif _is_tpu():
-        version += "+tpu"
-    elif _is_cpu():
-        version += "+cpu"
-    elif _is_xpu():
-        version += "+xpu"
     else:
         raise RuntimeError("Unknown runtime environment")
 
@@ -405,7 +314,7 @@ def get_requirements() -> List[str]:
         return resolved_requirements
 
     if _is_cuda():
-        requirements = _read_requirements("requirements-cuda.txt")
+        requirements = _read_requirements("requirements.txt")
         cuda_major, cuda_minor = torch.version.cuda.split(".")
         modified_requirements = []
         for req in requirements:
@@ -416,18 +325,6 @@ def get_requirements() -> List[str]:
                 continue
             modified_requirements.append(req)
         requirements = modified_requirements
-    elif _is_hip():
-        requirements = _read_requirements("requirements-rocm.txt")
-    elif _is_neuron():
-        requirements = _read_requirements("requirements-neuron.txt")
-    elif _is_openvino():
-        requirements = _read_requirements("requirements-openvino.txt")
-    elif _is_tpu():
-        requirements = _read_requirements("requirements-tpu.txt")
-    elif _is_cpu():
-        requirements = _read_requirements("requirements-cpu.txt")
-    elif _is_xpu():
-        requirements = _read_requirements("requirements-xpu.txt")
     else:
         raise ValueError(
             "Unsupported platform, please use CUDA, ROCm, Neuron, "
@@ -440,7 +337,7 @@ ext_modules = []
 if _build_core_ext():
     ext_modules.append(CMakeExtension(name="vllm._core_C"))
 
-if _is_cuda() or _is_hip():
+if _is_cuda():
     ext_modules.append(CMakeExtension(name="vllm._moe_C"))
 
 if _build_custom_ops():

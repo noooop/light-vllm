@@ -24,11 +24,8 @@ from vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
 # yapf: enable
 from vllm.inputs import parse_and_batch_prompt
 from vllm.logger import init_logger
-from vllm.lora.request import LoRARequest
-from vllm.model_executor.guided_decoding import (
-    get_guided_decoding_logits_processor)
+
 from vllm.pooling_params import PoolingParams
-from vllm.prompt_adapter.request import PromptAdapterRequest
 from vllm.sampling_params import LogitsProcessor, SamplingParams
 from vllm.sequence import Logprob
 from vllm.transformers_utils.tokenizer_group import AnyTokenizer
@@ -77,31 +74,6 @@ class OpenAIServing:
         self.max_model_len = model_config.max_model_len
 
         self.served_model_names = served_model_names
-
-        self.lora_requests = []
-        if lora_modules is not None:
-            self.lora_requests = [
-                LoRARequest(
-                    lora_name=lora.name,
-                    lora_int_id=i,
-                    lora_path=lora.path,
-                ) for i, lora in enumerate(lora_modules, start=1)
-            ]
-
-        self.prompt_adapter_requests = []
-        if prompt_adapters is not None:
-            for i, prompt_adapter in enumerate(prompt_adapters, start=1):
-                with pathlib.Path(prompt_adapter.local_path,
-                                  "adapter_config.json").open() as f:
-                    adapter_config = json.load(f)
-                    num_virtual_tokens = adapter_config["num_virtual_tokens"]
-                self.prompt_adapter_requests.append(
-                    PromptAdapterRequest(
-                        prompt_adapter_name=prompt_adapter.name,
-                        prompt_adapter_id=i,
-                        prompt_adapter_local_path=prompt_adapter.local_path,
-                        prompt_adapter_num_virtual_tokens=num_virtual_tokens))
-
         self.request_logger = request_logger
         self.return_tokens_as_token_ids = return_tokens_as_token_ids
 
@@ -152,15 +124,6 @@ class OpenAIServing:
         })
         return json_str
 
-    async def _guided_decode_logits_processor(
-            self, request: Union[ChatCompletionRequest, CompletionRequest],
-            tokenizer: AnyTokenizer) -> Optional[LogitsProcessor]:
-        decoding_config = await self.async_engine_client.get_decoding_config()
-        guided_decoding_backend = request.guided_decoding_backend \
-            or decoding_config.guided_decoding_backend
-        return await get_guided_decoding_logits_processor(
-            guided_decoding_backend, request, tokenizer)
-
     async def _check_model(
         self,
         request: AnyRequest,
@@ -181,16 +144,9 @@ class OpenAIServing:
 
     def _maybe_get_adapters(
         self, request: AnyRequest
-    ) -> Union[Tuple[None, None], Tuple[LoRARequest, None], Tuple[
-            None, PromptAdapterRequest]]:
+    ) -> Union[Tuple[None, None]]:
         if request.model in self.served_model_names:
             return None, None
-        for lora in self.lora_requests:
-            if request.model == lora.lora_name:
-                return lora, None
-        for prompt_adapter in self.prompt_adapter_requests:
-            if request.model == prompt_adapter.prompt_adapter_name:
-                return None, prompt_adapter
         # if _check_model has been called earlier, this will be unreachable
         raise ValueError(f"The model `{request.model}` does not exist.")
 
@@ -367,8 +323,6 @@ class OpenAIServing:
         request_id: str,
         inputs: Union[str, List[int], TextTokensPrompt],
         params: Optional[Union[SamplingParams, PoolingParams]],
-        lora_request: Optional[LoRARequest],
-        prompt_adapter_request: Optional[PromptAdapterRequest],
     ) -> None:
         if self.request_logger is None:
             return
@@ -388,8 +342,6 @@ class OpenAIServing:
             prompt,
             prompt_token_ids,
             params=params,
-            lora_request=lora_request,
-            prompt_adapter_request=prompt_adapter_request,
         )
 
     @staticmethod

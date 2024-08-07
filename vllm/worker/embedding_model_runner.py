@@ -3,12 +3,10 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 
-from vllm.config import (CacheConfig, DeviceConfig, LoadConfig, LoRAConfig,
-                         ModelConfig, MultiModalConfig, ParallelConfig,
-                         PromptAdapterConfig, SchedulerConfig)
+from vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
+                         ModelConfig, SchedulerConfig)
 from vllm.logger import init_logger
 from vllm.model_executor.pooling_metadata import PoolingMetadata
-from vllm.multimodal import MultiModalInputs
 from vllm.pooling_params import PoolingParams
 from vllm.sequence import (IntermediateTensors, PoolerOutput, SequenceData,
                            SequenceGroupMetadata)
@@ -35,28 +33,20 @@ class EmbeddingModelRunner(
     def __init__(
         self,
         model_config: ModelConfig,
-        parallel_config: ParallelConfig,
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         cache_config: CacheConfig,
         load_config: LoadConfig,
-        lora_config: Optional[LoRAConfig],
         kv_cache_dtype: Optional[str] = "auto",
-        is_driver_worker: bool = False,
-        prompt_adapter_config: Optional[PromptAdapterConfig] = None,
-        multimodal_config: Optional[MultiModalConfig] = None,
+        is_driver_worker: bool = False
     ):
         super().__init__(model_config,
-                         parallel_config,
                          scheduler_config,
                          device_config,
                          cache_config,
                          load_config,
-                         lora_config=lora_config,
                          kv_cache_dtype=kv_cache_dtype,
-                         is_driver_worker=is_driver_worker,
-                         prompt_adapter_config=prompt_adapter_config,
-                         multimodal_config=multimodal_config)
+                         is_driver_worker=is_driver_worker)
 
     @torch.inference_mode()
     def execute_model(
@@ -69,19 +59,6 @@ class EmbeddingModelRunner(
         if num_steps > 1:
             raise ValueError(
                 "EmbeddingModelRunner does not support multi-step execution.")
-
-        if self.lora_config:
-            assert model_input.lora_requests is not None
-            assert model_input.lora_mapping is not None
-            self.set_active_loras(model_input.lora_requests,
-                                  model_input.lora_mapping)
-
-        if self.prompt_adapter_config:
-            assert model_input.prompt_adapter_requests is not None
-            assert model_input.prompt_adapter_mapping is not None
-            self.set_active_prompt_adapters(
-                model_input.prompt_adapter_requests,
-                model_input.prompt_adapter_mapping)
 
         # Currently cuda graph is only supported by the decode phase.
         assert model_input.attn_metadata is not None
@@ -96,7 +73,7 @@ class EmbeddingModelRunner(
         else:
             model_executable = self.model
 
-        num_layers = self.model_config.get_num_layers(self.parallel_config)
+        num_layers = self.model_config.get_num_layers()
         kv_caches = [None] * num_layers
 
         execute_model_kwargs = {
@@ -108,8 +85,6 @@ class EmbeddingModelRunner(
             kv_caches,
             "attn_metadata":
             model_input.attn_metadata,
-            **MultiModalInputs.as_kwargs(model_input.multi_modal_kwargs or {},
-                                         device=self.device),
         }
 
         hidden_states = model_executable(**execute_model_kwargs)

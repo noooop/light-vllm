@@ -11,16 +11,13 @@ from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
 
 import torch
 
-from vllm.lora.request import LoRARequest
+
 from vllm.pooling_params import PoolingParams
-from vllm.prompt_adapter.request import PromptAdapterRequest
+
 from vllm.sampling_params import SamplingParams
 
 if TYPE_CHECKING:
     from vllm.inputs import LLMInputs
-    from vllm.multimodal import MultiModalDataDict
-    from vllm.spec_decode.metrics import SpecDecodeWorkerMetrics
-
 
 @dataclass
 class Logprob:
@@ -260,15 +257,11 @@ class Sequence:
             inputs: "LLMInputs",
             block_size: int,
             eos_token_id: Optional[int] = None,
-            lora_request: Optional[LoRARequest] = None,
-            prompt_adapter_request: Optional[PromptAdapterRequest] = None
     ) -> None:
         self.seq_id = seq_id
         self.inputs = inputs
         self.block_size = block_size
         self.eos_token_id = eos_token_id
-        self.lora_request = lora_request
-        self.prompt_adapter_request = prompt_adapter_request
 
         self.data = SequenceData(self.prompt_token_ids)
         self.output_logprobs: SampleLogprobs = []
@@ -436,12 +429,10 @@ class SequenceGroup:
         seqs: List[Sequence],
         arrival_time: float,
         sampling_params: Optional[SamplingParams] = None,
-        lora_request: Optional[LoRARequest] = None,
         embeddings: Optional[List[float]] = None,
         pooling_params: Optional[PoolingParams] = None,
         encoder_seq: Optional[Sequence] = None,
         trace_headers: Optional[Mapping[str, str]] = None,
-        prompt_adapter_request: Optional[PromptAdapterRequest] = None,
     ) -> None:
         self.request_id = request_id
         self.seqs = seqs
@@ -452,11 +443,9 @@ class SequenceGroup:
                                       first_scheduled_time=None,
                                       first_token_time=None,
                                       time_in_queue=None)
-        self.lora_request = lora_request
         self.prompt_logprobs: Optional[PromptLogprobs] = None
         self.embeddings = embeddings
         self.pooling_params = pooling_params
-        self.prompt_adapter_request = prompt_adapter_request
         self.encoder_seq = encoder_seq
         self.trace_headers = trace_headers
 
@@ -662,12 +651,9 @@ class SequenceGroupMetadata:
         do_sample: bool = True,
         pooling_params: Optional[PoolingParams] = None,
         token_chunk_size: Optional[int] = None,
-        lora_request: Optional[LoRARequest] = None,
         computed_block_nums: Optional[List[int]] = None,
-        multi_modal_data: Optional["MultiModalDataDict"] = None,
         encoder_seq_data: Optional[SequenceData] = None,
         cross_block_table: Optional[List[int]] = None,
-        prompt_adapter_request: Optional[PromptAdapterRequest] = None,
     ) -> None:
         self.request_id = request_id
         self.is_prompt = is_prompt
@@ -675,10 +661,7 @@ class SequenceGroupMetadata:
         self.sampling_params = sampling_params
         self.block_tables = block_tables
         self.pooling_params = pooling_params
-        self.lora_request = lora_request
-        self.prompt_adapter_request = prompt_adapter_request
         self.computed_block_nums = computed_block_nums
-        self.multi_modal_data = multi_modal_data
         self.encoder_seq_data = encoder_seq_data
         self.cross_block_table = cross_block_table
         self._token_chunk_size = token_chunk_size
@@ -695,20 +678,6 @@ class SequenceGroupMetadata:
                 self._token_chunk_size = list(seq_data.values())[0].get_len()
             else:
                 self._token_chunk_size = 1
-
-    @property
-    def lora_int_id(self) -> int:
-        return self.lora_request.lora_int_id if self.lora_request else 0
-
-    @property
-    def prompt_adapter_id(self) -> int:
-        return self.prompt_adapter_request.prompt_adapter_id \
-                        if self.prompt_adapter_request else 0
-
-    @property
-    def prompt_adapter_num_virtual_tokens(self) -> int:
-        return self.prompt_adapter_request.prompt_adapter_num_virtual_tokens \
-                        if self.prompt_adapter_request else 0
 
     @property
     def token_chunk_size(self) -> int:

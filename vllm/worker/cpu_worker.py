@@ -278,10 +278,6 @@ class CPUWorker(LoraNotSupportedWorkerBase, LocalOrDistributedWorkerBase):
                 layer_cache.fill_(0)
 
     @property
-    def do_metadata_broadcast(self) -> bool:
-        return self.parallel_config.tensor_parallel_size > 1
-
-    @property
     def kv_cache(self) -> Optional[List[List[torch.Tensor]]]:
         return self.cpu_cache
 

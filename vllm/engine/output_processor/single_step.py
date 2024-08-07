@@ -96,8 +96,7 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             self.stop_checker.maybe_stop_sequence(
                 seq,
                 new_char_count,
-                sampling_params,
-                lora_req=seq_group.lora_request,
+                sampling_params
             )
             if seq.is_finished():
                 for scheduler in self.scheduler:
@@ -158,8 +157,7 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             self.stop_checker.maybe_stop_sequence(
                 seq,
                 new_char_count,
-                sampling_params,
-                lora_req=seq_group.lora_request,
+                sampling_params
             )
 
         # Non-beam search case

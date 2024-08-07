@@ -29,8 +29,7 @@ from torch import nn
 from transformers import Qwen2Config
 
 from vllm.attention import Attention, AttentionMetadata
-from vllm.config import CacheConfig, LoRAConfig
-from vllm.distributed import get_pp_group, get_tensor_model_parallel_world_size
+from vllm.config import CacheConfig
 from vllm.model_executor.layers.activation import SiluAndMul
 from vllm.model_executor.layers.layernorm import RMSNorm
 from vllm.model_executor.layers.linear import (MergedColumnParallelLinear,
@@ -48,7 +47,6 @@ from vllm.model_executor.model_loader.weight_utils import (
 from vllm.model_executor.sampling_metadata import SamplingMetadata
 from vllm.sequence import IntermediateTensors, SamplerOutput
 
-from .interfaces import SupportsLoRA
 from .utils import is_pp_missing_parameter, make_layers
 
 
@@ -95,7 +93,7 @@ class Qwen2Attention(nn.Module):
                  rope_scaling: Optional[Tuple] = None) -> None:
         super().__init__()
         self.hidden_size = hidden_size
-        tp_size = get_tensor_model_parallel_world_size()
+        tp_size = 1
         self.total_num_heads = num_heads
         assert self.total_num_heads % tp_size == 0
         self.num_heads = self.total_num_heads // tp_size
@@ -261,16 +259,12 @@ class Qwen2Model(nn.Module):
         intermediate_tensors: Optional[IntermediateTensors] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        if get_pp_group().is_first_rank:
-            if inputs_embeds is not None:
-                hidden_states = inputs_embeds
-            else:
-                hidden_states = self.embed_tokens(input_ids)
-            residual = None
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
         else:
-            assert intermediate_tensors is not None
-            hidden_states = intermediate_tensors["hidden_states"]
-            residual = intermediate_tensors["residual"]
+            hidden_states = self.embed_tokens(input_ids)
+        residual = None
+
         for i in range(self.start_layer, self.end_layer):
             layer = self.layers[i]
             hidden_states, residual = layer(
@@ -280,16 +274,12 @@ class Qwen2Model(nn.Module):
                 attn_metadata,
                 residual,
             )
-        if not get_pp_group().is_last_rank:
-            return IntermediateTensors({
-                "hidden_states": hidden_states,
-                "residual": residual
-            })
+
         hidden_states, _ = self.norm(hidden_states, residual)
         return hidden_states
 
 
-class Qwen2ForCausalLM(nn.Module, SupportsLoRA):
+class Qwen2ForCausalLM(nn.Module):
     packed_modules_mapping = {
         "qkv_proj": [
             "q_proj",
@@ -317,7 +307,6 @@ class Qwen2ForCausalLM(nn.Module, SupportsLoRA):
         config: Qwen2Config,
         cache_config: Optional[CacheConfig] = None,
         quant_config: Optional[QuantizationConfig] = None,
-        lora_config: Optional[LoRAConfig] = None,
     ) -> None:
         # TODO (@robertgshaw2): see if this can be moved out
         if (cache_config.sliding_window is not None
@@ -334,7 +323,6 @@ class Qwen2ForCausalLM(nn.Module, SupportsLoRA):
         super().__init__()
 
         self.config = config
-        self.lora_config = lora_config
 
         self.quant_config = quant_config
         self.model = Qwen2Model(config, cache_config, quant_config)

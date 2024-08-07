@@ -5,9 +5,6 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from vllm.distributed import (divide, get_tensor_model_parallel_rank,
-                              get_tensor_model_parallel_world_size,
-                              tensor_model_parallel_all_reduce)
 from vllm.model_executor.layers.linear import UnquantizedLinearMethod
 from vllm.model_executor.layers.quantization.base_config import (
     QuantizationConfig, QuantizeMethodBase)
@@ -35,7 +32,7 @@ def vocab_range_from_global_vocab_size(global_vocab_size: int,
                                        rank: int,
                                        world_size: int,
                                        offset: int = 0) -> Sequence[int]:
-    per_partition_vocab_size = divide(global_vocab_size, world_size)
+    per_partition_vocab_size = global_vocab_size
     return vocab_range_from_per_partition_vocab_size(per_partition_vocab_size,
                                                      rank,
                                                      offset=offset)
@@ -175,8 +172,8 @@ class VocabParallelEmbedding(torch.nn.Module):
         super().__init__()
 
         # Keep the input dimensions.
-        tp_rank = get_tensor_model_parallel_rank()
-        self.tp_size = get_tensor_model_parallel_world_size()
+        tp_rank = 0
+        self.tp_size = 1
         self.num_embeddings = num_embeddings
         self.padding_size = padding_size
         self.org_vocab_size = org_num_embeddings or num_embeddings
@@ -206,8 +203,7 @@ class VocabParallelEmbedding(torch.nn.Module):
             params_dtype = torch.get_default_dtype()
         # Divide the weight matrix along the vocaburaly dimension.
         self.num_added_embeddings = self.num_embeddings - self.org_vocab_size
-        self.num_embeddings_per_partition = divide(self.num_embeddings_padded,
-                                                   self.tp_size)
+        self.num_embeddings_per_partition = self.num_embeddings_padded
         assert (self.shard_indices.num_elements_padded ==
                 self.num_embeddings_per_partition)
         self.num_org_embeddings_per_partition = (
@@ -345,11 +341,9 @@ class VocabParallelEmbedding(torch.nn.Module):
             masked_input = input_
         # Get the embeddings.
         output_parallel = F.embedding(masked_input.long(), self.weight)
-        # Mask the output embedding.
-        if self.tp_size > 1:
-            output_parallel.masked_fill_(input_mask.unsqueeze(-1), 0)
+
         # Reduce across all the model parallel GPUs.
-        output = tensor_model_parallel_all_reduce(output_parallel)
+        output = output_parallel
         return output
 
     def extra_repr(self) -> str:

@@ -5,8 +5,6 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from vllm.distributed import (tensor_model_parallel_all_gather,
-                              tensor_model_parallel_gather)
 from vllm.model_executor.layers.vocab_parallel_embedding import (
     VocabParallelEmbedding)
 from vllm.model_executor.sampling_metadata import SamplingMetadata
@@ -80,15 +78,6 @@ class LogitsProcessor(nn.Module):
         logits = lm_head.linear_method.apply(lm_head,
                                              hidden_states,
                                              bias=embedding_bias)
-        if self.use_gather:
-            logits = tensor_model_parallel_gather(logits)
-        else:
-            # Gather is not supported for some devices such as TPUs.
-            # Use all-gather instead.
-            # NOTE(woosuk): Here, the outputs of every device should not be None
-            # because XLA requires strict SPMD among all devices. Every device
-            # should execute the same operations after gathering the logits.
-            logits = tensor_model_parallel_all_gather(logits)
         # Remove paddings in vocab (if any).
         if logits is not None:
             logits = logits[:, :self.org_vocab_size]

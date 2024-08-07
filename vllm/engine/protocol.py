@@ -6,10 +6,8 @@ from transformers import PreTrainedTokenizer
 from vllm.config import DecodingConfig, ModelConfig
 from vllm.core.scheduler import SchedulerOutputs
 from vllm.inputs.data import PromptInputs
-from vllm.lora.request import LoRARequest
 from vllm.outputs import EmbeddingRequestOutput, RequestOutput
 from vllm.pooling_params import PoolingParams
-from vllm.prompt_adapter.request import PromptAdapterRequest
 from vllm.sampling_params import SamplingParams
 from vllm.sequence import SamplerOutput
 
@@ -35,9 +33,7 @@ class AsyncEngineClient(Protocol):
         inputs: PromptInputs,
         sampling_params: SamplingParams,
         request_id: str,
-        lora_request: Optional[LoRARequest] = None,
-        trace_headers: Optional[Mapping[str, str]] = None,
-        prompt_adapter_request: Optional[PromptAdapterRequest] = None
+        trace_headers: Optional[Mapping[str, str]] = None
     ) -> AsyncIterator[RequestOutput]:
         """Generates outputs for a request"""
 
@@ -46,7 +42,6 @@ class AsyncEngineClient(Protocol):
         inputs: PromptInputs,
         pooling_params: PoolingParams,
         request_id: str,
-        lora_request: Optional[LoRARequest] = None,
         trace_headers: Optional[Mapping[str, str]] = None,
     ) -> AsyncIterator[EmbeddingRequestOutput]:
         """Generate outputs for a request from an embedding model."""
@@ -66,7 +61,6 @@ class AsyncEngineClient(Protocol):
 
     async def get_tokenizer(
         self,
-        lora_request: Optional[LoRARequest] = None,
     ) -> PreTrainedTokenizer:
         """Get the appropriate Tokenizer for the request"""
 
