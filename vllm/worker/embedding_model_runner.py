@@ -6,7 +6,7 @@ import torch
 from vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
                          ModelConfig, SchedulerConfig)
 from vllm.logger import init_logger
-from vllm.model_executor.pooling_metadata import PoolingMetadata
+from vllm.layers.pooling_metadata import PoolingMetadata
 from vllm.pooling_params import PoolingParams
 from vllm.sequence import (IntermediateTensors, PoolerOutput, SequenceData,
                            SequenceGroupMetadata)

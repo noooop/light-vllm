@@ -4,7 +4,7 @@ import time
 import warnings
 import weakref
 from dataclasses import dataclass
-from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple, Type,
+from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
                     TypeVar, Union)
 
 import numpy as np
@@ -24,16 +24,16 @@ except ImportError:
     FLASHINFER_WORKSPACE_BUFFER_SIZE = 0
 
 import vllm.envs as envs
-from vllm.attention import AttentionMetadata, get_attn_backend
+from vllm.layers.attention import AttentionMetadata, get_attn_backend
 from vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
                          ModelConfig, SchedulerConfig)
 from contextlib import contextmanager
 from vllm.inputs import INPUT_REGISTRY
 from vllm.logger import init_logger
-from vllm.model_executor import SamplingMetadata
-from vllm.model_executor.model_loader import get_model
-from vllm.model_executor.model_loader.tensorizer import TensorizerConfig
-from vllm.model_executor.models.utils import set_cpu_offload_max_bytes
+from vllm.layers.sampling_metadata import SamplingMetadata
+from vllm.models.loader import get_model
+from vllm.models.loader.tensorizer import TensorizerConfig
+from vllm.models.utils import set_cpu_offload_max_bytes
 from vllm.sampling_params import SamplingParams
 from vllm.sequence import (IntermediateTensors, SamplerOutput,
                            SequenceGroupMetadata)
@@ -48,7 +48,7 @@ from vllm.worker.model_runner_base import (
     _init_sampling_metadata_from_tensor_dict)
 
 if TYPE_CHECKING:
-    from vllm.attention.backends.abstract import AttentionBackend
+    from vllm.layers.attention.backends import AttentionBackend
 
 logger = init_logger(__name__)
 
@@ -590,7 +590,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         pattern: Optional[str] = None,
         max_size: Optional[int] = None,
     ) -> None:
-        from vllm.model_executor.model_loader.loader import ShardedStateLoader
+        from vllm.models.loader.loader import ShardedStateLoader
         ShardedStateLoader.save_model(
             self.model,
             path,
@@ -602,7 +602,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         self,
         tensorizer_config: TensorizerConfig,
     ) -> None:
-        from vllm.model_executor.model_loader.loader import TensorizerLoader
+        from vllm.models.loader.loader import TensorizerLoader
         TensorizerLoader.save_model(
             self.model,
             tensorizer_config=tensorizer_config,

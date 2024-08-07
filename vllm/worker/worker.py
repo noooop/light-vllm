@@ -8,8 +8,8 @@ import torch.distributed
 
 from vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
                          ModelConfig, SchedulerConfig)
-from vllm.model_executor import set_random_seed
-from vllm.model_executor.model_loader.tensorizer import TensorizerConfig
+from vllm.layers.utils import set_random_seed
+from vllm.models.loader.tensorizer import TensorizerConfig
 from vllm.platforms import current_platform
 from vllm.sequence import ExecuteModelRequest
 from vllm.worker.cache_engine import CacheEngine

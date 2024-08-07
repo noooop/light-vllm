@@ -4,7 +4,7 @@ from vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 from vllm.engine.llm_engine import LLMEngine
 from vllm.entrypoints.llm import LLM
 from vllm.inputs import PromptInputs, TextPrompt, TokensPrompt
-from vllm.model_executor.models import ModelRegistry
+from vllm.models.zoo import ModelRegistry
 from vllm.outputs import (CompletionOutput, EmbeddingOutput,
                           EmbeddingRequestOutput, RequestOutput)
 from vllm.pooling_params import PoolingParams

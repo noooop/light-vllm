@@ -10,9 +10,9 @@ from vllm.sequence import (IntermediateTensors, SamplerOutput,
                            SequenceGroupMetadata)
 
 if TYPE_CHECKING:
-    from vllm.attention import AttentionMetadata
-    from vllm.attention.backends.abstract import AttentionBackend
-    from vllm.model_executor import SamplingMetadata
+    from vllm.layers.attention import AttentionMetadata
+    from vllm.layers.attention.backends import AttentionBackend
+    from vllm.layers.sampling_metadata import SamplingMetadata
 
 T = TypeVar('T', bound="ModelRunnerInputBase")
 

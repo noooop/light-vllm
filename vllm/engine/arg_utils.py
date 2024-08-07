@@ -10,7 +10,7 @@ from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
                          SchedulerConfig, TokenizerPoolConfig)
 from vllm.executor.executor_base import ExecutorBase
 from vllm.logger import init_logger
-from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
+from vllm.layers.quantization import QUANTIZATION_METHODS
 from vllm.utils import FlexibleArgumentParser
 
 if TYPE_CHECKING:

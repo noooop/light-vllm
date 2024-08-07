@@ -8,8 +8,8 @@ from transformers import PretrainedConfig
 
 import vllm.envs as envs
 from vllm.logger import init_logger
-from vllm.model_executor.layers.quantization import QUANTIZATION_METHODS
-from vllm.model_executor.models import ModelRegistry
+from vllm.layers.quantization import QUANTIZATION_METHODS
+from vllm.models.zoo import ModelRegistry
 from vllm.tracing import is_otel_installed
 from vllm.transformers_utils.config import get_config, get_hf_text_config
 from vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
@@ -18,7 +18,7 @@ from vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
 
 if TYPE_CHECKING:
     from vllm.executor.executor_base import ExecutorBase
-    from vllm.model_executor.model_loader.loader import BaseModelLoader
+    from vllm.models.loader import BaseModelLoader
     from vllm.transformers_utils.tokenizer_group.base_tokenizer_group import (
         BaseTokenizerGroup)
 

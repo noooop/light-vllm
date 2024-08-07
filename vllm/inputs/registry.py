@@ -144,7 +144,7 @@ class InputRegistry:
             :ref:`enabling_multimodal_inputs`
         """
         # Avoid circular import
-        from vllm.model_executor.model_loader import get_model_architecture
+        from vllm.models.loader import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
         dummy_factory = self._dummy_factories_by_model_type \
@@ -192,7 +192,7 @@ class InputRegistry:
             :ref:`input_processing_pipeline`
         """
         # Avoid circular import
-        from vllm.model_executor.model_loader import get_model_architecture
+        from vllm.models.loader import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
 

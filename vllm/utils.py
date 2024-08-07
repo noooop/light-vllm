@@ -26,7 +26,7 @@ import torch.types
 from typing_extensions import ParamSpec
 
 import vllm.envs as envs
-from vllm import _custom_ops as ops
+from vllm.layers import _custom_ops as ops
 from vllm.logger import enable_trace_function_call, init_logger
 
 logger = init_logger(__name__)
@@ -219,22 +219,7 @@ def is_tpu() -> bool:
 
 @lru_cache(maxsize=None)
 def is_xpu() -> bool:
-    from importlib.metadata import version
-    is_xpu_flag = "xpu" in version("vllm")
-    # vllm is not build with xpu
-    if not is_xpu_flag:
-        return False
-    try:
-        import intel_extension_for_pytorch as ipex  # noqa: F401
-        _import_ipex = True
-    except ImportError as e:
-        logger.warning("Import Error for IPEX: %s", e.msg)
-        _import_ipex = False
-    # ipex dependency is not ready
-    if not _import_ipex:
-        logger.warning("not found ipex lib")
-        return False
-    return hasattr(torch, "xpu") and torch.xpu.is_available()
+    return False
 
 
 @lru_cache(maxsize=None)
@@ -447,7 +432,7 @@ def _generate_random_fp8(
     #-----|-------------|-------------------
     # Inf | N/A         | s.11111.00
     # NaN | s.1111.111  | s.11111.{01,10,11}
-    from vllm import _custom_ops as ops
+    from vllm.layers import _custom_ops as ops
     tensor_tmp = torch.empty_like(tensor, dtype=torch.float16)
     tensor_tmp.uniform_(low, high)
     ops.convert_fp8(tensor, tensor_tmp)
@@ -909,7 +894,6 @@ def _cuda_device_count_stateless(
     # https://github.com/pytorch/pytorch/blob/
     # c1cd946818442aca8c7f812b16d187ce1586c3bc/
     # torch/cuda/__init__.py#L831C1-L831C17
-    import torch.cuda
     import torch.version
 
     if not torch.cuda._is_compiled():

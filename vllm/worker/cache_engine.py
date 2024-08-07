@@ -3,7 +3,7 @@ from typing import List
 
 import torch
 
-from vllm.attention import get_attn_backend
+from vllm.layers.attention import get_attn_backend
 from vllm.config import CacheConfig, DeviceConfig, ModelConfig
 from vllm.logger import init_logger
 from vllm.utils import (STR_DTYPE_TO_TORCH_DTYPE, get_dtype_size,
