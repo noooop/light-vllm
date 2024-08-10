@@ -1015,6 +1015,12 @@ class CUDAGraphRunner:
         self.input_buffers["slot_mapping"].copy_(attn_metadata.slot_mapping,
                                                  non_blocking=True)
 
+        self.input_buffers["seq_lens_tensor"].copy_(
+            attn_metadata.decode_metadata.seq_lens_tensor,
+            non_blocking=True)
+        self.input_buffers["block_tables"].copy_(
+            attn_metadata.decode_metadata.block_tables, non_blocking=True)
+
         if "seqlen_agnostic_capture_inputs" in self.input_buffers:
             self.model.copy_inputs_before_cuda_graphs(self.input_buffers,
                                                       **kwargs)
