@@ -11,18 +11,6 @@ import numpy as np
 import torch
 import torch.distributed
 import torch.nn as nn
-
-try:
-    from flashinfer import BatchDecodeWithPagedKVCacheWrapper
-    from flashinfer.decode import CUDAGraphBatchDecodeWithPagedKVCacheWrapper
-    from flashinfer.prefill import BatchPrefillWithPagedKVCacheWrapper
-    FLASHINFER_WORKSPACE_BUFFER_SIZE = 256 * 1024 * 1024
-except ImportError:
-    BatchDecodeWithPagedKVCacheWrapper = None
-    CUDAGraphBatchDecodeWithPagedKVCacheWrapper = None
-    BatchPrefillWithPagedKVCacheWrapper = None
-    FLASHINFER_WORKSPACE_BUFFER_SIZE = 0
-
 import vllm.envs as envs
 from vllm.layers.attention import AttentionMetadata, get_attn_backend
 from vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
@@ -531,11 +519,6 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         # Lazy initialization
         self.model: nn.Module  # Set after load_model
 
-        self.flashinfer_decode_workspace_buffer = None
-        self.flashinfer_decode_wrapper = None
-        self.flashinfer_prefill_workspace_buffer = None
-        self.flashinfer_prefill_wrapper = None
-
         set_cpu_offload_max_bytes(
             int(self.cache_config.cpu_offload_gb * 1024**3))
 
@@ -736,112 +719,30 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
             bs for bs in _BATCH_SIZES_TO_CAPTURE if bs <= graph_batch_size
         ]
 
-        if self.attn_backend.get_name() == "flashinfer":
-            # For flashinfer, different batch sizes will share the
-            # same workspace buffer.
-            decode_workspace_buffer = \
-            torch.empty(FLASHINFER_WORKSPACE_BUFFER_SIZE,
-                                                dtype=torch.uint8,
-                                              device=self.device)
-            indices_buffer = torch.empty(max_batch_size *
-                                         self.cache_config.num_gpu_blocks,
-                                         dtype=torch.int32,
-                                         device=self.device)
-            indptr_buffer = torch.empty(max_batch_size + 1,
-                                        dtype=torch.int32,
-                                        device=self.device)
-            last_page_len_buffer = torch.empty(max_batch_size,
-                                               dtype=torch.int32,
-                                               device=self.device)
-
         with graph_capture() as graph_capture_context:
             # NOTE: Capturing the largest batch size first may help reduce the
             # memory usage of CUDA graph.
             for virtual_engine in range(1):
                 for batch_size in reversed(batch_size_capture_list):
-                    if self.attn_backend.get_name() == "flashinfer":
-                        _indptr_buffer = indptr_buffer[:batch_size + 1]
-                        _last_page_len_buffer = last_page_len_buffer[:
-                                                                     batch_size]
-
-                        num_qo_heads = (
-                            self.model_config.get_num_attention_heads())
-                        num_kv_heads = self.model_config.get_num_kv_heads()
-                        if num_qo_heads // num_kv_heads >= 4:
-                            use_tensor_cores = True
-                        else:
-                            use_tensor_cores = False
-                        decode_wrapper = \
-                            CUDAGraphBatchDecodeWithPagedKVCacheWrapper(
-                            decode_workspace_buffer, _indptr_buffer,
-                            indices_buffer, _last_page_len_buffer, "NHD",
-                            use_tensor_cores)
-                        kv_cache_dtype = get_kv_cache_torch_dtype(
-                            self.kv_cache_dtype, self.model_config.dtype)
-
-                        paged_kv_indptr_tensor_host = torch.arange(
-                            0, batch_size + 1, dtype=torch.int32)
-                        paged_kv_indices_tensor_host = torch.arange(
-                            0, batch_size, dtype=torch.int32)
-                        paged_kv_last_page_len_tensor_host = torch.full(
-                            (batch_size, ), self.block_size, dtype=torch.int32)
-                        query_start_loc_host = torch.arange(0,
-                                                            batch_size + 1,
-                                                            dtype=torch.int32)
-
-                        attn_metadata = self.attn_backend.make_metadata(
-                            num_prefills=0,
-                            slot_mapping=slot_mapping[:batch_size],
-                            num_prefill_tokens=0,
-                            num_decode_tokens=batch_size,
-                            max_prefill_seq_len=0,
-                            block_tables=block_tables,
-                            paged_kv_indptr=paged_kv_indptr_tensor_host,
-                            paged_kv_indices=paged_kv_indices_tensor_host,
-                            paged_kv_last_page_len=
-                            paged_kv_last_page_len_tensor_host,
-                            num_qo_heads=num_qo_heads,
-                            num_kv_heads=num_kv_heads,
-                            head_dim=self.model_config.get_head_size(),
-                            page_size=self.block_size,
-                            seq_start_loc=None,
-                            query_start_loc=query_start_loc_host,
-                            device=self.device,
-                            data_type=kv_cache_dtype,
-                            use_cuda_graph=True,
-                            decode_wrapper=decode_wrapper,
-                            prefill_wrapper=None)
-                        attn_metadata.begin_forward()
-                    else:
-                        attn_metadata = self.attn_backend.make_metadata(
-                            num_prefills=0,
-                            num_prefill_tokens=0,
-                            num_decode_tokens=batch_size,
-                            slot_mapping=slot_mapping[:batch_size],
-                            seq_lens=None,
-                            seq_lens_tensor=seq_lens[:batch_size],
-                            max_query_len=None,
-                            max_prefill_seq_len=0,
-                            max_decode_seq_len=self.max_seq_len_to_capture,
-                            query_start_loc=None,
-                            seq_start_loc=None,
-                            context_lens_tensor=None,
-                            block_tables=block_tables[:batch_size],
-                            use_cuda_graph=True,
-                        )
+                    attn_metadata = self.attn_backend.make_metadata(
+                        num_prefills=0,
+                        num_prefill_tokens=0,
+                        num_decode_tokens=batch_size,
+                        slot_mapping=slot_mapping[:batch_size],
+                        seq_lens=None,
+                        seq_lens_tensor=seq_lens[:batch_size],
+                        max_query_len=None,
+                        max_prefill_seq_len=0,
+                        max_decode_seq_len=self.max_seq_len_to_capture,
+                        query_start_loc=None,
+                        seq_start_loc=None,
+                        context_lens_tensor=None,
+                        block_tables=block_tables[:batch_size],
+                        use_cuda_graph=True,
+                    )
 
                     graph_runner = CUDAGraphRunner(
                         self.model, self.attn_backend.get_name())
-
-                    if self.attn_backend.get_name() == "flashinfer":
-                        graph_runner.flashinfer_indptr_buffer = _indptr_buffer
-                        graph_runner.flashinfer_indices_buffer = indices_buffer
-                        graph_runner.flashinfer_last_page_len_buffer = \
-                            _last_page_len_buffer
-                        graph_runner.flashinfer_decode_workspace_buffer = \
-                                decode_workspace_buffer
-                        graph_runner.flashinfer_decode_wrapper = \
-                            decode_wrapper
 
                     capture_inputs = {
                         "input_ids":
@@ -954,37 +855,6 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         if num_steps > 1:
             raise ValueError("num_steps > 1 is not supported in ModelRunner")
 
-        if self.attn_backend.get_name() == "flashinfer":
-            assert model_input.attn_metadata is not None
-            assert model_input.input_tokens is not None
-            if self.flashinfer_decode_workspace_buffer is None:
-                self.flashinfer_decode_workspace_buffer = torch.empty(
-                    FLASHINFER_WORKSPACE_BUFFER_SIZE,
-                    dtype=torch.uint8,
-                    device=self.device)
-                self.flashinfer_decode_wrapper = \
-                    BatchDecodeWithPagedKVCacheWrapper(
-                    self.flashinfer_decode_workspace_buffer, "NHD")
-                self.flashinfer_prefill_workspace_buffer = torch.empty(
-                    FLASHINFER_WORKSPACE_BUFFER_SIZE,
-                    dtype=torch.uint8,
-                    device=self.device)
-                self.flashinfer_prefill_wrapper = \
-                    BatchPrefillWithPagedKVCacheWrapper(
-                    self.flashinfer_prefill_workspace_buffer, "NHD")
-
-            model_input.attn_metadata.prefill_wrapper = \
-                self.flashinfer_prefill_wrapper
-            if model_input.attn_metadata.use_cuda_graph:
-                batch_size = model_input.input_tokens.shape[0]
-                model_input.attn_metadata.decode_wrapper = self.graph_runners[
-                    model_input.
-                    virtual_engine][batch_size].flashinfer_decode_wrapper
-            else:
-                model_input.attn_metadata.decode_wrapper = \
-                    self.flashinfer_decode_wrapper
-            model_input.attn_metadata.begin_forward()
-
         # Currently cuda graph is only supported by the decode phase.
         assert model_input.attn_metadata is not None
         prefill_meta = model_input.attn_metadata.prefill_metadata
@@ -1052,13 +922,6 @@ class CUDAGraphRunner:
 
         self._graph: Optional[torch.cuda.CUDAGraph] = None
 
-        self.flashinfer_decode_workspace_buffer: Optional[torch.Tensor] = None
-        self.flashinfer_indptr_buffer: Optional[torch.Tensor] = None
-        self.flashinfer_indices_buffer: Optional[torch.Tensor] = None
-        self.flashinfer_last_page_len_buffer: Optional[torch.Tensor] = None
-        self.flashinfer_decode_wrapper: Optional[
-            CUDAGraphBatchDecodeWithPagedKVCacheWrapper] = None
-
     @property
     def graph(self):
         assert self._graph is not None
@@ -1115,25 +978,17 @@ class CUDAGraphRunner:
         torch.cuda.synchronize()
 
         # Save the input and output buffers.
-        if self.backend_name == "flashinfer":
-            self.input_buffers = {
-                "input_ids": input_ids,
-                "positions": positions,
-                "kv_caches": kv_caches,
-                "slot_mapping": attn_metadata.slot_mapping,
-                **kwargs,
-            }
-        else:
-            self.input_buffers = {
-                "input_ids": input_ids,
-                "positions": positions,
-                "kv_caches": kv_caches,
-                "slot_mapping": attn_metadata.slot_mapping,
-                "seq_lens_tensor":
-                attn_metadata.decode_metadata.seq_lens_tensor,
-                "block_tables": attn_metadata.decode_metadata.block_tables,
-                **kwargs,
-            }
+        self.input_buffers = {
+            "input_ids": input_ids,
+            "positions": positions,
+            "kv_caches": kv_caches,
+            "slot_mapping": attn_metadata.slot_mapping,
+            "seq_lens_tensor":
+            attn_metadata.decode_metadata.seq_lens_tensor,
+            "block_tables": attn_metadata.decode_metadata.block_tables,
+            **kwargs,
+        }
+
         if intermediate_inputs is not None:
             self.input_buffers.update(intermediate_inputs.tensors)
         self.output_buffers = {
@@ -1159,12 +1014,7 @@ class CUDAGraphRunner:
         self.input_buffers["positions"].copy_(positions, non_blocking=True)
         self.input_buffers["slot_mapping"].copy_(attn_metadata.slot_mapping,
                                                  non_blocking=True)
-        if self.backend_name != "flashinfer":
-            self.input_buffers["seq_lens_tensor"].copy_(
-                attn_metadata.decode_metadata.seq_lens_tensor,
-                non_blocking=True)
-            self.input_buffers["block_tables"].copy_(
-                attn_metadata.decode_metadata.block_tables, non_blocking=True)
+
         if "seqlen_agnostic_capture_inputs" in self.input_buffers:
             self.model.copy_inputs_before_cuda_graphs(self.input_buffers,
                                                       **kwargs)

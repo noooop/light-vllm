@@ -61,10 +61,6 @@ def get_attn_backend(
         logger.info("Using Torch SDPA backend.")
         from vllm.layers.attention.backends.torch_sdpa import TorchSDPABackend
         return TorchSDPABackend
-    elif backend == _Backend.FLASHINFER:
-        logger.info("Using Flashinfer backend.")
-        from vllm.layers.attention.backends.flashinfer import FlashInferBackend
-        return FlashInferBackend
     else:
         raise ValueError("Invalid attention backend.")
 
