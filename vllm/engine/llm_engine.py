@@ -7,8 +7,7 @@ from typing import Set, Type, TypeVar, Union
 
 import vllm.envs as envs
 from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
-                         EngineConfig, LoadConfig, ModelConfig,
-                         ObservabilityConfig, SchedulerConfig)
+                         EngineConfig, LoadConfig, ModelConfig, SchedulerConfig)
 from vllm.core.scheduler import (ScheduledSequenceGroup, Scheduler,
                                  SchedulerOutputs)
 from vllm.engine.arg_utils import EngineArgs
@@ -29,8 +28,6 @@ from vllm.sequence import (EmbeddingSequenceGroupOutput, ExecuteModelRequest,
                            PoolerOutput, SamplerOutput, Sequence,
                            SequenceGroup, SequenceGroupMetadata,
                            SequenceStatus)
-from vllm.tracing import (SpanAttributes, SpanKind, extract_trace_context,
-                          init_tracer)
 from vllm.transformers_utils.config import try_get_generation_config
 from vllm.transformers_utils.detokenizer import Detokenizer
 from vllm.transformers_utils.tokenizer_group import (
@@ -145,7 +142,6 @@ class LLMEngine:
         device_config: DeviceConfig,
         load_config: LoadConfig,
         decoding_config: Optional[DecodingConfig],
-        observability_config: Optional[ObservabilityConfig],
         executor_class: Type[ExecutorBase],
     ) -> None:
         logger.info(
@@ -158,7 +154,7 @@ class LLMEngine:
             "quantization=%s, "
             "enforce_eager=%s, kv_cache_dtype=%s, "
             "quantization_param_path=%s, device_config=%s, "
-            "decoding_config=%r, observability_config=%r, "
+            "decoding_config=%r, "
             "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
             "enable_prefix_caching=%s)",
             VLLM_VERSION,
@@ -181,7 +177,6 @@ class LLMEngine:
             model_config.quantization_param_path,
             device_config.device,
             decoding_config,
-            observability_config,
             model_config.seed,
             model_config.served_model_name,
             scheduler_config.use_v2_block_manager,
@@ -195,8 +190,6 @@ class LLMEngine:
         self.device_config = device_config
         self.load_config = load_config
         self.decoding_config = decoding_config or DecodingConfig()
-        self.observability_config = observability_config or ObservabilityConfig(
-        )
 
         if not self.model_config.skip_tokenizer_init:
             self.tokenizer = self._init_tokenizer()
@@ -232,12 +225,6 @@ class LLMEngine:
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
         self.scheduler = [Scheduler(scheduler_config, cache_config)]
-
-        self.tracer = None
-        if self.observability_config.otlp_traces_endpoint:
-            self.tracer = init_tracer(
-                "vllm.llm_engine",
-                self.observability_config.otlp_traces_endpoint)
 
         # Create sequence output processor, e.g. for beam search or
         # speculative decoding.

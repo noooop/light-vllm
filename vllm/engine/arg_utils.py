@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
 
 from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
                          EngineConfig, LoadConfig, ModelConfig,
-                         ObservabilityConfig,
                          SchedulerConfig, TokenizerPoolConfig)
 from vllm.executor.executor_base import ExecutorBase
 from vllm.logger import init_logger
@@ -783,9 +782,6 @@ class EngineArgs:
         decoding_config = DecodingConfig(
             guided_decoding_backend=self.guided_decoding_backend)
 
-        observability_config = ObservabilityConfig(
-            otlp_traces_endpoint=self.otlp_traces_endpoint)
-
         if (model_config.get_sliding_window() is not None
                 and scheduler_config.chunked_prefill_enabled
                 and not scheduler_config.use_v2_block_manager):
@@ -799,8 +795,7 @@ class EngineArgs:
             scheduler_config=scheduler_config,
             device_config=device_config,
             load_config=load_config,
-            decoding_config=decoding_config,
-            observability_config=observability_config,
+            decoding_config=decoding_config
         )
 
 
