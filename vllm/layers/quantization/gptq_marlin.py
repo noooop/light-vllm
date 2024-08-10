@@ -14,7 +14,7 @@ from vllm.layers.quantization.utils.marlin_utils import (
     marlin_make_empty_g_idx, marlin_make_workspace, marlin_permute_scales,
     marlin_repeat_scales_on_all_ranks, marlin_sort_g_idx, replace_tensor,
     verify_marlin_supported, verify_marlin_supports_shape)
-from vllm.layers.vocab_parallel_embedding import ParallelLMHead
+from vllm.layers.vocab_embedding import ParallelLMHead
 from vllm.layers.scalar_type import scalar_types
 
 logger = init_logger(__name__)

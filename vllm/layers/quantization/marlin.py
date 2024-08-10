@@ -8,7 +8,7 @@ from vllm.logger import init_logger
 from vllm.layers.linear import LinearBase, LinearMethodBase
 from vllm.layers.quantization.base_config import (
     QuantizationConfig)
-from vllm.layers.vocab_parallel_embedding import ParallelLMHead
+from vllm.layers.vocab_embedding import ParallelLMHead
 from vllm.layers.utils import set_weight_attrs
 
 logger = init_logger(__name__)

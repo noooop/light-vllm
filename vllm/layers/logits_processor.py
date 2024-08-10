@@ -5,7 +5,7 @@ from typing import Optional
 import torch
 import torch.nn as nn
 
-from vllm.layers.vocab_parallel_embedding import (
+from vllm.layers.vocab_embedding import (
     VocabParallelEmbedding)
 from vllm.layers.sampling_metadata import SamplingMetadata
 from vllm.platforms import current_platform

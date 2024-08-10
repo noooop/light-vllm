@@ -10,7 +10,7 @@ from vllm.layers import _custom_ops as ops
 from vllm.layers.linear import LinearBase, LinearMethodBase
 from vllm.layers.quantization.base_config import (
     QuantizationConfig)
-from vllm.layers.vocab_parallel_embedding import ParallelLMHead
+from vllm.layers.vocab_embedding import ParallelLMHead
 from vllm.layers.utils import set_weight_attrs
 
 

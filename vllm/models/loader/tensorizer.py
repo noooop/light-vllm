@@ -19,7 +19,7 @@ from vllm.engine.llm_engine import LLMEngine
 from vllm.logger import init_logger
 from vllm.layers.quantization.base_config import (
     QuantizationConfig)
-from vllm.layers.vocab_parallel_embedding import (
+from vllm.layers.vocab_embedding import (
     VocabParallelEmbedding)
 from vllm.utils import FlexibleArgumentParser
 

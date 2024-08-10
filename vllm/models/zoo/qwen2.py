@@ -40,7 +40,7 @@ from vllm.layers.quantization.base_config import (
     QuantizationConfig)
 from vllm.layers.rotary_embedding import get_rope
 from vllm.layers.sampler import Sampler
-from vllm.layers.vocab_parallel_embedding import (
+from vllm.layers.vocab_embedding import (
     ParallelLMHead, VocabParallelEmbedding)
 from vllm.models.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
