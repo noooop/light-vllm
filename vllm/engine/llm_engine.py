@@ -207,8 +207,7 @@ class LLMEngine:
             load_config=load_config
         )
 
-        if not self.model_config.embedding_mode:
-            self._initialize_kv_caches()
+        self._initialize_kv_caches()
 
         if self.tokenizer:
             # Ping the tokenizer to ensure liveness if it runs in a
@@ -589,9 +588,6 @@ class LLMEngine:
             seq_group = scheduled_seq_group.seq_group
             seq_group.update_num_computed_tokens(
                 scheduled_seq_group.token_chunk_size)
-            if self.model_config.embedding_mode:
-                self._process_sequence_group_outputs(seq_group, outputs)
-                continue
 
             self.output_processor.process_prompt_logprob(seq_group, outputs)
             if seq_group_meta.do_sample:

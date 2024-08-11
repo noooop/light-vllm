@@ -13,7 +13,6 @@ from vllm.models.loader.tensorizer import TensorizerConfig
 from vllm.platforms import current_platform
 from vllm.sequence import ExecuteModelRequest
 from vllm.worker.cache_engine import CacheEngine
-from vllm.worker.embedding_model_runner import EmbeddingModelRunner
 from vllm.worker.model_runner import GPUModelRunnerBase, ModelRunner
 from vllm.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
 
@@ -51,8 +50,6 @@ class Worker(LocalOrDistributedWorkerBase):
         ModelRunnerClass: Type[GPUModelRunnerBase] = ModelRunner
         if model_runner_cls is not None:
             ModelRunnerClass = model_runner_cls
-        elif self.model_config.embedding_mode:
-            ModelRunnerClass = EmbeddingModelRunner
         self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
             model_config,
             scheduler_config,

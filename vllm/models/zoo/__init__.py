@@ -28,7 +28,6 @@ _GENERATION_MODELS = {
     "DeepseekForCausalLM": ("deepseek", "DeepseekForCausalLM"),
     "DeepseekV2ForCausalLM": ("deepseek_v2", "DeepseekV2ForCausalLM"),
     "FalconForCausalLM": ("falcon", "FalconForCausalLM"),
-    "FuyuForCausalLM": ("fuyu", "FuyuForCausalLM"),
     "GemmaForCausalLM": ("gemma", "GemmaForCausalLM"),
     "Gemma2ForCausalLM": ("gemma2", "Gemma2ForCausalLM"),
     "GPT2LMHeadModel": ("gpt2", "GPT2LMHeadModel"),
@@ -53,7 +52,6 @@ _GENERATION_MODELS = {
     "MptForCausalLM": ("mpt", "MPTForCausalLM"),
     "MPTForCausalLM": ("mpt", "MPTForCausalLM"),
     "MiniCPMForCausalLM": ("minicpm", "MiniCPMForCausalLM"),
-    "MiniCPMV": ("minicpmv", "MiniCPMV"),
     "NemotronForCausalLM": ("nemotron", "NemotronForCausalLM"),
     "OlmoForCausalLM": ("olmo", "OlmoForCausalLM"),
     "OPTForCausalLM": ("opt", "OPTForCausalLM"),
@@ -79,11 +77,7 @@ _GENERATION_MODELS = {
     "JambaForCausalLM": ("jamba", "JambaForCausalLM")
 }
 
-_EMBEDDING_MODELS = {
-    "MistralModel": ("llama_embedding", "LlamaEmbeddingModel"),
-}
-
-_MODELS = {**_GENERATION_MODELS, **_EMBEDDING_MODELS}
+_MODELS = _GENERATION_MODELS
 
 # Architecture -> type.
 # out of tree models
@@ -156,10 +150,6 @@ class ModelRegistry:
                 model_cls.__name__)
         global _OOT_MODELS
         _OOT_MODELS[model_arch] = model_cls
-
-    @staticmethod
-    def is_embedding_model(model_arch: str) -> bool:
-        return model_arch in _EMBEDDING_MODELS
 
 
 __all__ = [
