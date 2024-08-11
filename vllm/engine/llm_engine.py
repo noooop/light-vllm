@@ -77,8 +77,6 @@ class LLMEngine:
             management.
         scheduler_config: The configuration related to the request scheduler.
         device_config: The configuration related to the device.
-        multimodal_config (Optional): The configuration related to multimodal 
-            models.
         executor_class: The model executor class for managing distributed
             execution.
     """
@@ -220,7 +218,7 @@ class LLMEngine:
         # Create the scheduler.
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
-        self.scheduler = [Scheduler(scheduler_config, cache_config)]
+        self.scheduler = Scheduler(scheduler_config, cache_config)
 
         # Create sequence output processor, e.g. for beam search or
         # speculative decoding.
@@ -364,13 +362,8 @@ class LLMEngine:
             raise ValueError(
                 "Either SamplingParams or PoolingParams must be provided.")
 
-        # Add the sequence group to the scheduler with least unfinished seqs.
-        costs = [
-            scheduler.get_num_unfinished_seq_groups()
-            for scheduler in self.scheduler
-        ]
-        min_cost_scheduler = self.scheduler[costs.index(min(costs))]
-        min_cost_scheduler.add_seq_group(seq_group)
+        # Add the sequence group to the scheduler.
+        self.scheduler.add_seq_group(seq_group)
 
     def stop_remote_worker_execution_loop(self) -> None:
         self.model_executor.stop_remote_worker_execution_loop()
@@ -533,8 +526,7 @@ class LLMEngine:
             >>> # abort the request
             >>> engine.abort_request(request_id)
         """
-        for scheduler in self.scheduler:
-            scheduler.abort_seq_group(request_id)
+        self.scheduler.abort_seq_group(request_id)
 
     def get_model_config(self) -> ModelConfig:
         """Gets the model configuration."""
@@ -546,20 +538,18 @@ class LLMEngine:
 
     def get_num_unfinished_requests(self) -> int:
         """Gets the number of unfinished requests."""
-        return sum(scheduler.get_num_unfinished_seq_groups()
-                   for scheduler in self.scheduler)
+        return self.scheduler.get_num_unfinished_seq_groups()
 
     def has_unfinished_requests(self) -> bool:
         """Returns True if there are unfinished requests."""
-        return any(scheduler.has_unfinished_seqs()
-                   for scheduler in self.scheduler)
+        return self.scheduler.has_unfinished_seqs()
 
     def has_unfinished_requests_for_virtual_engine(
             self, virtual_engine: int) -> bool:
         """
         Returns True if there are unfinished requests for the virtual engine.
         """
-        return self.scheduler[virtual_engine].has_unfinished_seqs()
+        return self.scheduler.has_unfinished_seqs()
 
     def _process_sequence_group_outputs(
         self,
@@ -608,8 +598,7 @@ class LLMEngine:
                 self.output_processor.process_outputs(seq_group, outputs)
 
         # Free the finished sequence groups.
-        for scheduler in self.scheduler:
-            scheduler.free_finished_seq_groups()
+        self.scheduler.free_finished_seq_groups()
 
         # Create the outputs.
         request_outputs: List[Union[RequestOutput,
@@ -675,12 +664,10 @@ class LLMEngine:
             >>>     if not (engine.has_unfinished_requests() or example_inputs):
             >>>         break
         """
-        seq_group_metadata_list, scheduler_outputs = self.scheduler[
-            0].schedule()
+        seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            finished_requests_ids = self.scheduler[
-                0].get_and_reset_finished_requests_ids()
+            finished_requests_ids = self.scheduler.get_and_reset_finished_requests_ids()
             execute_model_req = ExecuteModelRequest(
                 seq_group_metadata_list=seq_group_metadata_list,
                 blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
