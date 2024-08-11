@@ -4,9 +4,9 @@ import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
 
-from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+from vllm.config import (CacheConfig, DeviceConfig,
                          EngineConfig, LoadConfig, ModelConfig,
-                         SchedulerConfig, TokenizerPoolConfig)
+                         SchedulerConfig)
 from vllm.executor.executor_base import ExecutorBase
 from vllm.logger import init_logger
 from vllm.layers.quantization import QUANTIZATION_METHODS
@@ -779,9 +779,6 @@ class EngineArgs:
             ignore_patterns=self.ignore_patterns,
         )
 
-        decoding_config = DecodingConfig(
-            guided_decoding_backend=self.guided_decoding_backend)
-
         if (model_config.get_sliding_window() is not None
                 and scheduler_config.chunked_prefill_enabled
                 and not scheduler_config.use_v2_block_manager):
@@ -794,8 +791,7 @@ class EngineArgs:
             cache_config=cache_config,
             scheduler_config=scheduler_config,
             device_config=device_config,
-            load_config=load_config,
-            decoding_config=decoding_config
+            load_config=load_config
         )
 
 

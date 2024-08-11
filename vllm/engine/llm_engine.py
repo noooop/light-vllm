@@ -6,7 +6,7 @@ from typing import Sequence as GenericSequence
 from typing import Set, Type, TypeVar, Union
 
 import vllm.envs as envs
-from vllm.config import (CacheConfig, DecodingConfig, DeviceConfig,
+from vllm.config import (CacheConfig, DeviceConfig,
                          EngineConfig, LoadConfig, ModelConfig, SchedulerConfig)
 from vllm.core.scheduler import (ScheduledSequenceGroup, Scheduler,
                                  SchedulerOutputs)
@@ -141,7 +141,6 @@ class LLMEngine:
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         load_config: LoadConfig,
-        decoding_config: Optional[DecodingConfig],
         executor_class: Type[ExecutorBase],
     ) -> None:
         logger.info(
@@ -154,7 +153,6 @@ class LLMEngine:
             "quantization=%s, "
             "enforce_eager=%s, kv_cache_dtype=%s, "
             "quantization_param_path=%s, device_config=%s, "
-            "decoding_config=%r, "
             "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
             "enable_prefix_caching=%s)",
             VLLM_VERSION,
@@ -176,7 +174,6 @@ class LLMEngine:
             cache_config.cache_dtype,
             model_config.quantization_param_path,
             device_config.device,
-            decoding_config,
             model_config.seed,
             model_config.served_model_name,
             scheduler_config.use_v2_block_manager,
@@ -189,7 +186,6 @@ class LLMEngine:
         self.scheduler_config = scheduler_config
         self.device_config = device_config
         self.load_config = load_config
-        self.decoding_config = decoding_config or DecodingConfig()
 
         if not self.model_config.skip_tokenizer_init:
             self.tokenizer = self._init_tokenizer()
@@ -543,10 +539,6 @@ class LLMEngine:
     def get_model_config(self) -> ModelConfig:
         """Gets the model configuration."""
         return self.model_config
-
-    def get_decoding_config(self) -> DecodingConfig:
-        """Gets the decoding configuration."""
-        return self.decoding_config
 
     def get_scheduler_config(self) -> SchedulerConfig:
         """Gets the scheduler configuration."""
