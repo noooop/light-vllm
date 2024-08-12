@@ -5,7 +5,7 @@ import triton
 import triton.language as tl
 
 from vllm.layers.ops.rand import seeded_uniform
-from vllm.triton_utils.sample import get_num_triton_sampler_splits
+from vllm.layers.triton_utils.sample import get_num_triton_sampler_splits
 
 _EPS: tl.constexpr = 1e-6
 

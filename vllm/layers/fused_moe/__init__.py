@@ -1,6 +1,6 @@
 from vllm.layers.fused_moe.layer import (FusedMoE,
                                                         FusedMoEMethodBase)
-from vllm.triton_utils import HAS_TRITON
+from vllm.layers.triton_utils import HAS_TRITON
 
 __all__ = [
     "FusedMoE",

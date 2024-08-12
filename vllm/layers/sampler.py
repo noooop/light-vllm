@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 import torch.nn as nn
 
-from vllm.triton_utils import HAS_TRITON
+from vllm.layers.triton_utils import HAS_TRITON
 
 if HAS_TRITON:
     from vllm.layers.ops.sample import sample as sample_triton
