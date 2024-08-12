@@ -5,7 +5,7 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 
-from vllm.sampling_params import SamplingParams, SamplingType
+from vllm.layers.sampling_params import SamplingParams, SamplingType
 from vllm.sequence import SequenceData, SequenceGroupMetadata
 from vllm.triton_utils.sample import get_num_triton_sampler_splits
 from vllm.utils import (async_tensor_h2d, is_pin_memory_available,

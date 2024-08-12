@@ -3,7 +3,7 @@ from typing import Any, Dict, List, Tuple
 
 import torch
 
-from vllm.pooling_params import PoolingParams
+from vllm.layers.pooling_params import PoolingParams
 from vllm.utils import is_pin_memory_available
 
 

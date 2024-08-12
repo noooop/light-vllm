@@ -11,8 +11,8 @@ from typing_extensions import Annotated
 
 from vllm.entrypoints.chat_utils import ChatCompletionMessageParam
 from vllm.entrypoints.openai.logits_processors import get_logits_processors
-from vllm.pooling_params import PoolingParams
-from vllm.sampling_params import LogitsProcessor, SamplingParams
+from vllm.layers.pooling_params import PoolingParams
+from vllm.layers.sampling_params import LogitsProcessor, SamplingParams
 from vllm.utils import random_uuid
 
 # torch is mocked during docs generation,

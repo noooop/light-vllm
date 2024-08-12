@@ -1,5 +1,4 @@
 import json
-import pathlib
 from dataclasses import dataclass
 from http import HTTPStatus
 from typing import Iterable, Iterator, List, Optional, Tuple, TypedDict, Union
@@ -25,8 +24,8 @@ from vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
 from vllm.inputs import parse_and_batch_prompt
 from vllm.logger import init_logger
 
-from vllm.pooling_params import PoolingParams
-from vllm.sampling_params import LogitsProcessor, SamplingParams
+from vllm.layers.pooling_params import PoolingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.sequence import Logprob
 from vllm.transformers_utils.tokenizer_group import AnyTokenizer
 

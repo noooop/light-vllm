@@ -22,11 +22,11 @@ from vllm.layers.sampling_metadata import SamplingMetadata
 from vllm.models.loader import get_model
 from vllm.models.loader.tensorizer import TensorizerConfig
 from vllm.models.utils import set_cpu_offload_max_bytes
-from vllm.sampling_params import SamplingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.sequence import (IntermediateTensors, SamplerOutput,
                            SequenceGroupMetadata)
 from vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
-                        get_kv_cache_torch_dtype, is_hip,
+                        is_hip,
                         is_pin_memory_available)
 from vllm.worker.model_runner_base import (
     ModelRunnerBase, ModelRunnerInputBase, ModelRunnerInputBuilderBase,

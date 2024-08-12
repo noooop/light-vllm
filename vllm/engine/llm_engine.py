@@ -3,13 +3,11 @@ from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List,
                     Mapping, Optional)
 from typing import Sequence as GenericSequence
-from typing import Set, Type, TypeVar, Union
+from typing import Type, TypeVar, Union
 
-import vllm.envs as envs
 from vllm.config import (CacheConfig, DeviceConfig,
                          EngineConfig, LoadConfig, ModelConfig, SchedulerConfig)
-from vllm.core.scheduler import (ScheduledSequenceGroup, Scheduler,
-                                 SchedulerOutputs)
+from vllm.core.scheduler import (ScheduledSequenceGroup, Scheduler)
 from vllm.engine.arg_utils import EngineArgs
 
 from vllm.engine.output_processor.interfaces import (
@@ -22,8 +20,8 @@ from vllm.inputs import INPUT_REGISTRY, LLMInputs, PromptInputs
 from vllm.logger import init_logger
 from vllm.outputs import (EmbeddingRequestOutput, RequestOutput,
                           RequestOutputFactory)
-from vllm.pooling_params import PoolingParams
-from vllm.sampling_params import SamplingParams
+from vllm.layers.pooling_params import PoolingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.sequence import (EmbeddingSequenceGroupOutput, ExecuteModelRequest,
                            PoolerOutput, SamplerOutput, Sequence,
                            SequenceGroup, SequenceGroupMetadata,

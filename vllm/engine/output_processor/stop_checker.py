@@ -1,7 +1,7 @@
-from typing import Callable, Optional
+from typing import Optional
 
 from vllm.inputs.tokenizer import Tokenizer
-from vllm.sampling_params import SamplingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.sequence import Sequence, SequenceStatus
 
 

@@ -7,8 +7,8 @@ from vllm.inputs import PromptInputs, TextPrompt, TokensPrompt
 from vllm.models.zoo import ModelRegistry
 from vllm.outputs import (CompletionOutput, EmbeddingOutput,
                           EmbeddingRequestOutput, RequestOutput)
-from vllm.pooling_params import PoolingParams
-from vllm.sampling_params import SamplingParams
+from vllm.layers.pooling_params import PoolingParams
+from vllm.layers.sampling_params import SamplingParams
 
 from .version import __commit__, __version__
 

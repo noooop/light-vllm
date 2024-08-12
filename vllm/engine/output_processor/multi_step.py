@@ -8,7 +8,7 @@ from vllm.engine.output_processor.interfaces import (
     SequenceGroupOutputProcessor)
 from vllm.engine.output_processor.stop_checker import StopChecker
 from vllm.logger import init_logger
-from vllm.sampling_params import SamplingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.sequence import (Sequence, SequenceGroup, SequenceGroupOutput,
                            SequenceOutput, SequenceStatus)
 from vllm.transformers_utils.detokenizer import Detokenizer

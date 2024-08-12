@@ -12,9 +12,9 @@ from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
 import torch
 
 
-from vllm.pooling_params import PoolingParams
+from vllm.layers.pooling_params import PoolingParams
 
-from vllm.sampling_params import SamplingParams
+from vllm.layers.sampling_params import SamplingParams
 
 if TYPE_CHECKING:
     from vllm.inputs import LLMInputs

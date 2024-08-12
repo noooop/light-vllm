@@ -4,7 +4,7 @@ from typing import Dict, FrozenSet, Iterable, List, Optional, Union
 import torch
 from transformers import PreTrainedTokenizer
 
-from vllm.sampling_params import LogitsProcessor
+from vllm.layers.sampling_params import LogitsProcessor
 
 
 class AllowedTokenIdsLogitsProcessor:

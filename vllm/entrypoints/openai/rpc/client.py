@@ -13,7 +13,7 @@ from vllm.entrypoints.openai.rpc import (RPC_REQUEST_TYPE,
                                          RPCGenerateRequest, RPCUtilityRequest)
 from vllm.inputs import PromptInputs
 from vllm.outputs import EmbeddingRequestOutput, RequestOutput
-from vllm.sampling_params import SamplingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
 
 

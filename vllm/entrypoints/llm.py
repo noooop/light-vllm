@@ -11,8 +11,8 @@ from vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
 from vllm.logger import init_logger
 
 from vllm.outputs import EmbeddingRequestOutput, RequestOutput
-from vllm.pooling_params import PoolingParams
-from vllm.sampling_params import SamplingParams
+from vllm.layers.pooling_params import PoolingParams
+from vllm.layers.sampling_params import SamplingParams
 from vllm.inputs.tokenizer import get_cached_tokenizer
 from vllm.utils import Counter, deprecate_kwargs
 

@@ -14,7 +14,7 @@ if HAS_TRITON:
 from vllm.layers.sampling_metadata import (SamplingMetadata,
                                            SamplingTensors,
                                            SequenceGroupToSample)
-from vllm.sampling_params import SamplingType
+from vllm.layers.sampling_params import SamplingType
 from vllm.sequence import (CompletionSequenceGroupOutput, Logprob,
                            PromptLogprobs, SampleLogprobs, SamplerOutput,
                            SequenceOutput)
