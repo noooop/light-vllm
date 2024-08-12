@@ -5,11 +5,11 @@ from transformers import GenerationConfig, PretrainedConfig
 
 from vllm.envs import VLLM_USE_MODELSCOPE
 from vllm.logger import init_logger
-from vllm.transformers_utils.configs import (ChatGLMConfig, DbrxConfig,
-                                             InternVLChatConfig, JAISConfig,
-                                             MedusaConfig, MLPSpeculatorConfig,
-                                             MPTConfig, NemotronConfig,
-                                             RWConfig)
+from vllm.models.transformers_utils.configs import (ChatGLMConfig, DbrxConfig,
+                                                    InternVLChatConfig, JAISConfig,
+                                                    MedusaConfig, MLPSpeculatorConfig,
+                                                    MPTConfig, NemotronConfig,
+                                                    RWConfig)
 
 if VLLM_USE_MODELSCOPE:
     from modelscope import AutoConfig
@@ -88,9 +88,9 @@ def get_hf_text_config(config: PretrainedConfig):
 
 
 def try_get_generation_config(
-    model: str,
-    trust_remote_code: bool,
-    revision: Optional[str] = None,
+        model: str,
+        trust_remote_code: bool,
+        revision: Optional[str] = None,
 ) -> Optional[GenerationConfig]:
     try:
         return GenerationConfig.from_pretrained(

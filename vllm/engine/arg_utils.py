@@ -12,10 +12,6 @@ from vllm.logger import init_logger
 from vllm.layers.quantization import QUANTIZATION_METHODS
 from vllm.utils import FlexibleArgumentParser
 
-if TYPE_CHECKING:
-    from vllm.transformers_utils.tokenizer_group.base_tokenizer_group import (
-        BaseTokenizerGroup)
-
 logger = init_logger(__name__)
 
 

@@ -1,7 +1,6 @@
 from typing import Callable, Optional
 
-from transformers import PreTrainedTokenizer
-
+from vllm.inputs.tokenizer import Tokenizer
 from vllm.sampling_params import SamplingParams
 from vllm.sequence import Sequence, SequenceStatus
 
@@ -13,12 +12,12 @@ class StopChecker:
     emitted, or if we have exceeded the max model len.
     """
 
-    def __init__(self, max_model_len: int,
-                 get_tokenizer_for_seq: Callable[[Sequence],
-                                                 PreTrainedTokenizer]):
+    def __init__(self,
+                 max_model_len: int,
+                 tokenizer: Tokenizer):
         # Do not use it directly, but use `self._get_max_model_len`.
         self._max_model_len = max_model_len
-        self.get_tokenizer_for_seq = get_tokenizer_for_seq
+        self.tokenizer = tokenizer
 
     def _get_max_model_len(self):
         return self._max_model_len

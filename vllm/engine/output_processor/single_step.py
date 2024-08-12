@@ -9,7 +9,7 @@ from vllm.logger import init_logger
 from vllm.sampling_params import SamplingParams
 from vllm.sequence import (Sequence, SequenceGroup, SequenceGroupOutput,
                            SequenceOutput, SequenceStatus)
-from vllm.transformers_utils.detokenizer import Detokenizer
+from vllm.inputs.tokenizer import Tokenizer
 from vllm.utils import Counter
 
 logger = init_logger(__name__)
@@ -32,13 +32,13 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
     def __init__(
         self,
         scheduler_config: SchedulerConfig,
-        detokenizer: Detokenizer,
         scheduler: Scheduler,
+        tokenizer: Tokenizer,
         seq_counter: Counter,
         stop_checker: StopChecker,
     ):
         self.scheduler_config = scheduler_config
-        self.detokenizer = detokenizer
+        self.tokenizer = tokenizer
         self.scheduler = scheduler
         self.seq_counter = seq_counter
         self.stop_checker = stop_checker
@@ -71,8 +71,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 prompt_logprobs = [None] + prompt_logprobs
                 seq_group.prompt_logprobs = []
 
-            if seq_group.sampling_params.detokenize and self.detokenizer:
-                self.detokenizer.decode_prompt_logprobs_inplace(
+            if seq_group.sampling_params.detokenize and self.tokenizer:
+                self.tokenizer.decode_prompt_logprobs_inplace(
                     seq_group,
                     prompt_logprobs,
                     position_offset=len(seq_group.prompt_logprobs))
@@ -88,8 +88,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             # only have one sequence
             seq = seq_group.seqs[0]
             seq.append_token_id(sample.output_token, sample.logprobs)
-            if sampling_params.detokenize and self.detokenizer:
-                new_char_count = self.detokenizer.decode_sequence_inplace(
+            if sampling_params.detokenize and self.tokenizer:
+                new_char_count = self.tokenizer.decode_sequence_inplace(
                     seq, sampling_params)
             else:
                 new_char_count = 0
@@ -147,8 +147,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             child_seqs.append((parent, parent))
 
         for seq, _ in child_seqs:
-            if sampling_params.detokenize and self.detokenizer:
-                new_char_count = self.detokenizer.decode_sequence_inplace(
+            if sampling_params.detokenize and self.tokenizer:
+                new_char_count = self.tokenizer.decode_sequence_inplace(
                     seq, sampling_params)
             else:
                 new_char_count = 0

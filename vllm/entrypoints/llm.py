@@ -13,7 +13,7 @@ from vllm.logger import init_logger
 from vllm.outputs import EmbeddingRequestOutput, RequestOutput
 from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
-from vllm.transformers_utils.tokenizer import get_cached_tokenizer
+from vllm.inputs.tokenizer import get_cached_tokenizer
 from vllm.utils import Counter, deprecate_kwargs
 
 logger = init_logger(__name__)

@@ -28,10 +28,8 @@ from vllm.sequence import (EmbeddingSequenceGroupOutput, ExecuteModelRequest,
                            PoolerOutput, SamplerOutput, Sequence,
                            SequenceGroup, SequenceGroupMetadata,
                            SequenceStatus)
-from vllm.transformers_utils.config import try_get_generation_config
-from vllm.transformers_utils.detokenizer import Detokenizer
-from vllm.transformers_utils.tokenizer_group import (
-    AnyTokenizer, BaseTokenizerGroup, init_tokenizer_from_configs)
+from vllm.inputs.tokenizer import Tokenizer
+from vllm.models.transformers_utils.config import try_get_generation_config
 from vllm.utils import Counter
 from vllm.version import __version__ as VLLM_VERSION
 
@@ -95,9 +93,9 @@ class LLMEngine:
 
     @classmethod
     def validate_output(
-        cls,
-        output: object,
-        output_type: Type[_O],
+            cls,
+            output: object,
+            output_type: Type[_O],
     ) -> _O:
         do_validate = cls.DO_VALIDATE_OUTPUT
 
@@ -110,9 +108,9 @@ class LLMEngine:
 
     @classmethod
     def validate_outputs(
-        cls,
-        outputs: GenericSequence[object],
-        output_type: Type[_O],
+            cls,
+            outputs: GenericSequence[object],
+            output_type: Type[_O],
     ) -> List[_O]:
         do_validate = cls.DO_VALIDATE_OUTPUT
 
@@ -130,16 +128,16 @@ class LLMEngine:
 
         return outputs_
 
-    tokenizer: Optional[BaseTokenizerGroup]
+    tokenizer: Optional[Tokenizer]
 
     def __init__(
-        self,
-        model_config: ModelConfig,
-        cache_config: CacheConfig,
-        scheduler_config: SchedulerConfig,
-        device_config: DeviceConfig,
-        load_config: LoadConfig,
-        executor_class: Type[ExecutorBase],
+            self,
+            model_config: ModelConfig,
+            cache_config: CacheConfig,
+            scheduler_config: SchedulerConfig,
+            device_config: DeviceConfig,
+            load_config: LoadConfig,
+            executor_class: Type[ExecutorBase],
     ) -> None:
         logger.info(
             "Initializing an LLM engine (v%s) with config: "
@@ -187,10 +185,8 @@ class LLMEngine:
 
         if not self.model_config.skip_tokenizer_init:
             self.tokenizer = self._init_tokenizer()
-            self.detokenizer = Detokenizer(self.tokenizer)
         else:
             self.tokenizer = None
-            self.detokenizer = None
 
         self.seq_counter = Counter()
         self.generation_config_fields = _load_generation_config_dict(
@@ -209,11 +205,6 @@ class LLMEngine:
 
         self._initialize_kv_caches()
 
-        if self.tokenizer:
-            # Ping the tokenizer to ensure liveness if it runs in a
-            # different process.
-            self.tokenizer.ping()
-
         # Create the scheduler.
         # NOTE: the cache_config here have been updated with the numbers of
         # GPU and CPU blocks, which are profiled in the distributed executor.
@@ -224,13 +215,12 @@ class LLMEngine:
         self.output_processor = (
             SequenceGroupOutputProcessor.create_output_processor(
                 self.scheduler_config,
-                self.detokenizer,
                 self.scheduler,
+                self.tokenizer,
                 self.seq_counter,
-                self.get_tokenizer_for_seq,
                 stop_checker=StopChecker(
                     self.scheduler_config.max_model_len,
-                    self.get_tokenizer_for_seq,
+                    self.tokenizer
                 ),
             ))
 
@@ -270,8 +260,8 @@ class LLMEngine:
 
     @classmethod
     def from_engine_args(
-        cls,
-        engine_args: EngineArgs = None,
+            cls,
+            engine_args: EngineArgs = None,
     ) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
         # Create the engine configs.
@@ -299,26 +289,13 @@ class LLMEngine:
     MISSING_TOKENIZER_GROUP_MSG = ("Unable to get tokenizer because "
                                    "skip_tokenizer_init is True")
 
-    def get_tokenizer_group(
-            self,
-            fail_msg: str = MISSING_TOKENIZER_GROUP_MSG) -> BaseTokenizerGroup:
-        if self.tokenizer is None:
-            raise ValueError(fail_msg)
+    def _init_tokenizer(self) -> Tokenizer:
+        init_kwargs = dict(tokenizer_name=self.model_config.tokenizer,
+                           tokenizer_mode=self.model_config.tokenizer_mode,
+                           trust_remote_code=self.model_config.trust_remote_code,
+                           revision=self.model_config.tokenizer_revision)
 
-        return self.tokenizer
-
-    def get_tokenizer(
-        self,
-    ) -> AnyTokenizer:
-        return self.get_tokenizer_group().get_tokenizer()
-
-    def get_tokenizer_for_seq(self, sequence: Sequence) -> AnyTokenizer:
-        return self.get_tokenizer_group().get_tokenizer()
-
-    def _init_tokenizer(self) -> BaseTokenizerGroup:
-        return init_tokenizer_from_configs(
-            model_config=self.model_config,
-            scheduler_config=self.scheduler_config)
+        return Tokenizer(**init_kwargs)
 
     def _get_eos_token_id(self) -> Optional[int]:
         if self.tokenizer is None:
@@ -326,15 +303,15 @@ class LLMEngine:
                            "is not initialized")
             return None
 
-        return self.tokenizer.get_tokenizer().eos_token_id
+        return self.tokenizer.eos_token_id
 
     def _add_processed_request(
-        self,
-        request_id: str,
-        processed_inputs: LLMInputs,
-        params: Union[SamplingParams, PoolingParams],
-        arrival_time: float,
-        trace_headers: Optional[Mapping[str, str]] = None,
+            self,
+            request_id: str,
+            processed_inputs: LLMInputs,
+            params: Union[SamplingParams, PoolingParams],
+            arrival_time: float,
+            trace_headers: Optional[Mapping[str, str]] = None,
     ) -> None:
         # Create the sequences.
         block_size = self.cache_config.block_size
@@ -368,35 +345,32 @@ class LLMEngine:
         self.model_executor.stop_remote_worker_execution_loop()
 
     def process_model_inputs(
-        self,
-        request_id: str,
-        inputs: PromptInputs,
+            self,
+            request_id: str,
+            inputs: PromptInputs,
     ) -> LLMInputs:
         if isinstance(inputs, str):
             inputs = {"prompt": inputs}
 
         if "prompt_token_ids" not in inputs:
-            tokenizer = self.get_tokenizer_group("prompts must be None if "
-                                                 "skip_tokenizer_init is True")
+            tokenizer = self.tokenizer
 
-            prompt_token_ids = tokenizer.encode(request_id=request_id,
-                                                prompt=inputs["prompt"])
+            prompt_token_ids = tokenizer.encode(inputs["prompt"])
         else:
             prompt_token_ids = inputs["prompt_token_ids"]
 
         llm_inputs = LLMInputs(prompt_token_ids=prompt_token_ids,
-                               prompt=inputs.get("prompt"),
-                               multi_modal_data=inputs.get("multi_modal_data"))
+                               prompt=inputs.get("prompt"))
 
         return self.input_processor(llm_inputs)
 
     def add_request(
-        self,
-        request_id: str,
-        inputs: PromptInputs,
-        params: Union[SamplingParams, PoolingParams],
-        arrival_time: Optional[float] = None,
-        trace_headers: Optional[Mapping[str, str]] = None
+            self,
+            request_id: str,
+            inputs: PromptInputs,
+            params: Union[SamplingParams, PoolingParams],
+            arrival_time: Optional[float] = None,
+            trace_headers: Optional[Mapping[str, str]] = None
     ) -> None:
         """Add a request to the engine's request pool.
 
@@ -457,19 +431,19 @@ class LLMEngine:
         )
 
     def _create_sequence_group_with_sampling(
-        self,
-        request_id: str,
-        seq: Sequence,
-        sampling_params: SamplingParams,
-        arrival_time: float,
-        trace_headers: Optional[Mapping[str, str]] = None,
+            self,
+            request_id: str,
+            seq: Sequence,
+            sampling_params: SamplingParams,
+            arrival_time: float,
+            trace_headers: Optional[Mapping[str, str]] = None,
     ) -> SequenceGroup:
         """Creates a SequenceGroup with SamplingParams."""
         max_logprobs = self.get_model_config().max_logprobs
         if (sampling_params.logprobs
-                and sampling_params.logprobs > max_logprobs) or (
-                    sampling_params.prompt_logprobs
-                    and sampling_params.prompt_logprobs > max_logprobs):
+            and sampling_params.logprobs > max_logprobs) or (
+                sampling_params.prompt_logprobs
+                and sampling_params.prompt_logprobs > max_logprobs):
             raise ValueError(f"Cannot request more than "
                              f"{max_logprobs} logprobs.")
 
@@ -491,11 +465,11 @@ class LLMEngine:
         return seq_group
 
     def _create_sequence_group_with_pooling(
-        self,
-        request_id: str,
-        seq: Sequence,
-        pooling_params: PoolingParams,
-        arrival_time: float,
+            self,
+            request_id: str,
+            seq: Sequence,
+            pooling_params: PoolingParams,
+            arrival_time: float,
     ) -> SequenceGroup:
         """Creates a SequenceGroup with PoolingParams."""
         # Defensive copy of PoolingParams, which are used by the pooler
@@ -551,9 +525,9 @@ class LLMEngine:
         return self.scheduler.has_unfinished_seqs()
 
     def _process_sequence_group_outputs(
-        self,
-        seq_group: SequenceGroup,
-        outputs: List[EmbeddingSequenceGroupOutput],
+            self,
+            seq_group: SequenceGroup,
+            outputs: List[EmbeddingSequenceGroupOutput],
     ) -> None:
         seq_group.embeddings = outputs[0].embeddings
 
@@ -563,11 +537,11 @@ class LLMEngine:
         return
 
     def _process_model_outputs(
-        self,
-        output: GenericSequence[Union[SamplerOutput, PoolerOutput]],
-        scheduled_seq_groups: List[ScheduledSequenceGroup],
-        ignored_seq_groups: List[SequenceGroup],
-        seq_group_metadata_list: List[SequenceGroupMetadata],
+            self,
+            output: GenericSequence[Union[SamplerOutput, PoolerOutput]],
+            scheduled_seq_groups: List[ScheduledSequenceGroup],
+            ignored_seq_groups: List[SequenceGroup],
+            seq_group_metadata_list: List[SequenceGroupMetadata],
     ) -> List[Union[RequestOutput, EmbeddingRequestOutput]]:
         """Apply the model output to the sequences in the scheduled seq groups.
 
@@ -598,7 +572,7 @@ class LLMEngine:
 
         # Create the outputs.
         request_outputs: List[Union[RequestOutput,
-                                    EmbeddingRequestOutput]] = []
+        EmbeddingRequestOutput]] = []
         for scheduled_seq_group in scheduled_seq_groups:
             seq_group = scheduled_seq_group.seq_group
             seq_group.maybe_set_first_token_time(now)
@@ -692,6 +666,4 @@ class LLMEngine:
         return request_outputs
 
     def check_health(self) -> None:
-        if self.tokenizer:
-            self.tokenizer.check_health()
         self.model_executor.check_health()

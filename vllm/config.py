@@ -10,16 +10,13 @@ import vllm.envs as envs
 from vllm.logger import init_logger
 from vllm.layers.quantization import QUANTIZATION_METHODS
 from vllm.models.zoo import ModelRegistry
-from vllm.transformers_utils.config import get_config, get_hf_text_config
+from vllm.models.transformers_utils.config import get_config, get_hf_text_config
 from vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
                         is_hip, is_neuron, is_openvino, is_tpu, is_xpu,
                         print_warning_once)
 
 if TYPE_CHECKING:
-    from vllm.executor.executor_base import ExecutorBase
     from vllm.models.loader import BaseModelLoader
-    from vllm.transformers_utils.tokenizer_group.base_tokenizer_group import (
-        BaseTokenizerGroup)
 
 logger = init_logger(__name__)
 
