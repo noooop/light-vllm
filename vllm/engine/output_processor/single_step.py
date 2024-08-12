@@ -1,7 +1,5 @@
 from typing import Dict, List, Optional, Tuple, Union
 
-from vllm.config import SchedulerConfig
-from vllm.core.scheduler import Scheduler
 from vllm.engine.output_processor.interfaces import (
     SequenceGroupOutputProcessor)
 from vllm.engine.output_processor.stop_checker import StopChecker
@@ -31,20 +29,18 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
 
     def __init__(
         self,
-        scheduler_config: SchedulerConfig,
-        scheduler: Scheduler,
         tokenizer: Tokenizer,
         seq_counter: Counter,
         stop_checker: StopChecker,
+        max_model_len: int,
     ):
-        self.scheduler_config = scheduler_config
         self.tokenizer = tokenizer
-        self.scheduler = scheduler
         self.seq_counter = seq_counter
         self.stop_checker = stop_checker
+        self.max_model_len = max_model_len
 
     def process_outputs(self, sequence_group: SequenceGroup,
-                        outputs: List[SequenceGroupOutput]) -> None:
+                        outputs: List[SequenceGroupOutput]) -> Tuple[List]:
         """Append all new tokens to sequences in the sequence group. Fork any
         surviving beam candidates; free any unsurviving ones.
 
@@ -80,7 +76,10 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             seq_group.prompt_logprobs.extend(prompt_logprobs)
 
     def _process_sequence_group_outputs(self, seq_group: SequenceGroup,
-                                        outputs: SequenceGroupOutput) -> None:
+                                        outputs: SequenceGroupOutput) -> Tuple[List]:
+        seq_need_free = []
+        seq_need_fork = []
+
         sampling_params = seq_group.sampling_params
         if sampling_params.n == 1 and not sampling_params.use_beam_search:
             # only have one output sample
@@ -99,8 +98,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 sampling_params
             )
             if seq.is_finished():
-                self.scheduler.free_seq(seq)
-            return
+                seq_need_free.append(seq)
+            return seq_need_fork, seq_need_free
 
         # Process samples
         samples = outputs.samples
@@ -129,7 +128,7 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 # not be used in the future iterations.
                 parent.status = SequenceStatus.FINISHED_ABORTED
                 seq_group.remove(parent.seq_id)
-                self.scheduler.free_seq(parent)
+                seq_need_free.append(parent)
                 continue
             # Fork the parent sequence if there are multiple child samples.
             for child_sample in child_samples[:-1]:
@@ -166,7 +165,7 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 if seq is not parent:
                     seq_group.add(seq)
                     if not seq.is_finished():
-                        self.scheduler.fork_seq(parent, seq)
+                        seq_need_fork.append((parent, seq))
 
             # Free the finished and selected parent sequences' memory in block
             # manager. Keep them in the sequence group as candidate output.
@@ -174,8 +173,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             # old sequences.
             for seq, parent in child_seqs:
                 if seq is parent and seq.is_finished():
-                    self.scheduler.free_seq(seq)
-            return
+                    seq_need_free.append(seq)
+            return seq_need_fork, seq_need_free
 
         # Beam search case
         # Select the child sequences to keep in the sequence group.
@@ -259,13 +258,13 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
             if seq is not parent:
                 seq_group.add(seq)
                 if not seq.is_finished():
-                    self.scheduler.fork_seq(parent, seq)
+                    seq_need_fork.append((parent, seq))
 
         # Free the finished and selected parent sequences' memory in block
         # manager. Keep them in the sequence group as candidate output.
         for seq, parent in selected_child_seqs:
             if seq is parent and seq.is_finished():
-                self.scheduler.free_seq(seq)
+                seq_need_free.append(seq)
 
         # Remove the unselected parent sequences from the sequence group and
         # free their memory in block manager.
@@ -274,7 +273,9 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 # Remove the parent sequence if it is not selected for next
                 # iteration
                 seq_group.remove(seq.seq_id)
-                self.scheduler.free_seq(seq)
+                seq_need_free.append(seq)
+
+        return seq_need_fork, seq_need_free
 
     def _check_beam_search_early_stopping(
         self,
@@ -303,8 +304,7 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                 # based on the longest possible sequence length in this case.
                 max_possible_length = max(
                     best_running_seq.get_prompt_len() +
-                    sampling_params.max_tokens,
-                    self.scheduler_config.max_model_len)
+                    sampling_params.max_tokens, self.max_model_len)
                 highest_attainable_score = (
                     best_running_seq.get_beam_search_score(
                         length_penalty=length_penalty,

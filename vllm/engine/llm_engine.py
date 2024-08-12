@@ -10,8 +10,7 @@ from vllm.config import (CacheConfig, DeviceConfig,
 from vllm.core.scheduler import (ScheduledSequenceGroup, Scheduler)
 from vllm.engine.arg_utils import EngineArgs
 
-from vllm.engine.output_processor.interfaces import (
-    SequenceGroupOutputProcessor)
+from vllm.engine.output_processor.single_step import SingleStepOutputProcessor
 from vllm.engine.output_processor.stop_checker import StopChecker
 from vllm.engine.output_processor.util import create_output_by_sequence_group
 from vllm.executor.executor_base import ExecutorBase
@@ -208,19 +207,16 @@ class LLMEngine:
         # GPU and CPU blocks, which are profiled in the distributed executor.
         self.scheduler = Scheduler(scheduler_config, cache_config)
 
-        # Create sequence output processor, e.g. for beam search or
-        # speculative decoding.
-        self.output_processor = (
-            SequenceGroupOutputProcessor.create_output_processor(
-                self.scheduler_config,
-                self.scheduler,
-                self.tokenizer,
-                self.seq_counter,
-                stop_checker=StopChecker(
-                    self.scheduler_config.max_model_len,
-                    self.tokenizer
-                ),
-            ))
+        # Create sequence output processor
+        self.output_processor = SingleStepOutputProcessor(
+            self.tokenizer,
+            self.seq_counter,
+            stop_checker=StopChecker(
+                self.scheduler_config.max_model_len,
+                self.tokenizer
+            ),
+            max_model_len=self.scheduler_config.max_model_len,
+        )
 
     def _initialize_kv_caches(self) -> None:
         """Initialize the KV cache in the worker(s).
@@ -563,7 +559,12 @@ class LLMEngine:
 
             self.output_processor.process_prompt_logprob(seq_group, outputs)
             if seq_group_meta.do_sample:
-                self.output_processor.process_outputs(seq_group, outputs)
+                seq_need_fork, seq_need_free = self.output_processor.process_outputs(seq_group, outputs)
+
+                for parent, seq in seq_need_fork:
+                    self.scheduler.fork_seq(parent, seq)
+                for seq in seq_need_free:
+                    self.scheduler.free_seq(seq)
 
         # Free the finished sequence groups.
         self.scheduler.free_finished_seq_groups()

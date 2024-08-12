@@ -26,7 +26,6 @@ class SequenceGroupOutputProcessor(ABC):
     @staticmethod
     def create_output_processor(
         scheduler_config: SchedulerConfig,
-        scheduler: Scheduler,
         tokenizer: Tokenizer,
         seq_counter: Counter,
         stop_checker: "StopChecker",
@@ -41,8 +40,7 @@ class SequenceGroupOutputProcessor(ABC):
             from vllm.engine.output_processor.single_step import (
                 SingleStepOutputProcessor)
             return SingleStepOutputProcessor(
-                scheduler_config,
-                scheduler,
+                scheduler_config.max_model_len,
                 tokenizer,
                 seq_counter,
                 stop_checker,
