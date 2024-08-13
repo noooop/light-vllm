@@ -9,12 +9,8 @@ from vllm.sequence import ExecuteModelRequest, SamplerOutput
 class ExecutorBase(ABC):
     """Base class for all executors.
 
-    An executor is responsible for executing the model on a specific device
-    type (e.g., CPU, GPU, Neuron, etc.). Or it can be a distributed executor
-    that can execute the model on multiple devices.
+    An executor is responsible for executing the model on a specific device type.
     """
-
-    uses_ray: bool  # whether the executor uses Ray for orchestration.
 
     def __init__(
         self,
@@ -65,38 +61,9 @@ class ExecutorBase(ABC):
         """Executes at least one model step on the given sequences."""
         raise NotImplementedError
 
-    def stop_remote_worker_execution_loop(self) -> None:
-        """Releases parallel workers from model loop."""
-        return
-
-    @abstractmethod
-    def check_health(self) -> None:
-        """Checks if the executor is healthy. If not, it should raise an
-        exception."""
-        raise NotImplementedError
-
     def shutdown(self) -> None:
         """Shutdown the executor."""
         return
 
     def __del__(self):
         self.shutdown()
-
-
-class ExecutorAsyncBase(ExecutorBase):
-
-    @abstractmethod
-    async def execute_model_async(
-            self,
-            execute_model_req: ExecuteModelRequest) -> List[SamplerOutput]:
-        """Executes one model step on the given sequences."""
-        raise NotImplementedError
-
-    async def stop_remote_worker_execution_loop_async(self) -> None:
-        """Releases parallel workers from model loop."""
-        return
-
-    async def check_health_async(self) -> None:
-        """Checks if the executor is healthy. If not, it should raise an
-        exception."""
-        self.check_health()

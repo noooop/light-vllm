@@ -654,15 +654,4 @@ class LLMEngine:
             output, scheduler_outputs.scheduled_seq_groups,
             scheduler_outputs.ignored_seq_groups, seq_group_metadata_list)
 
-        if not self.has_unfinished_requests():
-            # Stop the execute model loop in parallel workers until there are
-            # more requests to process. This avoids waiting indefinitely in
-            # torch.distributed ops which may otherwise timeout, and unblocks
-            # the RPC thread in the workers so that they can process any other
-            # queued control plane messages, such as add/remove lora adapters.
-            self.model_executor.stop_remote_worker_execution_loop()
-
         return request_outputs
-
-    def check_health(self) -> None:
-        self.model_executor.check_health()
