@@ -64,6 +64,7 @@ def run_vllm(
     )
     engine = LLMEngine.from_engine_args(engine_args)
 
+    start = time.perf_counter()
     # Add the requests to the engine.
     for request_id, (prompt, _, output_len) in enumerate(requests):
         inputs = TextPrompt(prompt=prompt)
@@ -75,11 +76,9 @@ def run_vllm(
                 ignore_eos=True,
                 max_tokens=output_len,
             )
-
         engine.add_request(str(request_id), inputs, sampling_params)
 
     out = []
-    start = time.perf_counter()
     while engine.has_unfinished_requests():
         request_outputs = engine.step()
         out.append((time.perf_counter(), request_outputs))
