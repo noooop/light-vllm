@@ -10,10 +10,9 @@ from vllm.layers.attention.backends.abstract import (AttentionBackend, Attention
                                                      AttentionMetadata,
                                                      AttentionMetadataBuilder,
                                                      AttentionType)
-from vllm.layers.attention.backends.utils import (PAD_SLOT_ID, compute_slot_mapping,
+from vllm.layers.attention.backends.utils import (compute_slot_mapping,
                                                   compute_slot_mapping_start_idx,
                                                   is_block_tables_empty)
-from vllm.utils import make_tensor_with_pad
 
 if TYPE_CHECKING:
     from vllm.worker.model_runner import ModelInputForGPUBuilder
@@ -299,26 +298,10 @@ class FlashAttentionMetadataBuilder(
         max_decode_seq_len = max(self.curr_seq_lens, default=0)
         num_decode_tokens = self.num_decode_tokens
 
-        if use_captured_graph:
-            self.slot_mapping.extend([PAD_SLOT_ID] * cuda_graph_pad_size)
-            self.block_tables.extend([] * cuda_graph_pad_size)
-            num_decode_tokens = batch_size
-
-            # The shape of graph_block_tables is
-            # [max batch size, max context len // block size].
-            input_block_tables = self.runner.graph_block_tables[:batch_size]
-            for i, block_table in enumerate(self.block_tables):
-                if block_table:
-                    input_block_tables[i, :len(block_table)] = block_table
-            block_tables = torch.tensor(input_block_tables, device=device)
-        else:
-            block_tables = make_tensor_with_pad(
-                self.block_tables,
-                pad=0,
-                dtype=torch.int,
-                device=device,
-            )
         assert max_query_len > 0, ("query_lens: {}".format(query_lens))
+
+        num_decode_tokens, block_tables = (
+            self.runner.cuda_graph.attention_metadata_builder_maybe_pad(self, cuda_graph_pad_size, num_decode_tokens, batch_size, device))
 
         context_lens_tensor = torch.tensor(self.context_lens,
                                            dtype=torch.int,
