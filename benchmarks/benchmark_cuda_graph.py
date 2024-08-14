@@ -38,15 +38,15 @@ def benchmark(args):
     )
     engine = LLMEngine.from_engine_args(engine_args)
 
-    for n in range(1, args.num_prompts+2):
+    for batch_size in range(1, args.num_prompts+2):
         prompt = "hi" * (args.input_len - 1)
         requests = [(prompt, args.input_len, args.output_len)
-                    for _ in range(n)]
+                    for _ in range(batch_size)]
 
         for request_id, (prompt, _, output_len) in enumerate(requests):
             inputs = TextPrompt(prompt=prompt)
             sampling_params = SamplingParams(
-                    n=n,
+                    n=args.n,
                     temperature=0.0 if args.use_beam_search else 1.0,
                     top_p=1.0,
                     use_beam_search=args.use_beam_search,
@@ -65,7 +65,7 @@ def benchmark(args):
         end = time.perf_counter()
 
         elapsed_time = end - start
-        print(n, f"{elapsed_time:.2f}")
+        print(batch_size, f"{elapsed_time:.2f}")
 
         for request_id, (prompt, _, output_len) in enumerate(requests):
             engine.abort_request(str(request_id))
