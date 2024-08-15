@@ -30,6 +30,20 @@ python -m python -m benchmarks.baseline
 
 对贡献这些代码的提交者表示深深的歉意
 
+# step 2 Refactor
+
+## Cuda Graph
+把Cuda Graph相关的，散落在各处的Capture Graph，检测是否能使用Cuda Graph，输入做pad，运行Graph等逻辑重构到[一个文件](https://github.com/noooop/light-vllm/blob/main/vllm/worker/cuda_graph_util.py)
+
+使用Cuda Graph捕捉的是静态图，所有tenser尺寸和显存位置都是写死的，要一个batch都是decode阶段才行，不能在prefill阶段包括chunked_prefill使用，[条件还是挺苛刻的](https://github.com/noooop/light-vllm/blob/main/vllm/worker/cuda_graph_util.py#L248)。
+
+python -m benchmarks.benchmark_cuda_graph
+
+<img src="https://github.com/noooop/noooop.github.io/blob/main/benchmarking/light-vllm/cuda_graph.png?raw=true" width="400">
+
+实测多个版本的vllm，Qwen2-7B-Instruct使用Cuda Graph，decode延迟降低1%~5%，行吧。[LLaMA-7B 2.3x speedup](https://fireworks.ai/blog/speed-python-pick-two-how-cuda-graphs-enable-fast-python-code-for-deep-learning#llama27b--cuda-graph-inference-performance-results)不知道怎么做到的，可能是30 tokens/sec真的很慢，baseline比较低。
+
+[This (CUDA graph) is particularly effective for small models and when using tensor parallelism.](https://github.com/vllm-project/vllm/pull/1926) 有时间再测一下
 
 # Warning
 Not rigorously tested.
