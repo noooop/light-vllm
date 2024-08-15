@@ -65,7 +65,7 @@ def benchmark(args):
         end = time.perf_counter()
 
         elapsed_time = end - start
-        print(batch_size, f"{elapsed_time:.2f}")
+        print(batch_size, elapsed_time)
 
         for request_id, (prompt, _, output_len) in enumerate(requests):
             engine.abort_request(str(request_id))
