@@ -45,6 +45,8 @@ python -m benchmarks.benchmark_cuda_graph
 
 [This (CUDA graph) is particularly effective for small models and when using tensor parallelism.](https://github.com/vllm-project/vllm/pull/1926) 有时间再测一下
 
+Capture Graph需要额外的时间，Graph占额外的显存空间。如果真有巨大的速度提升，调度器也会围绕这个特性，尽量一个batch都是decode阶段，这时chunked_prefill就很尴尬。实测几乎没有提升，Cuda Graph默认关了吧。
+
 # Warning
 Not rigorously tested.
 For research and experimentation only.
