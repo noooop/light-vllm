@@ -1,19 +1,19 @@
 import os
-
-os.environ["VLLM_USE_MODELSCOPE"] = "True"
-
-
+import random
 import time
 from concurrent.futures import ProcessPoolExecutor
 
 
 def benchmark(args):
+    random.seed(args.seed)
+
+    os.environ["VLLM_LOGGING_LEVEL"] = "ERROR"
+    os.environ["VLLM_NO_USAGE_STATS"] = "True"
+
+    import vllm
     from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
 
-    import logging
-    loggers = [logging.getLogger(name) for name in logging.root.manager.loggerDict]
-    for logger in loggers:
-        logger.setLevel(logging.ERROR)
+    print(vllm.__version__)
 
     engine_args = EngineArgs(
         model=args.model,
@@ -99,7 +99,6 @@ if __name__ == '__main__':
     args.use_beam_search = False
     args.dtype = 'auto'
     args.max_model_len = 10000
-    args.enforce_eager = False
     args.kv_cache_dtype = "auto"
     args.device = "cuda"
     args.enable_prefix_caching = False
@@ -110,7 +109,6 @@ if __name__ == '__main__':
     args.enable_chunked_prefill = False
     args.max_num_batched_tokens = None
     args.max_num_seqs = 512
-
     args.num_prompts = 128
 
     for enforce_eager in [True, False]:
