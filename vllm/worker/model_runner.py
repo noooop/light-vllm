@@ -20,21 +20,13 @@ from vllm.models.loader import get_model
 from vllm.models.loader.tensorizer import TensorizerConfig
 from vllm.models.utils import set_cpu_offload_max_bytes
 from vllm.layers.sampling_params import SamplingParams
-from vllm.sequence import (IntermediateTensors, SamplerOutput,
-                           SequenceGroupMetadata)
+from vllm.sequence import SamplerOutput, SequenceGroupMetadata
 from vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
                         is_hip,
                         is_pin_memory_available)
 from vllm.worker.model_runner_base import (
-    ModelRunnerBase, ModelRunnerInputBase, ModelRunnerInputBuilderBase,
-    _add_attn_metadata_broadcastable_dict,
-    _add_sampling_metadata_broadcastable_dict,
-    _init_attn_metadata_from_tensor_dict,
-    _init_sampling_metadata_from_tensor_dict)
+    ModelRunnerBase, ModelRunnerInputBase, ModelRunnerInputBuilderBase)
 from vllm.worker.cuda_graph_util import CUDAGraph
-
-if TYPE_CHECKING:
-    from vllm.layers.attention.backends import AttentionBackend
 
 logger = init_logger(__name__)
 
@@ -57,27 +49,6 @@ class ModelInputForGPU(ModelRunnerInputBase):
     request_ids_to_seq_ids: Optional[Dict[str, List[int]]] = None
     finished_requests_ids: Optional[List[str]] = None
 
-    def as_broadcastable_tensor_dict(self) -> Dict[str, Any]:
-        tensor_dict = {
-            "input_tokens": self.input_tokens,
-            "input_positions": self.input_positions,
-            "request_ids_to_seq_ids": self.request_ids_to_seq_ids,
-            "finished_requests_ids": self.finished_requests_ids,
-        }
-        _add_attn_metadata_broadcastable_dict(tensor_dict, self.attn_metadata)
-        return tensor_dict
-
-    @classmethod
-    def from_broadcasted_tensor_dict(
-        cls: Type[TModelInputForGPU],
-        tensor_dict: Dict[str, Any],
-        attn_backend: Optional["AttentionBackend"] = None,
-    ) -> TModelInputForGPU:
-        if attn_backend is not None:
-            tensor_dict = _init_attn_metadata_from_tensor_dict(
-                attn_backend, tensor_dict)
-        return cls(**tensor_dict)
-
 
 @dataclass(frozen=True)
 class ModelInputForGPUWithSamplingMetadata(ModelInputForGPU):
@@ -88,30 +59,6 @@ class ModelInputForGPUWithSamplingMetadata(ModelInputForGPU):
     # Used for speculative decoding. We do not broadcast it because it is only
     # used by the driver worker.
     is_prompt: Optional[bool] = None
-
-    def as_broadcastable_tensor_dict(self) -> Dict[str, Any]:
-        tensor_dict = {
-            "input_tokens": self.input_tokens,
-            "input_positions": self.input_positions,
-            "request_ids_to_seq_ids": self.request_ids_to_seq_ids,
-            "finished_requests_ids": self.finished_requests_ids,
-        }
-        _add_attn_metadata_broadcastable_dict(tensor_dict, self.attn_metadata)
-        _add_sampling_metadata_broadcastable_dict(tensor_dict,
-                                                  self.sampling_metadata)
-        return tensor_dict
-
-    @classmethod
-    def from_broadcasted_tensor_dict(
-        cls,
-        tensor_dict: Dict[str, Any],
-        attn_backend: Optional["AttentionBackend"] = None,
-    ) -> "ModelInputForGPUWithSamplingMetadata":
-        tensor_dict = _init_sampling_metadata_from_tensor_dict(tensor_dict)
-        if attn_backend is not None:
-            tensor_dict = _init_attn_metadata_from_tensor_dict(
-                attn_backend, tensor_dict)
-        return cls(**tensor_dict)
 
 
 class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
@@ -605,17 +552,6 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         ModelInputForGPUWithSamplingMetadata)
     _builder_cls: Type[ModelInputForGPUBuilder] = ModelInputForGPUBuilder
 
-    def make_model_input_from_broadcasted_tensor_dict(
-        self,
-        tensor_dict: Dict[str, Any],
-    ) -> ModelInputForGPUWithSamplingMetadata:
-        model_input = \
-            ModelInputForGPUWithSamplingMetadata.from_broadcasted_tensor_dict(
-                tensor_dict,
-                attn_backend=self.attn_backend,
-            )
-        return model_input
-
     def prepare_model_input(
         self,
         seq_group_metadata_list: List[SequenceGroupMetadata],
@@ -655,9 +591,8 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         self,
         model_input: ModelInputForGPUWithSamplingMetadata,
         kv_caches: List[torch.Tensor],
-        intermediate_tensors: Optional[IntermediateTensors] = None,
         num_steps: int = 1,
-    ) -> Optional[Union[List[SamplerOutput], IntermediateTensors]]:
+    ) -> Optional[List[SamplerOutput]]:
         if num_steps > 1:
             raise ValueError("num_steps > 1 is not supported in ModelRunner")
 
@@ -675,15 +610,14 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
             "request_ids_to_seq_ids": model_input.request_ids_to_seq_ids,
         } if self.cuda_graph.has_seqlen_agnostic else {}
 
-        hidden_or_intermediate_states = model_executable(
+        hidden_states = model_executable(
             input_ids=model_input.input_tokens,
             positions=model_input.input_positions,
             kv_caches=kv_caches,
             attn_metadata=model_input.attn_metadata,
-            intermediate_tensors=intermediate_tensors,
             **seqlen_agnostic_kwargs)
 
-        logits = self.model.compute_logits(hidden_or_intermediate_states,
+        logits = self.model.compute_logits(hidden_states,
                                            model_input.sampling_metadata)
 
         if not self.is_driver_worker:
@@ -700,12 +634,12 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
             assert model_input.sampling_metadata is not None
             indices = model_input.sampling_metadata.selected_token_indices
             if model_input.is_prompt:
-                hidden_states = hidden_or_intermediate_states.index_select(
+                hidden_states = hidden_states.index_select(
                     0, indices)
             elif model_input.attn_metadata.decode_metadata.use_cuda_graph:
-                hidden_states = hidden_or_intermediate_states[:len(indices)]
+                hidden_states = hidden_states[:len(indices)]
             else:
-                hidden_states = hidden_or_intermediate_states
+                hidden_states = hidden_states
 
             output.hidden_states = hidden_states
 

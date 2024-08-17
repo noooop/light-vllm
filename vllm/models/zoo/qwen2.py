@@ -45,7 +45,7 @@ from vllm.layers.vocab_embedding import (
 from vllm.models.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from vllm.layers.sampling_metadata import SamplingMetadata
-from vllm.sequence import IntermediateTensors, SamplerOutput
+from vllm.sequence import SamplerOutput
 
 from vllm.models.utils import is_pp_missing_parameter, make_layers
 
@@ -256,7 +256,6 @@ class Qwen2Model(nn.Module):
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
             attn_metadata: AttentionMetadata,
-            intermediate_tensors: Optional[IntermediateTensors] = None,
             inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if inputs_embeds is not None:
@@ -343,10 +342,8 @@ class Qwen2ForCausalLM(nn.Module):
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
             attn_metadata: AttentionMetadata,
-            intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids, positions, kv_caches,
-                                   attn_metadata, intermediate_tensors)
+        hidden_states = self.model(input_ids, positions, kv_caches, attn_metadata)
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor,
@@ -354,20 +351,6 @@ class Qwen2ForCausalLM(nn.Module):
         logits = self.logits_processor(self.lm_head, hidden_states,
                                        sampling_metadata)
         return logits
-
-    def make_empty_intermediate_tensors(
-            self, batch_size: int, dtype: torch.dtype,
-            device: torch.device) -> IntermediateTensors:
-        return IntermediateTensors({
-            "hidden_states":
-                torch.zeros((batch_size, self.config.hidden_size),
-                            dtype=dtype,
-                            device=device),
-            "residual":
-                torch.zeros((batch_size, self.config.hidden_size),
-                            dtype=dtype,
-                            device=device),
-        })
 
     def sample(
             self,

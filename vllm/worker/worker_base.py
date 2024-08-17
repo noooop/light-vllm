@@ -8,8 +8,7 @@ import torch
 
 from vllm.logger import init_logger
 from vllm.platforms import current_platform
-from vllm.sequence import (ExecuteModelRequest, IntermediateTensors,
-                           SamplerOutput)
+from vllm.sequence import ExecuteModelRequest, SamplerOutput
 from vllm.utils import (enable_trace_function_call_for_thread,
                         update_environment_variables)
 from vllm.worker.model_runner_base import ModelRunnerBase, ModelRunnerInputBase
@@ -90,36 +89,6 @@ class WorkerInput:
     blocks_to_swap_out: Optional[torch.Tensor] = None
     blocks_to_copy: Optional[torch.Tensor] = None
 
-    @classmethod
-    def from_broadcasted_tensor_dict(
-        cls: Type["WorkerInput"],
-        tensor_dict: Dict[str, Any],
-    ) -> "WorkerInput":
-        """
-        Pop fields from the given tensor_dict and populate a new instance of
-        WorkerInput.
-        """
-        return cls(
-            num_seq_groups=tensor_dict.pop("num_seq_groups"),
-            blocks_to_swap_in=tensor_dict.pop("blocks_to_swap_in"),
-            blocks_to_swap_out=tensor_dict.pop("blocks_to_swap_out"),
-            blocks_to_copy=tensor_dict.pop("blocks_to_copy"),
-        )
-
-    def as_broadcastable_tensor_dict(
-            self) -> Dict[str, Union[int, torch.Tensor]]:
-        """
-        Extract broadcastable fields.
-        """
-        tensor_dict = {
-            "num_seq_groups": self.num_seq_groups,
-            "blocks_to_swap_in": self.blocks_to_swap_in,
-            "blocks_to_swap_out": self.blocks_to_swap_out,
-            "blocks_to_copy": self.blocks_to_copy,
-        }
-
-        return tensor_dict
-
 
 class LocalOrDistributedWorkerBase(WorkerBase):
     """
@@ -186,45 +155,12 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         if worker_input.num_seq_groups == 0:
             return []
 
-        intermediate_tensors = None
-
         output = self.model_runner.execute_model(
             model_input,
             self.kv_cache if self.kv_cache is not None else None,
-            intermediate_tensors,
             num_steps)
 
         return output
-
-    def _execute_model_spmd(
-        self,
-        execute_model_req: ExecuteModelRequest,
-        intermediate_tensors: Optional[IntermediateTensors] = None
-    ) -> Optional[List[SamplerOutput]]:
-        """
-        Execute model in Single Program Multiple Data (SPMD) fashion.
-        All workers take the same request, prepare the input and
-        execute the model.
-        """
-        assert execute_model_req is not None, (
-            "_execute_model_spmd() requires each worker to take in an "
-            "ExecuteModelRequest")
-        worker_input: WorkerInput = self.prepare_worker_input(
-            execute_model_req=execute_model_req)
-        model_input: ModelRunnerInputBase = (
-            self.model_runner.prepare_model_input(
-                execute_model_req.seq_group_metadata_list))
-
-        self.execute_worker(worker_input)
-
-        # If there is no input, we don't need to execute the model.
-        if worker_input.num_seq_groups == 0:
-            return []
-
-        return self.model_runner.execute_model(
-            model_input,
-            self.kv_cache if self.kv_cache is not None else None,
-            intermediate_tensors)
 
 
 class WorkerWrapperBase:
