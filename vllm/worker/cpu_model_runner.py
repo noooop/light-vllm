@@ -24,7 +24,7 @@ from vllm.worker.model_runner_base import (
     _init_sampling_metadata_from_tensor_dict)
 
 if TYPE_CHECKING:
-    from vllm.attention.backends.abstract import AttentionBackend
+    from vllm.layers.attention.backends.abstract import AttentionBackend
 
 logger = init_logger(__name__)
 
@@ -41,7 +41,6 @@ class CPUModelInput(ModelRunnerInputBase):
     attn_metadata: Optional["AttentionMetadata"] = None
     sampling_metadata: Optional["SamplingMetadata"] = None
     multi_modal_kwargs: Optional[BatchedTensorInputs] = None
-    virtual_engine: Optional[int] = None
 
     def as_broadcastable_tensor_dict(
             self) -> Dict[str, Union[int, torch.Tensor]]:
@@ -311,7 +310,6 @@ class CPUModelRunner(ModelRunnerBase[CPUModelInput]):
     def prepare_model_input(
             self,
             seq_group_metadata_list: List[SequenceGroupMetadata],
-            virtual_engine: int = 0,
             finished_requests_ids: Optional[List[str]] = None
     ) -> CPUModelInput:
         multi_modal_kwargs = None

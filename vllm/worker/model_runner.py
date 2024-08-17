@@ -56,13 +56,11 @@ class ModelInputForGPU(ModelRunnerInputBase):
     attn_metadata: Optional["AttentionMetadata"] = None
     request_ids_to_seq_ids: Optional[Dict[str, List[int]]] = None
     finished_requests_ids: Optional[List[str]] = None
-    virtual_engine: int = 0
 
     def as_broadcastable_tensor_dict(self) -> Dict[str, Any]:
         tensor_dict = {
             "input_tokens": self.input_tokens,
             "input_positions": self.input_positions,
-            "virtual_engine": self.virtual_engine,
             "request_ids_to_seq_ids": self.request_ids_to_seq_ids,
             "finished_requests_ids": self.finished_requests_ids,
         }
@@ -95,7 +93,6 @@ class ModelInputForGPUWithSamplingMetadata(ModelInputForGPU):
         tensor_dict = {
             "input_tokens": self.input_tokens,
             "input_positions": self.input_positions,
-            "virtual_engine": self.virtual_engine,
             "request_ids_to_seq_ids": self.request_ids_to_seq_ids,
             "finished_requests_ids": self.finished_requests_ids,
         }
@@ -592,8 +589,8 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         torch.cuda.synchronize()
         return
 
-    def capture_model(self, kv_caches: List[List[torch.Tensor]]) -> None:
-        self.cuda_graph.capture_model(self.model, self.attn_backend, kv_caches[0])
+    def capture_model(self, kv_caches: List[torch.Tensor]) -> None:
+        self.cuda_graph.capture_model(self.model, self.attn_backend, kv_caches)
 
     @property
     def vocab_size(self) -> int:
@@ -622,7 +619,6 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
     def prepare_model_input(
         self,
         seq_group_metadata_list: List[SequenceGroupMetadata],
-        virtual_engine: int = 0,
         finished_requests_ids: Optional[List[str]] = None
     ) -> ModelInputForGPUWithSamplingMetadata:
         """Prepare the model input based on a given sequence group, including
@@ -652,8 +648,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
                      if seq_group_metadata_list else None)
         return dataclasses.replace(model_input,
                                    sampling_metadata=sampling_metadata,
-                                   is_prompt=is_prompt,
-                                   virtual_engine=virtual_engine)
+                                   is_prompt=is_prompt)
 
     @torch.inference_mode()
     def execute_model(

@@ -89,7 +89,6 @@ class WorkerInput:
     blocks_to_swap_in: Optional[torch.Tensor] = None
     blocks_to_swap_out: Optional[torch.Tensor] = None
     blocks_to_copy: Optional[torch.Tensor] = None
-    virtual_engine: int = 0
 
     @classmethod
     def from_broadcasted_tensor_dict(
@@ -105,7 +104,6 @@ class WorkerInput:
             blocks_to_swap_in=tensor_dict.pop("blocks_to_swap_in"),
             blocks_to_swap_out=tensor_dict.pop("blocks_to_swap_out"),
             blocks_to_copy=tensor_dict.pop("blocks_to_copy"),
-            virtual_engine=tensor_dict["virtual_engine"],
         )
 
     def as_broadcastable_tensor_dict(
@@ -118,7 +116,6 @@ class WorkerInput:
             "blocks_to_swap_in": self.blocks_to_swap_in,
             "blocks_to_swap_out": self.blocks_to_swap_out,
             "blocks_to_copy": self.blocks_to_copy,
-            "virtual_engine": self.virtual_engine,
         }
 
         return tensor_dict
@@ -180,7 +177,6 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         model_input: ModelRunnerInputBase = (
             self.model_runner.prepare_model_input(
                 execute_model_req.seq_group_metadata_list,
-                execute_model_req.virtual_engine,
                 execute_model_req.finished_requests_ids))
         num_steps = execute_model_req.num_steps
 
@@ -193,8 +189,9 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         intermediate_tensors = None
 
         output = self.model_runner.execute_model(
-            model_input, self.kv_cache[worker_input.virtual_engine]
-            if self.kv_cache is not None else None, intermediate_tensors,
+            model_input,
+            self.kv_cache if self.kv_cache is not None else None,
+            intermediate_tensors,
             num_steps)
 
         return output
@@ -225,8 +222,9 @@ class LocalOrDistributedWorkerBase(WorkerBase):
             return []
 
         return self.model_runner.execute_model(
-            model_input, self.kv_cache[worker_input.virtual_engine]
-            if self.kv_cache is not None else None, intermediate_tensors)
+            model_input,
+            self.kv_cache if self.kv_cache is not None else None,
+            intermediate_tensors)
 
 
 class WorkerWrapperBase:

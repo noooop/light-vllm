@@ -61,9 +61,9 @@ class Worker(LocalOrDistributedWorkerBase):
         )
         # Uninitialized cache engine. Will be initialized by
         # initialize_cache.
-        self.cache_engine: List[CacheEngine]
+        self.cache_engine: CacheEngine
         # Initialize gpu_cache as embedding models don't initialize kv_caches
-        self.gpu_cache: Optional[List[List[torch.Tensor]]] = None
+        self.gpu_cache: Optional[List[torch.Tensor]] = None
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
@@ -176,12 +176,8 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def _init_cache_engine(self):
         assert self.cache_config.num_gpu_blocks is not None
-        self.cache_engine = [
-            CacheEngine(self.cache_config, self.model_config, self.device_config)
-        ]
-        self.gpu_cache = [
-            self.cache_engine[0].gpu_cache
-        ]
+        self.cache_engine = CacheEngine(self.cache_config, self.model_config, self.device_config)
+        self.gpu_cache = self.cache_engine.gpu_cache
 
     def _warm_up_model(self) -> None:
         if not self.model_config.enforce_eager:
@@ -191,13 +187,12 @@ class Worker(LocalOrDistributedWorkerBase):
         set_random_seed(self.model_config.seed)
 
     @property
-    def kv_cache(self) -> Optional[List[List[torch.Tensor]]]:
+    def kv_cache(self) -> Optional[List[torch.Tensor]]:
         return self.gpu_cache
 
     @torch.inference_mode()
     def prepare_worker_input(
             self, execute_model_req: ExecuteModelRequest) -> WorkerInput:
-        virtual_engine = execute_model_req.virtual_engine
         num_seq_groups = len(execute_model_req.seq_group_metadata_list)
         # `blocks_to_swap_in` and `blocks_to_swap_out` are cpu tensors.
         # they contain parameters to launch cudamemcpyasync.
@@ -218,25 +213,22 @@ class Worker(LocalOrDistributedWorkerBase):
             num_seq_groups=num_seq_groups,
             blocks_to_swap_in=blocks_to_swap_in,
             blocks_to_swap_out=blocks_to_swap_out,
-            blocks_to_copy=blocks_to_copy,
-            virtual_engine=virtual_engine,
+            blocks_to_copy=blocks_to_copy
         )
 
     @torch.inference_mode()
     def execute_worker(self, worker_input: WorkerInput) -> None:
-        virtual_engine = worker_input.virtual_engine
-        # Issue cache operations.
         if (worker_input.blocks_to_swap_in is not None
                 and worker_input.blocks_to_swap_in.numel() > 0):
-            self.cache_engine[virtual_engine].swap_in(
+            self.cache_engine.swap_in(
                 worker_input.blocks_to_swap_in)
         if (worker_input.blocks_to_swap_out is not None
                 and worker_input.blocks_to_swap_out.numel() > 0):
-            self.cache_engine[virtual_engine].swap_out(
+            self.cache_engine.swap_out(
                 worker_input.blocks_to_swap_out)
         if (worker_input.blocks_to_copy is not None
                 and worker_input.blocks_to_copy.numel() > 0):
-            self.cache_engine[virtual_engine].copy(worker_input.blocks_to_copy)
+            self.cache_engine.copy(worker_input.blocks_to_copy)
 
     @property
     def max_model_len(self) -> int:

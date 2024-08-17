@@ -287,14 +287,12 @@ class CPUWorker(LoraNotSupportedWorkerBase, LocalOrDistributedWorkerBase):
     ) -> None:
         if (worker_input.blocks_to_copy is not None
                 and worker_input.blocks_to_copy.numel() > 0):
-            self.cache_engine[worker_input.virtual_engine].copy(
-                worker_input.blocks_to_copy)
+            self.cache_engine.copy(worker_input.blocks_to_copy)
 
     @torch.inference_mode()
     def prepare_worker_input(
             self, execute_model_req: ExecuteModelRequest) -> WorkerInput:
         assert execute_model_req is not None
-        virtual_engine = execute_model_req.virtual_engine
         num_seq_groups: int = len(execute_model_req.seq_group_metadata_list)
         blocks_to_copy = execute_model_req.blocks_to_copy
         blocks_to_copy = torch.tensor(execute_model_req.blocks_to_copy,
@@ -304,8 +302,7 @@ class CPUWorker(LoraNotSupportedWorkerBase, LocalOrDistributedWorkerBase):
         assert len(execute_model_req.blocks_to_swap_out) == 0
         return WorkerInput(
             num_seq_groups=num_seq_groups,
-            blocks_to_copy=blocks_to_copy,
-            virtual_engine=virtual_engine,
+            blocks_to_copy=blocks_to_copy
         )
 
     def init_distributed_environment(self) -> None:

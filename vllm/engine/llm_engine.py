@@ -511,13 +511,6 @@ class LLMEngine:
         """Returns True if there are unfinished requests."""
         return self.scheduler.has_unfinished_seqs()
 
-    def has_unfinished_requests_for_virtual_engine(
-            self, virtual_engine: int) -> bool:
-        """
-        Returns True if there are unfinished requests for the virtual engine.
-        """
-        return self.scheduler.has_unfinished_seqs()
-
     def _process_sequence_group_outputs(
             self,
             seq_group: SequenceGroup,

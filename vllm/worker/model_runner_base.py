@@ -157,7 +157,6 @@ class ModelRunnerBase(ABC, Generic[T]):
     def prepare_model_input(
         self,
         seq_group_metadata_list: List[SequenceGroupMetadata],
-        virtual_engine: int = 0,
         finished_requests_ids: Optional[List[str]] = None,
     ) -> T:
         """
