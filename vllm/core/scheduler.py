@@ -8,6 +8,7 @@ from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union
 
 from vllm.config import CacheConfig, SchedulerConfig
 from vllm.core.interfaces import AllocStatus, BlockSpaceManager
+from vllm.core.policy import Policy, PolicyFactory
 from vllm.logger import init_logger
 from vllm.sequence import (Sequence, SequenceData, SequenceGroup,
                            SequenceGroupMetadata, SequenceStatus)
@@ -134,6 +135,7 @@ class SchedulerOutputs:
         return (not self.scheduled_seq_groups and not self.blocks_to_swap_in
                 and not self.blocks_to_swap_out and not self.blocks_to_copy)
 
+
 @dataclass
 class SchedulerRunningOutputs:
     """The requests that are scheduled from a running queue.
@@ -228,10 +230,10 @@ class SchedulerPrefillOutputs:
 class Scheduler:
 
     def __init__(
-        self,
-        scheduler_config: SchedulerConfig,
-        cache_config: CacheConfig,
-        pipeline_parallel_size: int = 1,
+            self,
+            scheduler_config: SchedulerConfig,
+            cache_config: CacheConfig,
+            pipeline_parallel_size: int = 1,
     ) -> None:
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
@@ -299,16 +301,6 @@ class Scheduler:
         # Add sequence groups to the waiting queue.
         self.waiting.append(seq_group)
 
-    def _add_seq_group_to_running(self, seq_group: SequenceGroup) -> None:
-        # Add sequence groups to the running queue.
-        # Only for testing purposes.
-        self.running.append(seq_group)
-
-    def _add_seq_group_to_swapped(self, seq_group: SequenceGroup) -> None:
-        # Add sequence groups to the swapped queue.
-        # Only for testing purposes.
-        self.swapped.append(seq_group)
-
     def abort_seq_group(self, request_id: Union[str, Iterable[str]]) -> None:
         """Aborts a sequence group with the given ID.
 
@@ -323,7 +315,7 @@ class Scheduler:
             request_id: The ID(s) of the sequence group to abort.
         """
         if isinstance(request_id, str):
-            request_id = (request_id, )
+            request_id = (request_id,)
         request_ids = set(request_id)
         for state_queue in [self.waiting, self.running, self.swapped]:
             aborted_groups: List[SequenceGroup] = []
@@ -361,24 +353,30 @@ class Scheduler:
         return finished_requests_ids
 
     def _schedule_running(
-        self,
-        budget: SchedulingBudget,
-        enable_chunking: bool = False,
-    ) -> SchedulerRunningOutputs:
+            self,
+            running_queue: deque,
+            budget: SchedulingBudget,
+            policy: Policy,
+            enable_chunking: bool = False,
+    ) -> Tuple[deque, SchedulerRunningOutputs]:
         """Schedule sequence groups that are running.
 
         Running queue should include decode and chunked prefill requests.
 
         Args:
+            running_queue: The queue that contains running requests (i.e.,
+                decodes). The given arguments are NOT in-place modified.
             budget: The scheduling budget. The argument is in-place updated
                 when any decodes are preempted.
+            policy: The sorting policy to sort running_queue.
             enable_chunking: If True, seq group can be chunked and only a
                 chunked number of tokens are scheduled  if
                 `budget.num_batched_tokens` has not enough capacity to schedule
                 all tokens.
-    
+
         Returns:
-            SchedulerRunningOutputs.
+            A tuple of remaining running queue (should be always 0) after
+            scheduling and SchedulerRunningOutputs.
         """
         # Blocks that need to be swapped or copied before model execution.
         blocks_to_swap_out: List[Tuple[int, int]] = []
@@ -391,9 +389,10 @@ class Scheduler:
 
         # NOTE(woosuk): Preemption happens only when there is no available slot
         # to keep all the sequence groups in the RUNNING state.
-
-        running_queue = self.running
-
+        # In this case, the policy is responsible for deciding which sequence
+        # groups to preempt.
+        now = time.time()
+        running_queue = policy.sort_by_priority(now, running_queue)
         while running_queue:
             seq_group = running_queue[0]
             num_running_tokens = self._get_num_new_tokens(
@@ -451,7 +450,7 @@ class Scheduler:
                     num_running_seqs = seq_group.get_max_num_running_seqs()
                     budget.add_num_seqs(seq_group.request_id, num_running_seqs)
 
-        return SchedulerRunningOutputs(
+        return running_queue, SchedulerRunningOutputs(
             decode_seq_groups=decode_seq_groups,
             prefill_seq_groups=prefill_seq_groups,
             preempted=preempted,
@@ -462,22 +461,29 @@ class Scheduler:
                 is_prefill=False))
 
     def _schedule_swapped(
-        self,
-        budget: SchedulingBudget,
-        enable_chunking: bool = False,
-    ) -> SchedulerSwappedInOutputs:
+            self,
+            swapped_queue: deque,
+            budget: SchedulingBudget,
+            policy: Policy,
+            enable_chunking: bool = False,
+    ) -> Tuple[deque, SchedulerSwappedInOutputs]:
         """Schedule sequence groups that are swapped out.
 
-        It schedules swapped requests as long as it fits `budget`
+        It schedules swapped requests as long as it fits `budget`.
+
         Args:
+            swapped_queue: The queue that contains swapped out requests.
+                The given arguments are NOT in-place modified.
             budget: The scheduling budget. The argument is in-place updated
                 when any requests are swapped in.
+            policy: The sorting policy to sort swapped_queue.
             enable_chunking: If True, seq group can be chunked and only a
                 chunked number of tokens are scheduled  if
                 `budget.num_batched_tokens` has not enough capacity to schedule
                 all tokens.
 
         Returns:
+            A tuple of remaining swapped_queue after scheduling and
             SchedulerSwappedInOutputs.
         """
         # Blocks that need to be swapped or copied before model execution.
@@ -485,9 +491,9 @@ class Scheduler:
         blocks_to_copy: List[Tuple[int, int]] = []
         decode_seq_groups: List[ScheduledSequenceGroup] = []
         prefill_seq_groups: List[ScheduledSequenceGroup] = []
+        now = time.time()
+        swapped_queue = policy.sort_by_priority(now, swapped_queue)
         infeasible_seq_groups: List[SequenceGroup] = []
-
-        swapped_queue = self.swapped
 
         leftover_swapped: Deque[SequenceGroup] = deque()
         while swapped_queue:
@@ -516,6 +522,7 @@ class Scheduler:
             num_new_tokens = self._get_num_new_tokens(seq_group,
                                                       SequenceStatus.SWAPPED,
                                                       enable_chunking, budget)
+
             if (num_new_tokens == 0
                     or not budget.can_schedule(num_new_tokens=num_new_tokens,
                                                num_new_seqs=num_new_seqs)):
@@ -537,7 +544,7 @@ class Scheduler:
 
         swapped_queue.extendleft(leftover_swapped)
 
-        return SchedulerSwappedInOutputs(
+        return swapped_queue, SchedulerSwappedInOutputs(
             decode_seq_groups=decode_seq_groups,
             prefill_seq_groups=prefill_seq_groups,
             blocks_to_swap_in=blocks_to_swap_in,
@@ -553,24 +560,25 @@ class Scheduler:
         else:
             prompt_limit = min(self.scheduler_config.max_model_len,
                                self.scheduler_config.max_num_batched_tokens)
-
-        # Model is fine tuned with long context. Return the fine tuned max_len.
         return prompt_limit
 
     def _schedule_prefills(
-        self,
-        budget: SchedulingBudget,
-        enable_chunking: bool = False,
-    ) -> SchedulerPrefillOutputs:
+            self,
+            waiting_queue: deque,
+            budget: SchedulingBudget,
+            enable_chunking: bool = False,
+    ) -> Tuple[deque, SchedulerPrefillOutputs]:
         """Schedule sequence groups that are in prefill stage.
 
         Note that the current scheduler treats PREEMPTED_FOR_RECOMPUTE
         as a new prefill (that starts from beginning -> most recently generated
         tokens).
 
-        It schedules waiting requests as long as it fits `budget`
+        It schedules waiting requests as long as it fits `budget`.
 
         Args:
+            waiting_queue: The queue that contains prefill requests.
+                The given arguments are NOT in-place modified.
             budget: The scheduling budget. The argument is in-place updated
                 when any requests are scheduled.
             enable_chunking: If True, seq group can be chunked and only a
@@ -579,12 +587,14 @@ class Scheduler:
                 all tokens.
 
         Returns:
+            A tuple of remaining waiting_queue after scheduling and
             SchedulerSwappedInOutputs.
         """
         ignored_seq_groups: List[SequenceGroup] = []
         seq_groups: List[SequenceGroup] = []
-
-        waiting_queue = self.waiting
+        # We don't sort waiting queue because we assume it is sorted.
+        # Copy the queue so that the input queue is not modified.
+        waiting_queue = deque([s for s in waiting_queue])
 
         leftover_waiting_sequences: Deque[SequenceGroup] = deque()
         while self._passed_delay(time.time()) and waiting_queue:
@@ -647,14 +657,14 @@ class Scheduler:
         if len(seq_groups) > 0:
             self.prev_prompt = True
 
-        return SchedulerPrefillOutputs(
+        return waiting_queue, SchedulerPrefillOutputs(
             seq_groups=seq_groups,
             ignored_seq_groups=ignored_seq_groups,
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill=True))
 
     def _schedule_default(self) -> SchedulerOutputs:
         """Schedule queued requests.
-        
+
         The current policy is designed to optimize the throughput. First,
         it batches as many prefill requests as possible. And it schedules
         decodes. If there's a pressure on GPU memory, decode requests can
@@ -671,41 +681,52 @@ class Scheduler:
             budget.add_num_seqs(seq_group.request_id,
                                 seq_group.get_max_num_running_seqs())
 
-        prefills = SchedulerPrefillOutputs.create_empty()
-        running_scheduled = SchedulerRunningOutputs.create_empty()
-        swapped_in = SchedulerSwappedInOutputs.create_empty()
+        remaining_waiting, prefills = (self.waiting,
+                                       SchedulerPrefillOutputs.create_empty())
+        remaining_running, running_scheduled = (
+            self.running, SchedulerRunningOutputs.create_empty())
+        remaining_swapped, swapped_in = (
+            self.swapped, SchedulerSwappedInOutputs.create_empty())
 
         # If any requests are swapped, prioritized swapped requests.
         if not self.swapped:
-            prefills = self._schedule_prefills(budget,
-                                               enable_chunking=False)
+            remaining_waiting, prefills = self._schedule_prefills(
+                self.waiting, budget, enable_chunking=False)
 
+        fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
         # Don't schedule decodes if prefills are scheduled.
         # NOTE: If `_schedule_prefills` doesn't enable chunking, self.running
         # only contains decode requests, not chunked prefills.
         if len(prefills.seq_groups) == 0:
-            running_scheduled = self._schedule_running(budget,
-                                                       enable_chunking=False)
+            remaining_running, running_scheduled = self._schedule_running(
+                self.running,
+                budget,
+                fcfs_policy,
+                enable_chunking=False)
 
             # If any sequence group is preempted, do not swap in any sequence
             # group. because it means there's no slot for new running requests.
             if len(running_scheduled.preempted) + len(
                     running_scheduled.swapped_out) == 0:
-                swapped_in = self._schedule_swapped(budget)
+                remaining_swapped, swapped_in = self._schedule_swapped(
+                    self.swapped, budget, fcfs_policy)
 
         assert (budget.num_batched_tokens <=
                 self.scheduler_config.max_num_batched_tokens)
         assert budget.num_curr_seqs <= self.scheduler_config.max_num_seqs
 
         # Update waiting requests.
+        self.waiting = remaining_waiting
         self.waiting.extendleft(running_scheduled.preempted)
         # Update new running requests.
+        self.running = remaining_running
         self.running.extend([s.seq_group for s in prefills.seq_groups])
         self.running.extend(
             [s.seq_group for s in running_scheduled.decode_seq_groups])
         self.running.extend(
             [s.seq_group for s in swapped_in.decode_seq_groups])
         # Update swapped requests.
+        self.swapped = remaining_swapped
         self.swapped.extend(running_scheduled.swapped_out)
         preempted = (len(running_scheduled.preempted) +
                      len(running_scheduled.swapped_out))
@@ -723,9 +744,9 @@ class Scheduler:
             blocks_to_swap_in=swapped_in.blocks_to_swap_in,
             blocks_to_swap_out=running_scheduled.blocks_to_swap_out,
             blocks_to_copy=running_scheduled.blocks_to_copy +
-            swapped_in.blocks_to_copy,
+                           swapped_in.blocks_to_copy,
             ignored_seq_groups=prefills.ignored_seq_groups +
-            swapped_in.infeasible_seq_groups,
+                               swapped_in.infeasible_seq_groups,
             num_lookahead_slots=running_scheduled.num_lookahead_slots,
             running_queue_size=len(self.running),
             preempted=preempted,
@@ -733,7 +754,7 @@ class Scheduler:
 
     def _schedule_chunked_prefill(self):
         """Schedule queued requests.
-        
+
         Chunked prefill allows to chunk prefill requests, batch them together
         with decode requests. This policy 1. schedule as many decoding requests
         as possible. 2. schedule chunked prefill requests that are not
@@ -750,30 +771,41 @@ class Scheduler:
             max_num_seqs=self.scheduler_config.max_num_seqs,
         )
 
-        prefills = SchedulerPrefillOutputs.create_empty()
-        swapped_in = SchedulerSwappedInOutputs.create_empty()
+        remaining_waiting, prefills = (self.waiting,
+                                       SchedulerPrefillOutputs.create_empty())
+        remaining_running, running_scheduled = (
+            self.running, SchedulerRunningOutputs.create_empty())
+        remaining_swapped, swapped_in = (
+            self.swapped, SchedulerSwappedInOutputs.create_empty())
 
         # Decoding should be always scheduled first by fcfs.
-        running_scheduled = self._schedule_running(budget,
-                                                   enable_chunking=True)
+        fcfs_policy = PolicyFactory.get_policy(policy_name="fcfs")
+        remaining_running, running_scheduled = self._schedule_running(
+            self.running,
+            budget,
+            fcfs_policy,
+            enable_chunking=True)
 
         # Schedule swapped out requests.
         # If preemption happens, it means we don't have space for swap-in.
         if len(running_scheduled.preempted) + len(
                 running_scheduled.swapped_out) == 0:
-            swapped_in = self._schedule_swapped(budget)
+            remaining_swapped, swapped_in = self._schedule_swapped(
+                self.swapped, budget, fcfs_policy)
 
         # Schedule new prefills.
-        prefills = self._schedule_prefills(budget,
-                                           enable_chunking=True)
+        remaining_waiting, prefills = self._schedule_prefills(
+            self.waiting, budget, enable_chunking=True)
 
         assert (budget.num_batched_tokens <=
                 self.scheduler_config.max_num_batched_tokens)
         assert budget.num_curr_seqs <= self.scheduler_config.max_num_seqs
 
         # Update waiting requests.
+        self.waiting = remaining_waiting
         self.waiting.extendleft(running_scheduled.preempted)
         # Update new running requests.
+        self.running = remaining_running
         self.running.extend([s.seq_group for s in prefills.seq_groups])
         self.running.extend(
             [s.seq_group for s in running_scheduled.decode_seq_groups])
@@ -784,6 +816,7 @@ class Scheduler:
         self.running.extend(
             [s.seq_group for s in swapped_in.prefill_seq_groups])
         # Update swapped requests.
+        self.swapped = remaining_swapped
         self.swapped.extend(running_scheduled.swapped_out)
         return SchedulerOutputs(
             scheduled_seq_groups=(prefills.seq_groups +
@@ -798,9 +831,9 @@ class Scheduler:
             blocks_to_swap_in=swapped_in.blocks_to_swap_in,
             blocks_to_swap_out=running_scheduled.blocks_to_swap_out,
             blocks_to_copy=running_scheduled.blocks_to_copy +
-            swapped_in.blocks_to_copy,
+                           swapped_in.blocks_to_copy,
             ignored_seq_groups=prefills.ignored_seq_groups +
-            swapped_in.infeasible_seq_groups,
+                               swapped_in.infeasible_seq_groups,
             num_lookahead_slots=running_scheduled.num_lookahead_slots,
             running_queue_size=len(self.running),
             preempted=(len(running_scheduled.preempted) +
@@ -928,9 +961,9 @@ class Scheduler:
             seq.status = SequenceStatus.RUNNING
 
     def _append_slots(
-        self,
-        seq_group: SequenceGroup,
-        blocks_to_copy: List[Tuple[int, int]],
+            self,
+            seq_group: SequenceGroup,
+            blocks_to_copy: List[Tuple[int, int]],
     ) -> None:
         """Appends new slots to the sequences in the given sequence group.
 
@@ -950,10 +983,10 @@ class Scheduler:
             blocks_to_copy.extend(cows)
 
     def _preempt(
-        self,
-        seq_group: SequenceGroup,
-        blocks_to_swap_out: List[Tuple[int, int]],
-        preemption_mode: Optional[PreemptionMode] = None,
+            self,
+            seq_group: SequenceGroup,
+            blocks_to_swap_out: List[Tuple[int, int]],
+            preemption_mode: Optional[PreemptionMode] = None,
     ) -> PreemptionMode:
         # If preemption mode is not specified, we determine the mode as follows:
         # We use recomputation by default since it incurs lower overhead than
@@ -996,8 +1029,8 @@ class Scheduler:
         return preemption_mode
 
     def _preempt_by_recompute(
-        self,
-        seq_group: SequenceGroup,
+            self,
+            seq_group: SequenceGroup,
     ) -> None:
         seqs = seq_group.get_seqs(status=SequenceStatus.RUNNING)
         assert len(seqs) == 1
@@ -1007,16 +1040,16 @@ class Scheduler:
             seq.reset_state_for_recompute()
 
     def _preempt_by_swap(
-        self,
-        seq_group: SequenceGroup,
-        blocks_to_swap_out: List[Tuple[int, int]],
+            self,
+            seq_group: SequenceGroup,
+            blocks_to_swap_out: List[Tuple[int, int]],
     ) -> None:
         self._swap_out(seq_group, blocks_to_swap_out)
 
     def _swap_in(
-        self,
-        seq_group: SequenceGroup,
-        blocks_to_swap_in: List[Tuple[int, int]],
+            self,
+            seq_group: SequenceGroup,
+            blocks_to_swap_in: List[Tuple[int, int]],
     ) -> None:
         mapping = self.block_manager.swap_in(seq_group)
         blocks_to_swap_in.extend(mapping)
@@ -1024,9 +1057,9 @@ class Scheduler:
             seq.status = SequenceStatus.RUNNING
 
     def _swap_out(
-        self,
-        seq_group: SequenceGroup,
-        blocks_to_swap_out: List[Tuple[int, int]],
+            self,
+            seq_group: SequenceGroup,
+            blocks_to_swap_out: List[Tuple[int, int]],
     ) -> None:
         if not self.block_manager.can_swap_out(seq_group):
             # FIXME(woosuk): Abort the sequence group instead of aborting the
@@ -1048,9 +1081,9 @@ class Scheduler:
             earliest_arrival_time = min(
                 [e.metrics.arrival_time for e in self.waiting])
             passed_delay = (
-                (now - earliest_arrival_time) >
-                (self.scheduler_config.delay_factor * self.last_prompt_latency)
-                or not self.running)
+                    (now - earliest_arrival_time) >
+                    (self.scheduler_config.delay_factor * self.last_prompt_latency)
+                    or not self.running)
         else:
             passed_delay = True
         return passed_delay
