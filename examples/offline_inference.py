@@ -1,8 +1,13 @@
-import os
+try:
+    import light_vllm
+    from light_vllm import LLM, SamplingParams
 
-os.environ["VLLM_USE_MODELSCOPE"] = "True"
+    print("light_vllm:", light_vllm.__version__)
 
-from vllm import LLM, SamplingParams
+except Exception:
+    import vllm
+    from vllm import LLM, SamplingParams
+    print("vllm:", vllm.__version__)
 
 # Sample prompts.
 prompts = [

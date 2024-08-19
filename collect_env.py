@@ -264,8 +264,8 @@ def get_neuron_sdk_version(run_lambda):
 
 def get_vllm_version():
     try:
-        import vllm
-        return vllm.__version__
+        import light_vllm
+        return light_vllm.__version__
     except ImportError:
         return 'N/A'
 

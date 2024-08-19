@@ -10,10 +10,15 @@ def benchmark(args):
     os.environ["VLLM_LOGGING_LEVEL"] = "ERROR"
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
-    import vllm
-    from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+    try:
+        import light_vllm
+        from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        print("light_vllm:", light_vllm.__version__)
 
-    print(vllm.__version__)
+    except Exception:
+        import vllm
+        from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        print("vllm:", vllm.__version__)
 
     engine_args = EngineArgs(
         model=args.model,
@@ -88,7 +93,7 @@ if __name__ == '__main__':
     args.input_len = 512
     args.output_len = 512
 
-    args.model = "Qwen/Qwen2-7B-Instruct"
+    args.model = "Qwen/Qwen2-0.5B-Instruct"
     args.trust_remote_code = False
     args.tokenizer = args.model
     args.quantization = None

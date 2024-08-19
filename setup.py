@@ -39,7 +39,7 @@ def embed_commit_hash():
 
         commit_contents = f'__commit__ = "{commit_id}"\n'
 
-        version_file = os.path.join(ROOT_DIR, "vllm", "commit_id.py")
+        version_file = os.path.join(ROOT_DIR, "light_vllm", "commit_id.py")
         with open(version_file, "w", encoding="utf-8") as f:
             f.write(commit_contents)
 
@@ -57,7 +57,7 @@ embed_commit_hash()
 
 # cannot import envs directly because it depends on vllm,
 #  which is not installed yet
-envs = load_module_from_path('envs', os.path.join(ROOT_DIR, 'vllm', 'envs.py'))
+envs = load_module_from_path('envs', os.path.join(ROOT_DIR, 'light_vllm', 'envs.py'))
 
 VLLM_TARGET_DEVICE = envs.VLLM_TARGET_DEVICE
 
@@ -217,7 +217,7 @@ class cmake_build_ext(build_ext):
         # Build all the extensions
         for ext in self.extensions:
             self.configure(ext)
-            targets.append(remove_prefix(ext.name, "vllm."))
+            targets.append(remove_prefix(ext.name, "light_vllm."))
 
         num_jobs, _ = self.compute_num_jobs()
 
@@ -277,7 +277,7 @@ def find_version(filepath: str) -> str:
 
 
 def get_vllm_version() -> str:
-    version = find_version(get_path("vllm", "version.py"))
+    version = find_version(get_path("light_vllm", "version.py"))
 
     if _is_cuda():
         cuda_version = str(get_nvcc_cuda_version())
@@ -335,43 +335,34 @@ def get_requirements() -> List[str]:
 ext_modules = []
 
 if _build_core_ext():
-    ext_modules.append(CMakeExtension(name="vllm._core_C"))
+    ext_modules.append(CMakeExtension(name="light_vllm._core_C"))
 
 if _is_cuda():
-    ext_modules.append(CMakeExtension(name="vllm._moe_C"))
+    ext_modules.append(CMakeExtension(name="light_vllm._moe_C"))
 
 if _build_custom_ops():
-    ext_modules.append(CMakeExtension(name="vllm._C"))
+    ext_modules.append(CMakeExtension(name="light_vllm._C"))
 
 package_data = {
-    "vllm": ["py.typed", "model_executor/layers/fused_moe/configs/*.json"]
+    "light_vllm": ["py.typed", "model_executor/layers/fused_moe/configs/*.json"]
 }
 if envs.VLLM_USE_PRECOMPILED:
     ext_modules = []
-    package_data["vllm"].append("*.so")
+    package_data["light_vllm"].append("*.so")
 
 setup(
-    name="vllm",
+    name="light-vllm",
     version=get_vllm_version(),
-    author="vLLM Team",
-    license="Apache 2.0",
-    description=("A high-throughput and memory-efficient inference and "
-                 "serving engine for LLMs"),
+    author="noooop",
+    license="MIT+Apache 2.0",
+    description="light-vllm Does not support multiple machines and multiple GPUs",
     long_description=read_readme(),
     long_description_content_type="text/markdown",
-    url="https://github.com/vllm-project/vllm",
+    url="https://github.com/noooop/light-vllm",
     project_urls={
-        "Homepage": "https://github.com/vllm-project/vllm",
-        "Documentation": "https://vllm.readthedocs.io/en/latest/",
+        "Homepage": "https://github.com/noooop/light-vllm",
     },
     classifiers=[
-        "Programming Language :: Python :: 3.8",
-        "Programming Language :: Python :: 3.9",
-        "Programming Language :: Python :: 3.10",
-        "Programming Language :: Python :: 3.11",
-        "Programming Language :: Python :: 3.12",
-        "License :: OSI Approved :: Apache Software License",
-        "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
     packages=find_packages(exclude=("benchmarks", "csrc", "docs", "examples",
                                     "tests*")),
@@ -383,9 +374,4 @@ setup(
     },
     cmdclass={"build_ext": cmake_build_ext} if len(ext_modules) > 0 else {},
     package_data=package_data,
-    entry_points={
-        "console_scripts": [
-            "vllm=vllm.scripts:main",
-        ],
-    },
 )

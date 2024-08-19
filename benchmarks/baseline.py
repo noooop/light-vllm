@@ -11,10 +11,15 @@ def benchmark(args):
     os.environ["VLLM_LOGGING_LEVEL"] = "ERROR"
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
-    import vllm
-    from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+    try:
+        import light_vllm
+        from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        print("light_vllm:", light_vllm.__version__)
 
-    print(vllm.__version__)
+    except Exception:
+        import vllm
+        from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        print("vllm:", vllm.__version__)
 
     engine_args = EngineArgs(
         model=args.model,
