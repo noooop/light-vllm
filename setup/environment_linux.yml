@@ -13,3 +13,4 @@ dependencies:
       - torchvision==0.19
       - transformers==4.43.2
       - modelscope==1.17.0
+      - easydict
