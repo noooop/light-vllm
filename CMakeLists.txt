@@ -90,7 +90,7 @@ set(VLLM_EXT_SRC
 
 define_gpu_extension_target(
   _core_C
-  DESTINATION vllm
+  DESTINATION light_vllm
   LANGUAGE CXX
   SOURCES ${VLLM_EXT_SRC}
   COMPILE_FLAGS ${CXX_COMPILE_FLAGS}
@@ -230,7 +230,7 @@ endif()
 
 define_gpu_extension_target(
   _C
-  DESTINATION vllm
+  DESTINATION light_vllm
   LANGUAGE ${VLLM_GPU_LANG}
   SOURCES ${VLLM_EXT_SRC}
   COMPILE_FLAGS ${VLLM_GPU_FLAGS}
@@ -249,7 +249,7 @@ set(VLLM_MOE_EXT_SRC
 
 define_gpu_extension_target(
   _moe_C
-  DESTINATION vllm
+  DESTINATION light_vllm
   LANGUAGE ${VLLM_GPU_LANG}
   SOURCES ${VLLM_MOE_EXT_SRC}
   COMPILE_FLAGS ${VLLM_GPU_FLAGS}

@@ -104,7 +104,7 @@ set(VLLM_EXT_SRC
 
 define_gpu_extension_target(
     _C
-    DESTINATION vllm
+    DESTINATION light_vllm
     LANGUAGE CXX
     SOURCES ${VLLM_EXT_SRC}
     LIBRARIES ${LIBS}
