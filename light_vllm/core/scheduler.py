@@ -920,7 +920,6 @@ class Scheduler:
                 sampling_params=seq_group.sampling_params,
                 block_tables=block_tables,
                 do_sample=do_sample,
-                pooling_params=seq_group.pooling_params,
                 token_chunk_size=token_chunk_size,
                 computed_block_nums=common_computed_block_nums
             )
