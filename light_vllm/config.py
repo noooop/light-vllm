@@ -121,7 +121,6 @@ class ModelConfig:
         disable_sliding_window: bool = False,
         skip_tokenizer_init: bool = False,
         served_model_name: Optional[Union[str, List[str]]] = None,
-        multimodal_config: Optional["MultiModalConfig"] = None,
     ) -> None:
         self.model = model
         self.tokenizer = tokenizer
@@ -170,12 +169,12 @@ class ModelConfig:
             sliding_window_len=self.get_hf_config_sliding_window())
         self.served_model_name = get_served_model_name(model,
                                                        served_model_name)
-        self.multimodal_config = multimodal_config
 
         if not self.skip_tokenizer_init:
             self._verify_tokenizer_mode()
         self._verify_quantization()
         self._verify_cuda_graph()
+        self.workflow = self.get_model_workflow()
 
     def _verify_tokenizer_mode(self) -> None:
         tokenizer_mode = self.tokenizer_mode.lower()
@@ -259,6 +258,9 @@ class ModelConfig:
                 and not self.hf_text_config.use_sliding_window):
             return None
         return getattr(self.hf_text_config, "sliding_window", None)
+
+    def get_model_workflow(self) -> str:
+        return "light_vllm.task.chat.workflow.workflow:ChatWorkflow"
 
     def get_sliding_window(self) -> Optional[int]:
         """Get the sliding window size, or None if disabled.

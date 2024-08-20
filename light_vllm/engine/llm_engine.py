@@ -1,18 +1,17 @@
-import time
+
 from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List,
                     Mapping, Optional)
 from typing import Sequence as GenericSequence
-from typing import Type, TypeVar, Union
+from typing import Type, Union
 
 from light_vllm.config import ModelConfig, SchedulerConfig
 from light_vllm.engine.arg_utils import EngineArgs
 from light_vllm.inputs import PromptInputs
 from light_vllm.logger import init_logger
-from light_vllm.outputs import (EmbeddingRequestOutput, RequestOutput)
+from light_vllm.outputs import RequestOutput
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.sequence import ExecuteModelRequest
-from light_vllm.inputs.tokenizer import Tokenizer
 from light_vllm.version import __version__ as VLLM_VERSION
 
 logger = init_logger(__name__)
@@ -27,49 +26,7 @@ def lazy_import(module):
     return getattr(module, class_name)
 
 
-def initialize_kv_caches(model_executor, cache_config):
-    """Initialize the KV cache in the worker(s).
-
-    The workers will determine the number of blocks in both the GPU cache
-    and the swap CPU cache.
-    """
-    num_gpu_blocks, num_cpu_blocks = model_executor.determine_num_available_blocks()
-
-    if cache_config.num_gpu_blocks_override is not None:
-        num_gpu_blocks_override = cache_config.num_gpu_blocks_override
-        num_gpu_blocks = num_gpu_blocks_override
-
-    cache_config.num_gpu_blocks = num_gpu_blocks
-    cache_config.num_cpu_blocks = num_cpu_blocks
-    model_executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
-
-
 class LLMEngine:
-    """An LLM engine that receives requests and generates texts.
-
-    This is the main class for the vLLM engine. It receives requests
-    from clients and generates texts from the LLM. It includes a tokenizer, a
-    language model (possibly distributed across multiple GPUs), and GPU memory
-    space allocated for intermediate states (aka KV cache). This class utilizes
-    iteration-level scheduling and efficient memory management to maximize the
-    serving throughput.
-
-    The :class:`~vllm.LLM` class wraps this class for offline batched inference
-    and the :class:`AsyncLLMEngine` class wraps this class for online serving.
-
-    The config arguments are derived from :class:`~vllm.EngineArgs`. (See
-    :ref:`engine_args`)
-
-    Args:
-        model_config: The configuration related to the LLM model.
-        cache_config: The configuration related to the KV cache memory
-            management.
-        scheduler_config: The configuration related to the request scheduler.
-        device_config: The configuration related to the device.
-        executor_class: The model executor class for managing distributed
-            execution.
-    """
-
     DO_VALIDATE_OUTPUT: ClassVar[bool] = False
     """A flag to toggle whether to validate the type of request output."""
 
@@ -119,13 +76,7 @@ class LLMEngine:
 
         return outputs_
 
-    tokenizer: Optional[Tokenizer]
-
-    def __init__(
-            self,
-            workflow,
-            engine_config
-    ) -> None:
+    def __init__(self, engine_config) -> None:
         # config
         self.engine_config = engine_config
         self.model_config = engine_config.model_config
@@ -133,10 +84,13 @@ class LLMEngine:
         self.scheduler_config = engine_config.scheduler_config
         self.device_config = engine_config.device_config
         self.load_config = engine_config.load_config
+        self._log_config()
 
-        self.log_config()
+        # workflow
+        self.workflow = lazy_import(self.model_config.workflow)
 
-        self.Executor = lazy_import(workflow.Executor)(
+        # Executor
+        self.Executor = lazy_import(self.workflow.Executor)(
             model_config=self.model_config,
             cache_config=self.cache_config,
             scheduler_config=self.scheduler_config,
@@ -145,24 +99,28 @@ class LLMEngine:
         )
         self._initialize_kv_caches()
 
-        self.ExecuteModelRequest = lazy_import(workflow.ExecuteModelRequest)
+        self.ExecuteModelRequest = lazy_import(self.workflow.ExecuteModelRequest)
 
         # scheduler
-        self.scheduler = lazy_import(workflow.Scheduler)(self.scheduler_config, self.cache_config)
+        self.scheduler = lazy_import(self.workflow.Scheduler)(self.scheduler_config, self.cache_config)
 
         # tokenizer
-        tokenizer = lazy_import(workflow.Tokenizer)(**self._init_tokenizer_kwargs())
+        self.tokenizer = lazy_import(self.workflow.Tokenizer)(**self._init_tokenizer_kwargs())
 
         # InputProcessor
-        self.InputProcessor = lazy_import(workflow.InputProcessor)(tokenizer)
-        self.SequenceProcessor = lazy_import(workflow.SequenceProcessor)(self.model_config, self.cache_config, tokenizer)
-        self.ChatRequest = lazy_import(workflow.Request)
+        self.InputProcessor = lazy_import(self.workflow.InputProcessor)(self.tokenizer)
+        self.SequenceProcessor = lazy_import(self.workflow.SequenceProcessor)(self.model_config,
+                                                                              self.cache_config,
+                                                                              self.tokenizer)
+        self.ChatRequest = lazy_import(self.workflow.Request)
 
         # OutputProcessor
-        self.OutputProcessor = lazy_import(workflow.OutputProcessor)(self.scheduler_config, self.scheduler, tokenizer,
-                                                                     self.SequenceProcessor.seq_counter)
+        self.OutputProcessor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
+                                                                          self.scheduler,
+                                                                          self.tokenizer,
+                                                                          self.SequenceProcessor.seq_counter)
 
-    def log_config(self):
+    def _log_config(self):
         logger.info(
             "Initializing an LLM engine (v%s) with config: "
             "model=%r, tokenizer=%r, "
@@ -222,38 +180,6 @@ class LLMEngine:
 
         self.Executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
-    @classmethod
-    def from_engine_args(
-            cls,
-            engine_args: EngineArgs = None,
-            workflow=None
-    ) -> "LLMEngine":
-        """Creates an LLM engine from the engine arguments."""
-
-        if workflow is None:
-            from light_vllm.task.chat.workflow.workflow import ChatWorkflow
-            workflow = ChatWorkflow()
-
-        engine_config = engine_args.create_engine_config()
-
-        engine = cls(
-            workflow,
-            engine_config
-        )
-
-        return engine
-
-    def __reduce__(self):
-        # This is to ensure that the LLMEngine is not referenced in
-        # the closure used to initialize Ray worker actors
-        raise RuntimeError("LLMEngine should not be pickled!")
-
-    def __del__(self):
-        # Shutdown model executor when engine is garbage collected
-        # Use getattr since __init__ can fail before the field is set
-        if Executor := getattr(self, "Executor", None):
-            Executor.shutdown()
-
     def _init_tokenizer_kwargs(self) -> Dict:
         init_kwargs = dict(tokenizer_name=self.model_config.tokenizer,
                            tokenizer_mode=self.model_config.tokenizer_mode,
@@ -262,6 +188,17 @@ class LLMEngine:
 
         return init_kwargs
 
+    @classmethod
+    def from_engine_args(
+            cls,
+            engine_args: EngineArgs = None,
+    ) -> "LLMEngine":
+        """Creates an LLM engine from the engine arguments."""
+
+        engine_config = engine_args.create_engine_config()
+        engine = cls(engine_config)
+        return engine
+
     def add_request(
             self,
             request_id: str,
@@ -269,7 +206,6 @@ class LLMEngine:
             params: SamplingParams,
             arrival_time: Optional[float] = None,
     ) -> None:
-
         input = self.InputProcessor(prompt)
         request = self.ChatRequest(request_id=str(request_id), input=input, sampling_params=params)
         seq_group = self.SequenceProcessor(request, arrival_time)
@@ -294,23 +230,7 @@ class LLMEngine:
         """
         self.scheduler.abort_seq_group(request_id)
 
-    def get_model_config(self) -> ModelConfig:
-        """Gets the model configuration."""
-        return self.model_config
-
-    def get_scheduler_config(self) -> SchedulerConfig:
-        """Gets the scheduler configuration."""
-        return self.scheduler_config
-
-    def get_num_unfinished_requests(self) -> int:
-        """Gets the number of unfinished requests."""
-        return self.scheduler.get_num_unfinished_seq_groups()
-
-    def has_unfinished_requests(self) -> bool:
-        """Returns True if there are unfinished requests."""
-        return self.scheduler.has_unfinished_seqs()
-
-    def step(self) -> List[Union[RequestOutput, EmbeddingRequestOutput]]:
+    def step(self) -> List[RequestOutput]:
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
@@ -329,10 +249,37 @@ class LLMEngine:
             output = []
 
         request_outputs = self.OutputProcessor(output,
-                                          scheduler_outputs.scheduled_seq_groups,
-                                          scheduler_outputs.ignored_seq_groups,
-                                          seq_group_metadata_list)
+                                               scheduler_outputs.scheduled_seq_groups,
+                                               scheduler_outputs.ignored_seq_groups,
+                                               seq_group_metadata_list)
 
         self.scheduler.free_finished_seq_groups()
 
         return request_outputs
+
+    def get_num_unfinished_requests(self) -> int:
+        """Gets the number of unfinished requests."""
+        return self.scheduler.get_num_unfinished_seq_groups()
+
+    def has_unfinished_requests(self) -> bool:
+        """Returns True if there are unfinished requests."""
+        return self.scheduler.has_unfinished_seqs()
+
+    def get_model_config(self) -> ModelConfig:
+        """Gets the model configuration."""
+        return self.model_config
+
+    def get_scheduler_config(self) -> SchedulerConfig:
+        """Gets the scheduler configuration."""
+        return self.scheduler_config
+
+    def __reduce__(self):
+        # This is to ensure that the LLMEngine is not referenced in
+        # the closure used to initialize Ray worker actors
+        raise RuntimeError("LLMEngine should not be pickled!")
+
+    def __del__(self):
+        # Shutdown model executor when engine is garbage collected
+        # Use getattr since __init__ can fail before the field is set
+        if Executor := getattr(self, "Executor", None):
+            Executor.shutdown()
