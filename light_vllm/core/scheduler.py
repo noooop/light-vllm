@@ -270,11 +270,6 @@ class Scheduler:
         # Sequence groups in the SWAPPED state.
         # Contain decode requests that are swapped out.
         self.swapped: Deque[SequenceGroup] = deque()
-        # Sequence groups finished requests ids since last step iteration.
-        # It lets the model know that any state associated with these requests
-        # can and must be released after the current step.
-        # This is used to evict the finished requests from the Mamba cache.
-        self._finished_requests_ids: List[str] = list()
         # Time at previous scheduling step
         self.prev_time = 0.0
         # Did we schedule a prompt at previous step?
@@ -331,8 +326,6 @@ class Scheduler:
             for aborted_group in aborted_groups:
                 # Remove the sequence group from the state queue.
                 state_queue.remove(aborted_group)
-                # Remove the aborted request from the Mamba cache.
-                self._finished_requests_ids.append(aborted_group.request_id)
                 for seq in aborted_group.get_seqs():
                     if seq.is_finished():
                         continue
@@ -345,12 +338,6 @@ class Scheduler:
 
     def get_num_unfinished_seq_groups(self) -> int:
         return len(self.waiting) + len(self.running) + len(self.swapped)
-
-    def get_and_reset_finished_requests_ids(self) -> List[str]:
-        """Flushes the list of request ids of previously finished seq_groups."""
-        finished_requests_ids = self._finished_requests_ids
-        self._finished_requests_ids = list()
-        return finished_requests_ids
 
     def _schedule_running(
             self,
@@ -945,12 +932,7 @@ class Scheduler:
     def free_finished_seq_groups(self) -> None:
         remaining: Deque[SequenceGroup] = deque()
         for seq_group in self.running:
-            if seq_group.is_finished():
-                # Add the finished requests to the finished requests list.
-                # This list will be used to update the Mamba cache in the
-                # next step.
-                self._finished_requests_ids.append(seq_group.request_id)
-            else:
+            if not seq_group.is_finished():
                 remaining.append(seq_group)
         self.running = remaining
 

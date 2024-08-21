@@ -234,15 +234,13 @@ class LLMEngine:
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            finished_requests_ids = self.scheduler.get_and_reset_finished_requests_ids()
             execute_model_req = ExecuteModelRequest(
                 seq_group_metadata_list=seq_group_metadata_list,
                 blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
                 blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
                 blocks_to_copy=scheduler_outputs.blocks_to_copy,
                 num_lookahead_slots=scheduler_outputs.num_lookahead_slots,
-                running_queue_size=scheduler_outputs.running_queue_size,
-                finished_requests_ids=finished_requests_ids)
+                running_queue_size=scheduler_outputs.running_queue_size)
             output = self.Executor.execute_model(
                 execute_model_req=execute_model_req)
         else:

@@ -309,8 +309,7 @@ class CPUModelRunner(ModelRunnerBase[CPUModelInput]):
 
     def prepare_model_input(
             self,
-            seq_group_metadata_list: List[SequenceGroupMetadata],
-            finished_requests_ids: Optional[List[str]] = None
+            seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> CPUModelInput:
         multi_modal_kwargs = None
         # NOTE: We assume that all sequences in the group are all prompts or
@@ -333,8 +332,7 @@ class CPUModelRunner(ModelRunnerBase[CPUModelInput]):
             # just use seq_lens instead.
             seq_lens,
             self.device,
-            pin_memory=False,
-            generators=self.get_generators(finished_requests_ids))
+            pin_memory=False)
         return CPUModelInput(
             input_tokens=input_tokens,
             input_positions=input_positions,

@@ -30,7 +30,6 @@ class CUDAGraph:
         self.scheduler_config = scheduler_config
 
         self.max_seq_len_to_capture = model_config.max_seq_len_to_capture
-        self.has_seqlen_agnostic = model_config.contains_seqlen_agnostic_layers()
         self.block_size = cache_config.block_size
 
         self.graph_runners: Dict[int, CUDAGraphRunner] = {}
@@ -59,8 +58,7 @@ class CUDAGraph:
             graph_block_tables=self.graph_block_tables,
             max_num_seqs=self.scheduler_config.max_num_seqs,
             max_seq_len_to_capture=self.max_seq_len_to_capture,
-            attn_backend=attn_backend,
-            has_seqlen_agnostic=self.has_seqlen_agnostic)
+            attn_backend=attn_backend)
         self.graph_runners = graph_runners
         self.graph_memory_pool = graph_memory_pool
 
@@ -231,14 +229,7 @@ class CUDAGraphRunner:
         self.input_buffers["block_tables"].copy_(
             attn_metadata.decode_metadata.block_tables, non_blocking=True)
 
-        if "seqlen_agnostic_capture_inputs" in self.input_buffers:
-            self.model.copy_inputs_before_cuda_graphs(self.input_buffers,
-                                                      **kwargs)
-        # Run the graph.
         self.graph.replay()
-        if "seqlen_agnostic_capture_inputs" in self.input_buffers:
-            self.model.copy_outputs_after_cuda_graphs(self.input_buffers,
-                                                      **kwargs)
         return self.output_buffers["hidden_states"]
 
     def __call__(self, *args, **kwargs):
@@ -295,8 +286,7 @@ def capture_model(model,
                   graph_block_tables,
                   max_num_seqs,
                   max_seq_len_to_capture,
-                  attn_backend,
-                  has_seqlen_agnostic):
+                  attn_backend):
     """Cuda graph capture a model.
 
     Note that CUDA graph's performance gain is negligible if number
@@ -370,13 +360,6 @@ def capture_model(model,
                 "memory_pool": graph_memory_pool,
                 "stream": graph_capture_context.stream
             }
-            if has_seqlen_agnostic:
-                # Only used by Mamba-based models CUDA graph atm (Jamba)
-                capture_inputs.update({
-                    "seqlen_agnostic_capture_inputs":
-                        model.get_seqlen_agnostic_capture_inputs(
-                            batch_size)
-                })
             graph_runner.capture(**capture_inputs)
             graph_runners[batch_size] = graph_runner
             graph_memory_pool = graph_runner.graph.pool()

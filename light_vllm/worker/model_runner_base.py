@@ -48,14 +48,10 @@ class ModelRunnerBase(ABC, Generic[T]):
     ModelRunnerInputBase subclass.
     """
 
-    # Map of request_id -> generator used for seeded random sampling
-    generators: Dict[str, torch.Generator] = {}
-
     @abstractmethod
     def prepare_model_input(
         self,
-        seq_group_metadata_list: List[SequenceGroupMetadata],
-        finished_requests_ids: Optional[List[str]] = None,
+        seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> T:
         """
         Prepare the inputs to ModelRunnerBase.execute_model from an execution
@@ -75,15 +71,3 @@ class ModelRunnerBase(ABC, Generic[T]):
         Execute the model on the given input.
         """
         raise NotImplementedError
-
-    def get_generators(self, finished_request_ids: Optional[List[str]] = None):
-        """
-        Return dict of per-request generators used for random sampling.
-        """
-
-        # Clean up generators from completed requests
-        if finished_request_ids:
-            for request_id in finished_request_ids:
-                self.generators.pop(request_id, None)
-
-        return self.generators

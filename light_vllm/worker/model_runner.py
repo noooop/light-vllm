@@ -46,8 +46,6 @@ class ModelInputForGPU(ModelRunnerInputBase):
     seq_lens: Optional[List[int]] = None
     query_lens: Optional[List[int]] = None
     attn_metadata: Optional["AttentionMetadata"] = None
-    request_ids_to_seq_ids: Optional[Dict[str, List[int]]] = None
-    finished_requests_ids: Optional[List[str]] = None
 
 
 @dataclass(frozen=True)
@@ -129,9 +127,7 @@ class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
             self.context_lens = [0] * self.n_seqs
             self.curr_sliding_window_blocks = [0] * self.n_seqs
 
-    def __init__(self,
-                 runner: "GPUModelRunnerBase",
-                 finished_requests_ids: Optional[List[str]] = None):
+    def __init__(self, runner: "GPUModelRunnerBase"):
         super().__init__()
         # Compute functions for each sequence in a sequence group.
         # WARNING: The order of the functions matters!
@@ -147,7 +143,6 @@ class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
         self.scheduler_config = self.runner.scheduler_config
         self.sliding_window = self.runner.sliding_window
         self.block_size = self.runner.block_size
-        self.finished_requests_ids = finished_requests_ids
         self.decode_only = True
 
         # Intermediate data (data in CPU before going to GPU) for
@@ -315,12 +310,6 @@ class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
                                          max(inter_data.seq_lens))
         query_lens = flatten_2d_lists(
             [inter_data.query_lens for inter_data in self.inter_data_list])
-        # Mapping from request IDs to sequence IDs. Used for Jamba models
-        # that manages the cache by itself.
-        request_ids_to_seq_ids = {
-            data.request_id: data.seq_ids
-            for data in self.inter_data_list
-        }
 
         input_tokens, input_positions, input_tokens_tensor, input_positions_tensor, seq_lens, cuda_graph_pad_size, batch_size = (
             self.runner.cuda_graph.model_input_for_gpu_builder_maybe_pad(self, input_tokens, input_positions, seq_lens, max_decode_seq_len))
@@ -334,9 +323,7 @@ class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
             input_positions=input_positions_tensor,
             attn_metadata=attn_metadata,
             seq_lens=seq_lens,
-            query_lens=query_lens,
-            request_ids_to_seq_ids=request_ids_to_seq_ids,
-            finished_requests_ids=self.finished_requests_ids)
+            query_lens=query_lens)
 
 
 class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
@@ -462,8 +449,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
 
     def _prepare_model_input_tensors(
         self,
-        seq_group_metadata_list: List[SequenceGroupMetadata],
-        finished_requests_ids: Optional[List[str]] = None
+        seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> TModelInputForGPU:
         """Helper method to prepare the model input based on a given sequence
         group. Prepares metadata needed for the base model forward pass but not
@@ -479,7 +465,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
 
         If cuda graph is required, this API automatically pads inputs.
         """
-        builder = self._builder_cls(weakref.proxy(self), finished_requests_ids)
+        builder = self._builder_cls(weakref.proxy(self))
         for seq_group_metadata in seq_group_metadata_list:
             builder.add_seq_group(seq_group_metadata)
         return builder.build()  # type: ignore
@@ -529,9 +515,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         # Run the model with the dummy inputs.
         num_layers = self.model_config.get_num_layers()
         kv_caches = [None] * num_layers
-        finished_requests_ids = [seq.request_id for seq in seqs]
-        model_input = self.prepare_model_input(
-            seqs, finished_requests_ids=finished_requests_ids)
+        model_input = self.prepare_model_input(seqs)
         self.execute_model(model_input, kv_caches)
         torch.cuda.synchronize()
         return
@@ -554,8 +538,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
 
     def prepare_model_input(
         self,
-        seq_group_metadata_list: List[SequenceGroupMetadata],
-        finished_requests_ids: Optional[List[str]] = None
+        seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> ModelInputForGPUWithSamplingMetadata:
         """Prepare the model input based on a given sequence group, including
         metadata for the sampling step.
@@ -571,14 +554,11 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         If cuda graph is required, this API automatically pads inputs.
         """
         model_input = self._prepare_model_input_tensors(
-            seq_group_metadata_list, finished_requests_ids)
+            seq_group_metadata_list)
 
-        # Sampling metadata is only required for the final pp group
-        generators = self.get_generators(finished_requests_ids)
         sampling_metadata = SamplingMetadata.prepare(
             seq_group_metadata_list, model_input.seq_lens,
-            model_input.query_lens, self.device, self.pin_memory,
-            generators)
+            model_input.query_lens, self.device, self.pin_memory)
 
         is_prompt = (seq_group_metadata_list[0].is_prompt
                      if seq_group_metadata_list else None)
@@ -605,17 +585,11 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         else:
             model_executable = self.model
 
-        seqlen_agnostic_kwargs = {
-            "finished_requests_ids": model_input.finished_requests_ids,
-            "request_ids_to_seq_ids": model_input.request_ids_to_seq_ids,
-        } if self.cuda_graph.has_seqlen_agnostic else {}
-
         hidden_states = model_executable(
             input_ids=model_input.input_tokens,
             positions=model_input.input_positions,
             kv_caches=kv_caches,
-            attn_metadata=model_input.attn_metadata,
-            **seqlen_agnostic_kwargs)
+            attn_metadata=model_input.attn_metadata)
 
         logits = self.model.compute_logits(hidden_states,
                                            model_input.sampling_metadata)
