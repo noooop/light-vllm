@@ -2,7 +2,7 @@ from typing import Optional
 
 from light_vllm.inputs.tokenizer import Tokenizer
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.sequence import Sequence, SequenceStatus
+from light_vllm.task.base.schema.sequence import Sequence, SequenceStatus
 
 
 class StopChecker:

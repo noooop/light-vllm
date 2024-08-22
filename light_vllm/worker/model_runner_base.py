@@ -5,8 +5,8 @@ from typing import (Dict, Generic, List, Optional, TypeVar)
 import torch
 
 from light_vllm.platforms import current_platform
-from light_vllm.sequence import SamplerOutput, SequenceGroupMetadata
-
+from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
+from light_vllm.task.base.schema.execute_io import ExecuteOutput
 T = TypeVar('T', bound="ModelRunnerInputBase")
 
 
@@ -65,7 +65,7 @@ class ModelRunnerBase(ABC, Generic[T]):
         self,
         model_input: T,
         kv_caches: Optional[List[torch.Tensor]],
-    ) -> Optional[List[SamplerOutput]]:
+    ) -> Optional[List[ExecuteOutput]]:
         """
         Execute the model on the given input.
         """

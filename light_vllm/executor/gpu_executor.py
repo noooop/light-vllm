@@ -2,8 +2,9 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from light_vllm.executor.executor_base import ExecutorBase
 from light_vllm.logger import init_logger
-from light_vllm.sequence import ExecuteModelRequest, PoolerOutput, SamplerOutput
-from light_vllm.utils import make_async
+
+from light_vllm.task.base.schema.execute_io import ExecuteModelInput
+from light_vllm.task.base.schema.outputs import RequestOutput
 from light_vllm.worker.worker_base import WorkerWrapperBase
 
 logger = init_logger(__name__)
@@ -57,7 +58,7 @@ class GPUExecutor(ExecutorBase):
         self.driver_worker.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
     def execute_model(
-        self, execute_model_req: ExecuteModelRequest
-    ) -> Optional[List[Union[SamplerOutput, PoolerOutput]]]:
+        self, execute_model_req: ExecuteModelInput
+    ) -> Optional[List[RequestOutput]]:
         output = self.driver_worker.execute_model(execute_model_req)
         return output

@@ -45,9 +45,9 @@ from light_vllm.layers.vocab_embedding import (
 from light_vllm.models.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from light_vllm.layers.sampling_metadata import SamplingMetadata
-from light_vllm.sequence import SamplerOutput
-
 from light_vllm.models.utils import is_pp_missing_parameter, make_layers
+
+from light_vllm.task.chat.schema.execute_io import SamplerOutput
 
 
 class Qwen2MLP(nn.Module):

@@ -15,10 +15,8 @@ from light_vllm.layers.sampling_metadata import (SamplingMetadata,
                                                  SamplingTensors,
                                                  SequenceGroupToSample)
 from light_vllm.layers.sampling_params import SamplingType
-from light_vllm.sequence import (CompletionSequenceGroupOutput, Logprob,
-                                 PromptLogprobs, SampleLogprobs, SamplerOutput,
-                                 SequenceOutput)
-
+from light_vllm.task.base.schema.sequence import Logprob, PromptLogprobs, SampleLogprobs
+from light_vllm.task.chat.schema.execute_io import CompletionSequenceGroupOutput, SamplerOutput, SequenceOutput
 # (num_token_ids, num_parent_ids) per sequence group.
 SampleResultType = List[Tuple[List[int], List[int]]]
 

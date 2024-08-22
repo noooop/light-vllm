@@ -5,8 +5,8 @@ from light_vllm.engine.output_processor.interfaces import (
 from light_vllm.engine.output_processor.stop_checker import StopChecker
 from light_vllm.logger import init_logger
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.sequence import (Sequence, SequenceGroup, SequenceGroupOutput,
-                                 SequenceOutput, SequenceStatus)
+from light_vllm.task.base.schema.sequence import (Sequence, SequenceGroup, SequenceStatus)
+from light_vllm.task.chat.schema.execute_io import SequenceGroupOutput, SequenceOutput
 from light_vllm.inputs.tokenizer import Tokenizer
 from light_vllm.utils import Counter
 

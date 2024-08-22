@@ -3,9 +3,7 @@ import time
 from typing import List
 from light_vllm.task.chat.workflow.outputs import SequenceGroupOutput, SamplerOutput
 from light_vllm.task.chat.workflow.sequence import SequenceGroup, SequenceGroupMetadata
-
-from light_vllm.outputs import RequestOutput
-
+from light_vllm.task.chat.schema.outputs import ChatModelRequestOutput
 from light_vllm.core.scheduler import ScheduledSequenceGroup
 
 
@@ -63,9 +61,9 @@ class ChatModelOutputProcessor(object):
         for scheduled_seq_group in scheduled_seq_groups:
             seq_group = scheduled_seq_group.seq_group
             seq_group.maybe_set_first_token_time(now)
-            request_output = RequestOutput.from_seq_group(seq_group)
+            request_output = ChatModelRequestOutput.from_seq_group(seq_group)
             request_outputs.append(request_output)
         for seq_group in ignored_seq_groups:
-            request_output = RequestOutput.from_seq_group(seq_group)
+            request_output = ChatModelRequestOutput.from_seq_group(seq_group)
             request_outputs.append(request_output)
         return request_outputs

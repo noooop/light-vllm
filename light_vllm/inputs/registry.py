@@ -12,7 +12,7 @@ from .data import LLMInputs
 
 if TYPE_CHECKING:
     from light_vllm.config import ModelConfig
-    from light_vllm.sequence import SequenceData
+    from light_vllm.task.base.schema.sequence import SequenceData
 
 logger = init_logger(__name__)
 
@@ -89,7 +89,7 @@ class InputRegistry:
             :data:`InputProcessor` is not applied to the dummy data.
         """
         # Avoid circular import
-        from light_vllm.sequence import SequenceData
+        from light_vllm.task.base.schema.sequence import SequenceData
 
         dummy_seq_data = SequenceData([0] * seq_len)
         dummy_multi_modal_data = None

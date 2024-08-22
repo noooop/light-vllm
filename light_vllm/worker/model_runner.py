@@ -20,7 +20,8 @@ from light_vllm.models.loader import get_model
 from light_vllm.models.loader.tensorizer import TensorizerConfig
 from light_vllm.models.utils import set_cpu_offload_max_bytes
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.sequence import SamplerOutput, SequenceGroupMetadata
+from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
+from light_vllm.task.chat.schema.execute_io import SamplerOutput
 from light_vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
                               is_hip,
                               is_pin_memory_available)

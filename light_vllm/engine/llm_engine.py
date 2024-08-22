@@ -9,9 +9,9 @@ from light_vllm.config import ModelConfig, SchedulerConfig
 from light_vllm.engine.arg_utils import EngineArgs
 from light_vllm.inputs import PromptInputs
 from light_vllm.logger import init_logger
-from light_vllm.outputs import RequestOutput
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.sequence import ExecuteModelRequest
+from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.schema.execute_io import ExecuteModelInput
 from light_vllm.version import __version__ as VLLM_VERSION
 
 logger = init_logger(__name__)
@@ -98,8 +98,6 @@ class LLMEngine:
             load_config=self.load_config
         )
         self._initialize_kv_caches()
-
-        self.ExecuteModelRequest = lazy_import(self.workflow.ExecuteModelRequest)
 
         # scheduler
         self.scheduler = lazy_import(self.workflow.Scheduler)(self.scheduler_config, self.cache_config)
@@ -234,13 +232,11 @@ class LLMEngine:
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            execute_model_req = ExecuteModelRequest(
+            execute_model_req = ExecuteModelInput(
                 seq_group_metadata_list=seq_group_metadata_list,
                 blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
                 blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
-                blocks_to_copy=scheduler_outputs.blocks_to_copy,
-                num_lookahead_slots=scheduler_outputs.num_lookahead_slots,
-                running_queue_size=scheduler_outputs.running_queue_size)
+                blocks_to_copy=scheduler_outputs.blocks_to_copy)
             output = self.Executor.execute_model(
                 execute_model_req=execute_model_req)
         else:

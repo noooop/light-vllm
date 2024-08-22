@@ -8,7 +8,7 @@ import torch
 
 from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
-from light_vllm.sequence import ExecuteModelRequest, SamplerOutput
+from light_vllm.task.base.schema.execute_io import ExecuteModelInput, ExecuteOutput
 from light_vllm.utils import (enable_trace_function_call_for_thread,
                               update_environment_variables)
 from light_vllm.worker.model_runner_base import ModelRunnerBase, ModelRunnerInputBase
@@ -66,8 +66,8 @@ class WorkerBase(ABC):
     @abstractmethod
     def execute_model(
         self,
-        execute_model_req: Optional[ExecuteModelRequest] = None
-    ) -> Optional[List[SamplerOutput]]:
+        execute_model_req: Optional[ExecuteModelInput] = None
+    ) -> Optional[List[ExecuteOutput]]:
         raise NotImplementedError
 
     @abstractmethod
@@ -116,7 +116,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
     @abstractmethod
     def prepare_worker_input(
-            self, execute_model_req: ExecuteModelRequest) -> WorkerInput:
+            self, execute_model_req: ExecuteModelInput) -> WorkerInput:
         """
         Prepare the inputs to WorkerBase.execute_worker from an execution
         request. This method may move data to the worker's local device. It is
@@ -133,8 +133,8 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
     def execute_model(
         self,
-        execute_model_req: Optional[ExecuteModelRequest] = None
-    ) -> Optional[List[SamplerOutput]]:
+        execute_model_req: Optional[ExecuteModelInput] = None
+    ) -> Optional[List[ExecuteOutput]]:
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
 

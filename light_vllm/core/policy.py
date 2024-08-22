@@ -1,7 +1,7 @@
 from collections import deque
 from typing import Deque
 
-from light_vllm.sequence import SequenceGroup
+from light_vllm.task.base.schema.sequence import SequenceGroup
 
 
 class Policy:

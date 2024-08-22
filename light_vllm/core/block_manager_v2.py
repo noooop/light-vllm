@@ -11,7 +11,7 @@ from light_vllm.core.block.prefix_caching_block import (ComputedBlocksTracker,
                                                         LastAccessBlocksTracker)
 from light_vllm.core.block.utils import check_no_caching_or_swa_for_blockmgr_encdec
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
-from light_vllm.sequence import Sequence, SequenceGroup, SequenceStatus
+from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup, SequenceStatus
 from light_vllm.utils import Device
 
 SeqId = int

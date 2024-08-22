@@ -10,7 +10,7 @@ from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
                                parse_and_batch_prompt)
 from light_vllm.logger import init_logger
 
-from light_vllm.outputs import EmbeddingRequestOutput, RequestOutput
+from light_vllm.task.base.schema.outputs import RequestOutput
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.inputs.tokenizer import get_cached_tokenizer
@@ -308,7 +308,7 @@ class LLM:
                                        Sequence[PoolingParams]]] = None,
         prompt_token_ids: Optional[List[int]] = None,
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @overload  # LEGACY: multi (prompt + optional token ids)
@@ -319,7 +319,7 @@ class LLM:
                                        Sequence[PoolingParams]]] = None,
         prompt_token_ids: Optional[List[List[int]]] = None,
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @overload  # LEGACY: single (token ids + optional prompt)
@@ -331,7 +331,7 @@ class LLM:
         *,
         prompt_token_ids: List[int],
         use_tqdm: bool = True
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @overload  # LEGACY: multi (token ids + optional prompt)
@@ -343,7 +343,7 @@ class LLM:
         *,
         prompt_token_ids: List[List[int]],
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @overload  # LEGACY: single or multi token ids [pos-only]
@@ -353,7 +353,7 @@ class LLM:
         pooling_params: None,
         prompt_token_ids: Union[List[int], List[List[int]]],
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @overload
@@ -365,7 +365,7 @@ class LLM:
         pooling_params: Optional[Union[PoolingParams,
                                        Sequence[PoolingParams]]] = None,
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         ...
 
     @deprecate_kwargs("prompts",
@@ -381,7 +381,7 @@ class LLM:
                                        Sequence[PoolingParams]]] = None,
         prompt_token_ids: Optional[Union[List[int], List[List[int]]]] = None,
         use_tqdm: bool = True,
-    ) -> List[EmbeddingRequestOutput]:
+    ) -> List[RequestOutput]:
         """Generates the completions for the input prompts.
 
         This class automatically batches the given prompts, considering
@@ -427,7 +427,7 @@ class LLM:
         )
 
         outputs = self._run_engine(use_tqdm=use_tqdm)
-        return LLMEngine.validate_outputs(outputs, EmbeddingRequestOutput)
+        return LLMEngine.validate_outputs(outputs, RequestOutput)
 
     # LEGACY
     def _convert_v1_inputs(
@@ -506,7 +506,7 @@ class LLM:
 
     def _run_engine(
             self, *, use_tqdm: bool
-    ) -> List[Union[RequestOutput, EmbeddingRequestOutput]]:
+    ) -> List[RequestOutput]:
         # Initialize tqdm.
         if use_tqdm:
             num_requests = self.llm_engine.get_num_unfinished_requests()
@@ -518,7 +518,7 @@ class LLM:
                          f"output: {0:.2f} toks/s"),
             )
         # Run the engine.
-        outputs: List[Union[RequestOutput, EmbeddingRequestOutput]] = []
+        outputs: List[RequestOutput] = []
         total_in_toks = 0
         total_out_toks = 0
         while self.llm_engine.has_unfinished_requests():

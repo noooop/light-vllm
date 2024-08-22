@@ -6,7 +6,7 @@ from typing import Dict, List, Optional, Tuple
 import torch
 
 from light_vllm.layers.sampling_params import SamplingParams, SamplingType
-from light_vllm.sequence import SequenceData, SequenceGroupMetadata
+from light_vllm.task.base.schema.sequence import SequenceData, SequenceGroupMetadata
 from light_vllm.layers.triton_utils.sample import get_num_triton_sampler_splits
 from light_vllm.utils import (async_tensor_h2d, is_pin_memory_available,
                               make_tensor_with_pad, maybe_expand_dim)
