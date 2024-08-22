@@ -1,20 +1,19 @@
-
 from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List,
                     Mapping, Optional)
 from typing import Sequence as GenericSequence
 from typing import Type, Union
 
-from light_vllm.config import ModelConfig, SchedulerConfig
-from light_vllm.engine.arg_utils import EngineArgs
-from light_vllm.utils import Counter
-from light_vllm.logger import init_logger
-from light_vllm.task.base.schema.outputs import RequestOutput
-from light_vllm.task.base.schema.execute_io import ExecuteModelInput
 from light_vllm.version import __version__ as VLLM_VERSION
 
-logger = init_logger(__name__)
+from light_vllm.engine.arg_utils import EngineArgs
+from light_vllm.task.base.schema.outputs import RequestOutput
 
+from light_vllm.utils import Counter
+from light_vllm.logger import init_logger
+
+
+logger = init_logger(__name__)
 _O = RequestOutput
 
 
@@ -97,6 +96,15 @@ class LLMEngine:
             load_config=self.load_config,
             workflow=self.workflow
         )
+
+        # model_pre_processor
+        self.model_pre_processor = lazy_import(self.workflow.ModelPreProcessor)(self.device_config,
+                                                                                self.model_config,
+                                                                                self.scheduler_config,
+                                                                                self.cache_config,
+                                                                                attn_backend=self.executor.driver_worker.model_runner.attn_backend,
+                                                                                cuda_graph=self.executor.driver_worker.model_runner.cuda_graph)
+
         self._initialize_kv_caches()
 
         # scheduler
@@ -112,11 +120,11 @@ class LLMEngine:
                                                                          self.tokenizer,
                                                                          self.seq_counter)
 
-        # OutputProcessor
-        self.OutputProcessor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
-                                                                          self.scheduler,
-                                                                          self.tokenizer,
-                                                                          self.seq_counter)
+        # output_processor
+        self.output_processor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
+                                                                           self.scheduler,
+                                                                           self.tokenizer,
+                                                                           self.seq_counter)
 
     def _log_config(self):
         logger.info(
@@ -162,6 +170,8 @@ class LLMEngine:
         The workers will determine the number of blocks in both the GPU cache
         and the swap CPU cache.
         """
+        self.executor.driver_worker.model_runner.prepare_model_input = self.model_pre_processor.prepare_model_input
+
         num_gpu_blocks, num_cpu_blocks = (
             self.executor.determine_num_available_blocks())
 
@@ -177,6 +187,8 @@ class LLMEngine:
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
         self.executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
+
+        del self.executor.driver_worker.model_runner.prepare_model_input
 
     def _init_tokenizer_kwargs(self) -> Dict:
         init_kwargs = dict(tokenizer_name=self.model_config.tokenizer,
@@ -202,42 +214,21 @@ class LLMEngine:
         self.scheduler.add_seq_group(request["input"])
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
-        """Aborts a request(s) with the given ID.
-
-        Args:
-            request_id: The ID(s) of the request to abort.
-
-        Details:
-            - Refer to the
-              :meth:`~vllm.core.scheduler.Scheduler.abort_seq_group`
-              from class :class:`~vllm.core.scheduler.Scheduler`.
-
-        Example:
-            >>> # initialize engine and add a request with request_id
-            >>> request_id = str(0)
-            >>> # abort the request
-            >>> engine.abort_request(request_id)
-        """
         self.scheduler.abort_seq_group(request_id)
 
     def step(self) -> List[RequestOutput]:
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            execute_input = ExecuteModelInput(
-                seq_group_metadata_list=seq_group_metadata_list,
-                blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
-                blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
-                blocks_to_copy=scheduler_outputs.blocks_to_copy)
-            output = self.executor.execute_model(
-                execute_input=execute_input)
+            execute_input = self.model_pre_processor(seq_group_metadata_list, scheduler_outputs)
+            execute_output = self.executor.execute_model(execute_input)
         else:
-            output = []
+            execute_output = []
 
-        request_outputs = self.OutputProcessor(output,
-                                               scheduler_outputs.scheduled_seq_groups,
-                                               scheduler_outputs.ignored_seq_groups,
-                                               seq_group_metadata_list)
+        request_outputs = self.output_processor(execute_output,
+                                                scheduler_outputs.scheduled_seq_groups,
+                                                scheduler_outputs.ignored_seq_groups,
+                                                seq_group_metadata_list)
 
         self.scheduler.free_finished_seq_groups()
 
@@ -250,14 +241,6 @@ class LLMEngine:
     def has_unfinished_requests(self) -> bool:
         """Returns True if there are unfinished requests."""
         return self.scheduler.has_unfinished_seqs()
-
-    def get_model_config(self) -> ModelConfig:
-        """Gets the model configuration."""
-        return self.model_config
-
-    def get_scheduler_config(self) -> SchedulerConfig:
-        """Gets the scheduler configuration."""
-        return self.scheduler_config
 
     def __reduce__(self):
         # This is to ensure that the LLMEngine is not referenced in

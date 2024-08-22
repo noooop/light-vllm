@@ -22,5 +22,4 @@ class Workflow:
     Executor: str = "light_vllm.task.base.executor.gpu_executor:GPUExecutor"
     Scheduler: str = "light_vllm.core.scheduler:Scheduler"
     Tokenizer: str = "light_vllm.inputs.tokenizer:Tokenizer"
-    Worker: str = "light_vllm.task.base.worker.gpu_worker:Worker"
 

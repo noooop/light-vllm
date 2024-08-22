@@ -58,5 +58,5 @@ class GPUExecutor(ExecutorBase):
 
     def execute_model(self, execute_input: ExecuteInput
     ) -> Optional[List[ExecuteOutput]]:
-        output = self.driver_worker.execute_model(execute_input)
+        output = self.driver_worker(execute_input)
         return output

@@ -22,4 +22,5 @@ from light_vllm.task.base.workflow import Workflow
 class ChatWorkflow(Workflow):
     InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
-
+    ModelPreProcessor: str = "light_vllm.task.chat.processor.model_pre_processor:ChatModelPreProcessor"
+    Worker: str = "light_vllm.task.chat.worker.gpu_worker:Worker"

@@ -11,10 +11,10 @@ from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.models.loader.tensorizer import TensorizerConfig
 from light_vllm.platforms import current_platform
-from light_vllm.worker.model_runner import GPUModelRunnerBase, ModelRunner
+from light_vllm.task.chat.runner.model_runner import GPUModelRunnerBase, ModelRunner
 
-from .cache_engine import CacheEngine
-from .worker_base import LocalOrDistributedWorkerBase, WorkerInput
+from light_vllm.task.base.worker.cache_engine import CacheEngine
+from light_vllm.task.base.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
 
 
 class Worker(LocalOrDistributedWorkerBase):

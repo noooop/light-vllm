@@ -9,11 +9,9 @@ import torch
 from light_vllm.logger import init_logger
 from light_vllm.task.base.schema.execute_io import ExecuteOutput
 from light_vllm.task.base.schema.execute_io import ExecuteInput, WorkerInput, ModelInput
+from light_vllm.task.base.runner.model_runner_base import ModelRunnerBase
 from light_vllm.utils import (enable_trace_function_call_for_thread,
                               update_environment_variables)
-
-from light_vllm.worker.model_runner_base import ModelRunnerBase
-
 
 logger = init_logger(__name__)
 
@@ -119,60 +117,6 @@ class LocalOrDistributedWorkerBase(WorkerBase):
             self.kv_cache if self.kv_cache is not None else None)
 
         return output
-
-    def execute_model(
-        self,
-        execute_model_req: Optional[ExecuteInput] = None
-    ) -> Optional[List[ExecuteOutput]]:
-        """Executes at least one model step on the given sequences, unless no
-        sequences are provided."""
-
-        if execute_model_req is None:
-            return None
-
-        worker_input: WorkerInput = self.prepare_worker_input(
-            execute_model_req=execute_model_req)
-        model_input: ModelInput = (
-            self.model_runner.prepare_model_input(
-                execute_model_req.seq_group_metadata_list))
-
-        self.execute_worker(worker_input)
-
-        # If there is no input, we don't need to execute the model.
-        if worker_input.num_seq_groups == 0:
-            return []
-
-        output = self.model_runner.execute_model(
-            model_input,
-            self.kv_cache if self.kv_cache is not None else None)
-
-        return output
-
-    @torch.inference_mode()
-    def prepare_worker_input(
-            self, execute_model_req: ExecuteInput) -> WorkerInput:
-        num_seq_groups = len(execute_model_req.seq_group_metadata_list)
-        # `blocks_to_swap_in` and `blocks_to_swap_out` are cpu tensors.
-        # they contain parameters to launch cudamemcpyasync.
-        blocks_to_swap_in = torch.tensor(execute_model_req.blocks_to_swap_in,
-                                         device="cpu",
-                                         dtype=torch.int64).view(-1, 2)
-        blocks_to_swap_out = torch.tensor(execute_model_req.blocks_to_swap_out,
-                                          device="cpu",
-                                          dtype=torch.int64).view(-1, 2)
-        # `blocks_to_copy` is a gpu tensor. The src and tgt of
-        # blocks to copy are in the same device, and `blocks_to_copy`
-        # can be used directly within cuda kernels.
-        blocks_to_copy = torch.tensor(execute_model_req.blocks_to_copy,
-                                      device=self.device,
-                                      dtype=torch.int64).view(-1, 2)
-
-        return WorkerInput(
-            num_seq_groups=num_seq_groups,
-            blocks_to_swap_in=blocks_to_swap_in,
-            blocks_to_swap_out=blocks_to_swap_out,
-            blocks_to_copy=blocks_to_copy
-        )
 
 
 class WorkerWrapperBase:
