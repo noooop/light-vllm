@@ -7,11 +7,13 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 import torch
 
 from light_vllm.logger import init_logger
-from light_vllm.platforms import current_platform
-from light_vllm.task.base.schema.execute_io import ExecuteModelInput, ExecuteOutput
+from light_vllm.task.base.schema.execute_io import ExecuteOutput
+from light_vllm.task.base.schema.execute_io import ExecuteInput, WorkerInput, ModelInput
 from light_vllm.utils import (enable_trace_function_call_for_thread,
                               update_environment_variables)
-from light_vllm.worker.model_runner_base import ModelRunnerBase, ModelRunnerInputBase
+
+from light_vllm.worker.model_runner_base import ModelRunnerBase
+
 
 logger = init_logger(__name__)
 
@@ -51,22 +53,11 @@ class WorkerBase(ABC):
         """
         raise NotImplementedError
 
-    @current_platform.inference_mode()
-    def start_worker_execution_loop(self) -> None:
-        """Execute model loop in parallel worker.
-
-        You can stop the loop by executing a driver worker with an empty output.
-        See `stop_remote_worker_execution_loop` for more details.
-        """
-        while True:
-            output = self.execute_model(execute_model_req=None)
-            if output is None:
-                return None
-
     @abstractmethod
-    def execute_model(
+    @torch.inference_mode
+    def __call__(
         self,
-        execute_model_req: Optional[ExecuteModelInput] = None
+        execute_input: Optional[ExecuteInput] = None
     ) -> Optional[List[ExecuteOutput]]:
         raise NotImplementedError
 
@@ -76,18 +67,6 @@ class WorkerBase(ABC):
         speculative decoding.
         """
         raise NotImplementedError
-
-
-@dataclasses.dataclass(frozen=True)
-class WorkerInput:
-    """Local inputs to each worker. May contain device-specific data. These
-    fields should be broadcastable to other workers.
-    """
-
-    num_seq_groups: Optional[int] = None
-    blocks_to_swap_in: Optional[torch.Tensor] = None
-    blocks_to_swap_out: Optional[torch.Tensor] = None
-    blocks_to_copy: Optional[torch.Tensor] = None
 
 
 class LocalOrDistributedWorkerBase(WorkerBase):
@@ -115,25 +94,35 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         raise NotImplementedError
 
     @abstractmethod
-    def prepare_worker_input(
-            self, execute_model_req: ExecuteModelInput) -> WorkerInput:
-        """
-        Prepare the inputs to WorkerBase.execute_worker from an execution
-        request. This method may move data to the worker's local device. It is
-        not allowed to communicate with other workers or devices.
-        """
-        raise NotImplementedError
-
-    @abstractmethod
     def execute_worker(self, worker_input: WorkerInput) -> None:
         """
         Process an execution request.
         """
         raise NotImplementedError
 
+    @torch.inference_mode
+    def __call__(
+        self,
+        execute_input: Optional[ExecuteInput] = None
+    ) -> Optional[List[ExecuteOutput]]:
+        """Executes at least one model step on the given sequences, unless no
+        sequences are provided."""
+
+        self.execute_worker(execute_input.worker_input)
+
+        # If there is no input, we don't need to execute the model.
+        if execute_input.worker_input.num_seq_groups == 0:
+            return []
+
+        output = self.model_runner.execute_model(
+            execute_input.model_input,
+            self.kv_cache if self.kv_cache is not None else None)
+
+        return output
+
     def execute_model(
         self,
-        execute_model_req: Optional[ExecuteModelInput] = None
+        execute_model_req: Optional[ExecuteInput] = None
     ) -> Optional[List[ExecuteOutput]]:
         """Executes at least one model step on the given sequences, unless no
         sequences are provided."""
@@ -143,7 +132,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
         worker_input: WorkerInput = self.prepare_worker_input(
             execute_model_req=execute_model_req)
-        model_input: ModelRunnerInputBase = (
+        model_input: ModelInput = (
             self.model_runner.prepare_model_input(
                 execute_model_req.seq_group_metadata_list))
 
@@ -158,6 +147,32 @@ class LocalOrDistributedWorkerBase(WorkerBase):
             self.kv_cache if self.kv_cache is not None else None)
 
         return output
+
+    @torch.inference_mode()
+    def prepare_worker_input(
+            self, execute_model_req: ExecuteInput) -> WorkerInput:
+        num_seq_groups = len(execute_model_req.seq_group_metadata_list)
+        # `blocks_to_swap_in` and `blocks_to_swap_out` are cpu tensors.
+        # they contain parameters to launch cudamemcpyasync.
+        blocks_to_swap_in = torch.tensor(execute_model_req.blocks_to_swap_in,
+                                         device="cpu",
+                                         dtype=torch.int64).view(-1, 2)
+        blocks_to_swap_out = torch.tensor(execute_model_req.blocks_to_swap_out,
+                                          device="cpu",
+                                          dtype=torch.int64).view(-1, 2)
+        # `blocks_to_copy` is a gpu tensor. The src and tgt of
+        # blocks to copy are in the same device, and `blocks_to_copy`
+        # can be used directly within cuda kernels.
+        blocks_to_copy = torch.tensor(execute_model_req.blocks_to_copy,
+                                      device=self.device,
+                                      dtype=torch.int64).view(-1, 2)
+
+        return WorkerInput(
+            num_seq_groups=num_seq_groups,
+            blocks_to_swap_in=blocks_to_swap_in,
+            blocks_to_swap_out=blocks_to_swap_out,
+            blocks_to_copy=blocks_to_copy
+        )
 
 
 class WorkerWrapperBase:

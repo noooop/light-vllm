@@ -4,7 +4,7 @@ from light_vllm.task.base.executor.executor_base import ExecutorBase
 from light_vllm.logger import init_logger
 
 from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteOutput
-from light_vllm.worker.worker_base import WorkerWrapperBase
+from light_vllm.task.base.worker.worker_base import WorkerWrapperBase
 
 logger = init_logger(__name__)
 

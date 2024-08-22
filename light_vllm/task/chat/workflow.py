@@ -23,5 +23,3 @@ class ChatWorkflow(Workflow):
     InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
 
-    Worker: str = "light_vllm.worker.worker:Worker"
-

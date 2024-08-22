@@ -11,10 +11,10 @@ from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.models.loader.tensorizer import TensorizerConfig
 from light_vllm.platforms import current_platform
-from light_vllm.task.base.schema.execute_io import ExecuteModelInput
-from light_vllm.worker.cache_engine import CacheEngine
 from light_vllm.worker.model_runner import GPUModelRunnerBase, ModelRunner
-from light_vllm.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
+
+from .cache_engine import CacheEngine
+from .worker_base import LocalOrDistributedWorkerBase, WorkerInput
 
 
 class Worker(LocalOrDistributedWorkerBase):
@@ -189,32 +189,6 @@ class Worker(LocalOrDistributedWorkerBase):
     @property
     def kv_cache(self) -> Optional[List[torch.Tensor]]:
         return self.gpu_cache
-
-    @torch.inference_mode()
-    def prepare_worker_input(
-            self, execute_model_req: ExecuteModelInput) -> WorkerInput:
-        num_seq_groups = len(execute_model_req.seq_group_metadata_list)
-        # `blocks_to_swap_in` and `blocks_to_swap_out` are cpu tensors.
-        # they contain parameters to launch cudamemcpyasync.
-        blocks_to_swap_in = torch.tensor(execute_model_req.blocks_to_swap_in,
-                                         device="cpu",
-                                         dtype=torch.int64).view(-1, 2)
-        blocks_to_swap_out = torch.tensor(execute_model_req.blocks_to_swap_out,
-                                          device="cpu",
-                                          dtype=torch.int64).view(-1, 2)
-        # `blocks_to_copy` is a gpu tensor. The src and tgt of
-        # blocks to copy are in the same device, and `blocks_to_copy`
-        # can be used directly within cuda kernels.
-        blocks_to_copy = torch.tensor(execute_model_req.blocks_to_copy,
-                                      device=self.device,
-                                      dtype=torch.int64).view(-1, 2)
-
-        return WorkerInput(
-            num_seq_groups=num_seq_groups,
-            blocks_to_swap_in=blocks_to_swap_in,
-            blocks_to_swap_out=blocks_to_swap_out,
-            blocks_to_copy=blocks_to_copy
-        )
 
     @torch.inference_mode()
     def execute_worker(self, worker_input: WorkerInput) -> None:
