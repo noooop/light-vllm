@@ -211,7 +211,6 @@ class FlashAttentionMetadataBuilder(
         self.has_prefix_cache_hit = False
 
         self.input_builder = input_builder
-        self.runner = input_builder.runner
         self.sliding_window = input_builder.sliding_window
         self.block_size = input_builder.block_size
         self.use_v2_block_manager = (
@@ -290,7 +289,7 @@ class FlashAttentionMetadataBuilder(
                                 self.input_builder.chunked_prefill_enabled,
                                 prefix_cache_hit)
 
-        device = self.runner.device
+        device = self.input_builder.device
         use_captured_graph = cuda_graph_pad_size != -1
 
         max_query_len = max(query_lens)
@@ -301,7 +300,7 @@ class FlashAttentionMetadataBuilder(
         assert max_query_len > 0, ("query_lens: {}".format(query_lens))
 
         num_decode_tokens, block_tables = (
-            self.runner.cuda_graph.attention_metadata_builder_maybe_pad(self, cuda_graph_pad_size, num_decode_tokens, batch_size, device))
+            self.input_builder.cuda_graph.attention_metadata_builder_maybe_pad(self, cuda_graph_pad_size, num_decode_tokens, batch_size, device))
 
         context_lens_tensor = torch.tensor(self.context_lens,
                                            dtype=torch.int,
