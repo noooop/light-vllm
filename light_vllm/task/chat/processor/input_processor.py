@@ -2,16 +2,18 @@
 from typing import Any, Dict, Optional
 
 import time
+from light_vllm.utils import Counter
 from light_vllm.inputs.tokenizer import Tokenizer
 from light_vllm.config import ModelConfig, CacheConfig
-
+from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.task.chat.schema.inputs import PromptInput, ChatInput, ChatRequest
 from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup
+from light_vllm.task.base.processor.input_processor import InputProcessor
 
 
-class ChatModelInputProcessor(object):
+class ChatModelPromptProcessor(object):
     """
-    PromptInput -> ChatModelInputProcessor -> ChatInput
+    PromptInput -> ChatModelPromptProcessor -> ChatInput
     """
     def __init__(self, tokenizer: Tokenizer):
         self.tokenizer = tokenizer
@@ -39,14 +41,13 @@ class ChatModelSequenceProcessor(object):
     def __init__(self,
                  model_config: ModelConfig,
                  cache_config: CacheConfig,
-                 tokenizer: Tokenizer):
-        from light_vllm.utils import Counter
-
+                 tokenizer: Tokenizer,
+                 seq_counter: Counter):
         self.block_size = cache_config.block_size
         self.eos_token_id = tokenizer.eos_token_id
         self.max_logprobs = model_config.max_logprobs
+        self.seq_counter = seq_counter
 
-        self.seq_counter = Counter()
         self.generation_config_fields = self._load_generation_config_dict(
             model_config)
 
@@ -100,3 +101,33 @@ class ChatModelSequenceProcessor(object):
             sampling_params=sampling_params)
 
         return seq_group
+
+
+class ChatModelInputProcessor(InputProcessor):
+    """
+    PromptInput -> ChatModelInputProcessor -> ChatRequest
+
+    PromptInput -> ChatModelPromptProcessor -> ChatInput
+    ChatInput + request_id + arrival_time -> ChatRequest
+    ChatRequest -> ChatModelSequenceProcessor -> ChatRequest
+    """
+    def __init__(self,
+                 model_config: ModelConfig,
+                 cache_config: CacheConfig,
+                 tokenizer: Tokenizer,
+                 seq_counter: Counter):
+        self.prompt_processor = ChatModelPromptProcessor(tokenizer)
+        self.sequence_processor = ChatModelSequenceProcessor(model_config, cache_config, tokenizer, seq_counter)
+
+    def __call__(
+            self,
+            request_id: str,
+            prompt: PromptInput,
+            params: SamplingParams,
+            arrival_time: Optional[float] = None) -> ChatRequest:
+        input = self.prompt_processor(prompt)
+
+        request = ChatRequest(request_id=str(request_id), input=input, sampling_params=params)
+        seq_group = self.sequence_processor(request, arrival_time)
+        request["input"] = seq_group
+        return request

@@ -7,9 +7,8 @@ from typing import Type, Union
 
 from light_vllm.config import ModelConfig, SchedulerConfig
 from light_vllm.engine.arg_utils import EngineArgs
-from light_vllm.inputs import PromptInputs
+from light_vllm.utils import Counter
 from light_vllm.logger import init_logger
-from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.task.base.schema.outputs import RequestOutput
 from light_vllm.task.base.schema.execute_io import ExecuteModelInput
 from light_vllm.version import __version__ as VLLM_VERSION
@@ -106,18 +105,18 @@ class LLMEngine:
         # tokenizer
         self.tokenizer = lazy_import(self.workflow.Tokenizer)(**self._init_tokenizer_kwargs())
 
-        # InputProcessor
-        self.InputProcessor = lazy_import(self.workflow.InputProcessor)(self.tokenizer)
-        self.SequenceProcessor = lazy_import(self.workflow.SequenceProcessor)(self.model_config,
-                                                                              self.cache_config,
-                                                                              self.tokenizer)
-        self.ChatRequest = lazy_import(self.workflow.Request)
+        # input_processor
+        self.seq_counter = Counter()
+        self.input_processor = lazy_import(self.workflow.InputProcessor)(self.model_config,
+                                                                         self.cache_config,
+                                                                         self.tokenizer,
+                                                                         self.seq_counter)
 
         # OutputProcessor
         self.OutputProcessor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
                                                                           self.scheduler,
                                                                           self.tokenizer,
-                                                                          self.SequenceProcessor.seq_counter)
+                                                                          self.seq_counter)
 
     def _log_config(self):
         logger.info(
@@ -198,17 +197,9 @@ class LLMEngine:
         engine = cls(engine_config)
         return engine
 
-    def add_request(
-            self,
-            request_id: str,
-            prompt: PromptInputs,
-            params: SamplingParams,
-            arrival_time: Optional[float] = None,
-    ) -> None:
-        input = self.InputProcessor(prompt)
-        request = self.ChatRequest(request_id=str(request_id), input=input, sampling_params=params)
-        seq_group = self.SequenceProcessor(request, arrival_time)
-        self.scheduler.add_seq_group(seq_group)
+    def add_request(self, *args, **kwargs) -> None:
+        request = self.input_processor(*args, **kwargs)
+        self.scheduler.add_seq_group(request["input"])
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         """Aborts a request(s) with the given ID.

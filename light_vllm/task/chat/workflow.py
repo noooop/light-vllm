@@ -21,9 +21,7 @@ from light_vllm.task.base.workflow import Workflow
 
 class ChatWorkflow(Workflow):
     InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
-    SequenceProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelSequenceProcessor"
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
-    Request: str = "light_vllm.task.chat.schema.inputs:ChatRequest"
 
     Worker: str = "light_vllm.worker.worker:Worker"
 
