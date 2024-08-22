@@ -47,6 +47,45 @@ python -m benchmarks.benchmark_cuda_graph
 
 Capture Graph需要额外的时间，Graph占额外的显存空间。如果真有巨大的速度提升，调度器也会围绕这个特性，尽量一个batch都是decode阶段，这时chunked_prefill就很尴尬。实测几乎没有提升，Cuda Graph默认关了吧。
 
+....
+
+# step 3 Modularization + Workflow
+
+将工程拆分成可以即插即用的模型，并提过Workflow配置
+
+```
+抽象 Workflow:
+
+AnyInput(*args, **kwargs) -> InputProcessor -> Request
+scheduler.add_request(request:Request)
+
+engine.step
+    seq_group_metadata_list, scheduler_outputs = scheduler.schedule()
+
+    List[SequenceGroupMetadata], SchedulerOutputs -> ModelPreProcessor -> ExecuteInput
+
+    ExecuteInput -> Executor -> List[ExecuteOutput]
+
+    List[ExecuteOutput] -> OutputProcessor -> RequestOutput
+    RequestOutput -> return to downstream
+```
+
+定义chat模型的ChatWorkflow
+
+```
+class ChatWorkflow(Workflow):
+    InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
+    OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
+    ModelPreProcessor: str = "light_vllm.task.chat.processor.model_pre_processor:ChatModelPreProcessor"
+    Worker: str = "light_vllm.task.chat.worker.gpu_worker:Worker"
+    
+    Executor: str = "light_vllm.task.base.executor.gpu_executor:GPUExecutor"
+    Scheduler: str = "light_vllm.core.scheduler:Scheduler"
+    Tokenizer: str = "light_vllm.inputs.tokenizer:Tokenizer"
+```
+
+
+
 # Warning
 Not rigorously tested.
 For research and experimentation only.
