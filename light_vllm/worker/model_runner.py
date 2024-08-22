@@ -138,6 +138,8 @@ class ModelInputForGPUBuilder(ModelRunnerInputBuilderBase[ModelInputForGPU]):
         ]
 
         self.runner = runner
+        self.device = runner.device
+        self.cuda_graph = runner.cuda_graph
         self.model_input_cls = self.runner._model_input_cls
         self.attn_backend = self.runner.attn_backend
         self.scheduler_config = self.runner.scheduler_config
@@ -571,10 +573,7 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         self,
         model_input: ModelInputForGPUWithSamplingMetadata,
         kv_caches: List[torch.Tensor],
-        num_steps: int = 1,
     ) -> Optional[List[SamplerOutput]]:
-        if num_steps > 1:
-            raise ValueError("num_steps > 1 is not supported in ModelRunner")
 
         # Currently cuda graph is only supported by the decode phase.
         assert model_input.attn_metadata is not None

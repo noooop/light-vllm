@@ -146,7 +146,6 @@ class LocalOrDistributedWorkerBase(WorkerBase):
         model_input: ModelRunnerInputBase = (
             self.model_runner.prepare_model_input(
                 execute_model_req.seq_group_metadata_list))
-        num_steps = execute_model_req.num_steps
 
         self.execute_worker(worker_input)
 
@@ -156,8 +155,7 @@ class LocalOrDistributedWorkerBase(WorkerBase):
 
         output = self.model_runner.execute_model(
             model_input,
-            self.kv_cache if self.kv_cache is not None else None,
-            num_steps)
+            self.kv_cache if self.kv_cache is not None else None)
 
         return output
 

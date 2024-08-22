@@ -65,7 +65,6 @@ class ModelRunnerBase(ABC, Generic[T]):
         self,
         model_input: T,
         kv_caches: Optional[List[torch.Tensor]],
-        num_steps: int = 1,
     ) -> Optional[List[SamplerOutput]]:
         """
         Execute the model on the given input.

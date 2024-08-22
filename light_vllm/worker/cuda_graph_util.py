@@ -87,10 +87,10 @@ class CUDAGraph:
         input_positions.extend([0] * cuda_graph_pad_size)
         input_tokens_tensor = torch.tensor(input_tokens,
                                            dtype=torch.long,
-                                           device=builder.runner.device)
+                                           device=builder.device)
         input_positions_tensor = torch.tensor(input_positions,
                                               dtype=torch.long,
-                                              device=builder.runner.device)
+                                              device=builder.device)
 
         # Sequence and query lengths.
         seq_lens.extend([1] * cuda_graph_pad_size)
