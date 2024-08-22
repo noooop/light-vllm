@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
 from light_vllm.config import (CacheConfig, DeviceConfig,
                                EngineConfig, LoadConfig, ModelConfig,
                                SchedulerConfig)
-from light_vllm.executor.executor_base import ExecutorBase
 from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
 from light_vllm.utils import FlexibleArgumentParser
@@ -41,8 +40,7 @@ class EngineArgs:
     # Note: Specifying a custom executor backend by passing a class
     # is intended for expert use only. The API may change without
     # notice.
-    distributed_executor_backend: Optional[Union[str,
-                                                 Type[ExecutorBase]]] = None
+    distributed_executor_backend: Optional[str] = None
     pipeline_parallel_size: int = 1
     tensor_parallel_size: int = 1
     max_parallel_loading_workers: Optional[int] = None

@@ -5,8 +5,8 @@ import time
 from light_vllm.inputs.tokenizer import Tokenizer
 from light_vllm.config import ModelConfig, CacheConfig
 
-from light_vllm.task.chat.workflow.inputs import PromptInput, ChatInput, ChatRequest
-from light_vllm.task.chat.workflow.sequence import Sequence, SequenceGroup
+from light_vllm.task.chat.schema.inputs import PromptInput, ChatInput, ChatRequest
+from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup
 
 
 class ChatModelInputProcessor(object):

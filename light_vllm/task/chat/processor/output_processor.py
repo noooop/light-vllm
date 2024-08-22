@@ -1,8 +1,8 @@
 
 import time
 from typing import List
-from light_vllm.task.chat.workflow.outputs import SequenceGroupOutput, SamplerOutput
-from light_vllm.task.chat.workflow.sequence import SequenceGroup, SequenceGroupMetadata
+from light_vllm.task.chat.schema.execute_io import SequenceGroupOutput, SamplerOutput
+from light_vllm.task.base.schema.sequence import SequenceGroup, SequenceGroupMetadata
 from light_vllm.task.chat.schema.outputs import ChatModelRequestOutput
 from light_vllm.core.scheduler import ScheduledSequenceGroup
 

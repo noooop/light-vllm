@@ -1,19 +1,19 @@
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
-from light_vllm.executor.executor_base import ExecutorBase
+from light_vllm.task.base.executor.executor_base import ExecutorBase
 from light_vllm.logger import init_logger
 
-from light_vllm.task.base.schema.execute_io import ExecuteModelInput
-from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.worker.worker_base import WorkerWrapperBase
 
 logger = init_logger(__name__)
 
 
-def create_worker(worker_module_name, worker_class_name, **kwargs):
+def create_worker(module, **kwargs):
+    module_name, class_name = module.split(":")
     wrapper = WorkerWrapperBase(
-        worker_module_name=worker_module_name,
-        worker_class_name=worker_class_name,
+        worker_module_name=module_name,
+        worker_class_name=class_name,
     )
     wrapper.init_worker(**kwargs)
     return wrapper.worker
@@ -33,8 +33,7 @@ class GPUExecutor(ExecutorBase):
             load_config=self.load_config,
             is_driver_worker=True,
         )
-        worker_kwargs.update(worker_module_name="light_vllm.worker.worker",
-                             worker_class_name="Worker")
+        worker_kwargs.update(module=self.workflow.Worker)
 
         self.driver_worker = create_worker(**worker_kwargs)
         self.driver_worker.init_device()
@@ -57,8 +56,7 @@ class GPUExecutor(ExecutorBase):
 
         self.driver_worker.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
-    def execute_model(
-        self, execute_model_req: ExecuteModelInput
-    ) -> Optional[List[RequestOutput]]:
-        output = self.driver_worker.execute_model(execute_model_req)
+    def execute_model(self, execute_input: ExecuteInput
+    ) -> Optional[List[ExecuteOutput]]:
+        output = self.driver_worker.execute_model(execute_input)
         return output

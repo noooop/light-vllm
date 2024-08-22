@@ -260,7 +260,7 @@ class ModelConfig:
         return getattr(self.hf_text_config, "sliding_window", None)
 
     def get_model_workflow(self) -> str:
-        return "light_vllm.task.chat.workflow.workflow:ChatWorkflow"
+        return "light_vllm.task.chat.workflow:ChatWorkflow"
 
     def get_sliding_window(self) -> Optional[int]:
         """Get the sliding window size, or None if disabled.

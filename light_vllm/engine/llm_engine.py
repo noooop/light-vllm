@@ -89,13 +89,14 @@ class LLMEngine:
         # workflow
         self.workflow = lazy_import(self.model_config.workflow)
 
-        # Executor
-        self.Executor = lazy_import(self.workflow.Executor)(
+        # executor
+        self.executor = lazy_import(self.workflow.Executor)(
             model_config=self.model_config,
             cache_config=self.cache_config,
             scheduler_config=self.scheduler_config,
             device_config=self.device_config,
-            load_config=self.load_config
+            load_config=self.load_config,
+            workflow=self.workflow
         )
         self._initialize_kv_caches()
 
@@ -163,7 +164,7 @@ class LLMEngine:
         and the swap CPU cache.
         """
         num_gpu_blocks, num_cpu_blocks = (
-            self.Executor.determine_num_available_blocks())
+            self.executor.determine_num_available_blocks())
 
         if self.cache_config.num_gpu_blocks_override is not None:
             num_gpu_blocks_override = self.cache_config.num_gpu_blocks_override
@@ -176,7 +177,7 @@ class LLMEngine:
         self.cache_config.num_gpu_blocks = num_gpu_blocks
         self.cache_config.num_cpu_blocks = num_cpu_blocks
 
-        self.Executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
+        self.executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
     def _init_tokenizer_kwargs(self) -> Dict:
         init_kwargs = dict(tokenizer_name=self.model_config.tokenizer,
@@ -232,13 +233,13 @@ class LLMEngine:
         seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            execute_model_req = ExecuteModelInput(
+            execute_input = ExecuteModelInput(
                 seq_group_metadata_list=seq_group_metadata_list,
                 blocks_to_swap_in=scheduler_outputs.blocks_to_swap_in,
                 blocks_to_swap_out=scheduler_outputs.blocks_to_swap_out,
                 blocks_to_copy=scheduler_outputs.blocks_to_copy)
-            output = self.Executor.execute_model(
-                execute_model_req=execute_model_req)
+            output = self.executor.execute_model(
+                execute_input=execute_input)
         else:
             output = []
 

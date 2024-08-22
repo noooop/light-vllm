@@ -3,7 +3,7 @@ from typing import List, Optional, Set, Tuple
 
 from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
                                ModelConfig, SchedulerConfig)
-from light_vllm.task.base.schema.execute_io import ExecuteModelInput, ExecuteOutput
+from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteOutput
 
 
 class ExecutorBase(ABC):
@@ -19,12 +19,14 @@ class ExecutorBase(ABC):
         scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         load_config: LoadConfig,
+        workflow
     ) -> None:
         self.model_config = model_config
         self.cache_config = cache_config
         self.load_config = load_config
         self.scheduler_config = scheduler_config
         self.device_config = device_config
+        self.workflow = workflow
         self._init_executor()
 
     @abstractmethod
@@ -55,8 +57,7 @@ class ExecutorBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def execute_model(
-        self, execute_model_req: ExecuteModelInput
+    def execute_model(self, execute_input: ExecuteInput
     ) -> Optional[List[ExecuteOutput]]:
         """Executes at least one model step on the given sequences."""
         raise NotImplementedError
