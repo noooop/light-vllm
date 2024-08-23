@@ -1,4 +1,4 @@
-name: light_vllm_v0.1
+name: light_vllm_v0.2
 channels:
   - conda-forge
   - pytorch
