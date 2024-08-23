@@ -1,3 +1,4 @@
+import time
 from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List,
                     Mapping, Optional)
@@ -11,7 +12,6 @@ from light_vllm.task.base.schema.outputs import RequestOutput
 
 from light_vllm.utils import Counter
 from light_vllm.logger import init_logger
-
 
 logger = init_logger(__name__)
 _O = RequestOutput
@@ -107,18 +107,21 @@ class LLMEngine:
 
         self._initialize_kv_caches()
 
-        # scheduler
-        self.scheduler = lazy_import(self.workflow.Scheduler)(self.scheduler_config, self.cache_config)
-
         # tokenizer
         self.tokenizer = lazy_import(self.workflow.Tokenizer)(**self._init_tokenizer_kwargs())
 
         # input_processor
         self.seq_counter = Counter()
-        self.input_processor = lazy_import(self.workflow.InputProcessor)(self.model_config,
-                                                                         self.cache_config,
-                                                                         self.tokenizer,
-                                                                         self.seq_counter)
+        self.input_processor = lazy_import(self.workflow.InputProcessor)()
+        self.request_processor = lazy_import(self.workflow.RequestProcessor)(self.model_config,
+                                                                             self.cache_config,
+                                                                             self.tokenizer,
+                                                                             self.seq_counter)
+
+        # scheduler
+        self.scheduler = lazy_import(self.workflow.Scheduler)(self.scheduler_config,
+                                                              self.cache_config,
+                                                              self.request_processor)
 
         # output_processor
         self.output_processor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
@@ -209,9 +212,13 @@ class LLMEngine:
         engine = cls(engine_config)
         return engine
 
-    def add_request(self, *args, **kwargs) -> None:
-        request = self.input_processor(*args, **kwargs)
-        self.scheduler.add_seq_group(request["input"])
+    def add_request(self,
+                    request_id: str,
+                    prompt,
+                    params,
+                    arrival_time: Optional[float] = None) -> None:
+        request = self.input_processor(request_id, prompt, params, arrival_time)
+        self.scheduler.add_request(request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         self.scheduler.abort_seq_group(request_id)

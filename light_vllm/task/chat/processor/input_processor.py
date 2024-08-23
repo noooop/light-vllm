@@ -1,4 +1,3 @@
-
 from typing import Any, Dict, Optional
 
 import time
@@ -8,13 +7,29 @@ from light_vllm.config import ModelConfig, CacheConfig
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.task.chat.schema.inputs import PromptInput, ChatInput, ChatRequest
 from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup
-from light_vllm.task.base.processor.input_processor import InputProcessor
+from light_vllm.task.base.processor.input_processor import InputProcessor, RequestProcessor
+
+
+class ChatModelInputProcessor(InputProcessor):
+    def __call__(self,
+                 request_id: str,
+                 prompt: PromptInput,
+                 params: SamplingParams,
+                 arrival_time: Optional[float] = None) -> ChatRequest:
+        if not arrival_time:
+            arrival_time = time.time()
+        request = ChatRequest(request_id=str(request_id),
+                              input=prompt,
+                              sampling_params=params,
+                              arrival_time=arrival_time)
+        return request
 
 
 class ChatModelPromptProcessor(object):
     """
     PromptInput -> ChatModelPromptProcessor -> ChatInput
     """
+
     def __init__(self, tokenizer: Tokenizer):
         self.tokenizer = tokenizer
 
@@ -38,6 +53,7 @@ class ChatModelSequenceProcessor(object):
     """
     ChatRequest -> ChatModelSequenceProcessor -> SequenceGroup
     """
+
     def __init__(self,
                  model_config: ModelConfig,
                  cache_config: CacheConfig,
@@ -67,7 +83,7 @@ class ChatModelSequenceProcessor(object):
     def __call__(self, chat_request: ChatRequest, arrival_time: Optional[float] = None) -> SequenceGroup:
         """Creates a SequenceGroup with SamplingParams."""
 
-        sampling_params = chat_request["sampling_params"]
+        sampling_params = chat_request.sampling_params
 
         if arrival_time is None:
             arrival_time = time.time()
@@ -76,7 +92,7 @@ class ChatModelSequenceProcessor(object):
         eos_token_id = self.eos_token_id
         seq_id = next(self.seq_counter)
 
-        seq = Sequence(seq_id, chat_request["input"], block_size, eos_token_id)
+        seq = Sequence(seq_id, chat_request.input, block_size, eos_token_id)
 
         max_logprobs = self.max_logprobs
         if (sampling_params.logprobs
@@ -95,7 +111,7 @@ class ChatModelSequenceProcessor(object):
 
         # Create the sequence group.
         seq_group = SequenceGroup(
-            request_id=chat_request["request_id"],
+            request_id=chat_request.request_id,
             seqs=[seq],
             arrival_time=arrival_time,
             sampling_params=sampling_params)
@@ -103,14 +119,14 @@ class ChatModelSequenceProcessor(object):
         return seq_group
 
 
-class ChatModelInputProcessor(InputProcessor):
+class ChatModelRequestProcessor(RequestProcessor):
     """
-    PromptInput -> ChatModelInputProcessor -> ChatRequest
+    ChatRequest -> ChatModelRequestProcessor -> SequenceGroup
 
     PromptInput -> ChatModelPromptProcessor -> ChatInput
-    ChatInput + request_id + arrival_time -> ChatRequest
-    ChatRequest -> ChatModelSequenceProcessor -> ChatRequest
+    ChatRequest -> ChatModelSequenceProcessor -> SequenceGroup
     """
+
     def __init__(self,
                  model_config: ModelConfig,
                  cache_config: CacheConfig,
@@ -119,15 +135,11 @@ class ChatModelInputProcessor(InputProcessor):
         self.prompt_processor = ChatModelPromptProcessor(tokenizer)
         self.sequence_processor = ChatModelSequenceProcessor(model_config, cache_config, tokenizer, seq_counter)
 
-    def __call__(
-            self,
-            request_id: str,
-            prompt: PromptInput,
-            params: SamplingParams,
-            arrival_time: Optional[float] = None) -> ChatRequest:
-        input = self.prompt_processor(prompt)
-
-        request = ChatRequest(request_id=str(request_id), input=input, sampling_params=params)
-        seq_group = self.sequence_processor(request, arrival_time)
-        request["input"] = seq_group
-        return request
+    def __call__(self, request: ChatRequest) -> SequenceGroup:
+        try:
+            if not isinstance(request.input, ChatInput):
+                request.input = self.prompt_processor(request.input)
+            seq_group = self.sequence_processor(request, request.arrival_time)
+            return seq_group
+        except Exception:
+            print(request)

@@ -3,10 +3,12 @@
 """
 Workflow:
 
-AnyInput(*args, **kwargs) -> InputProcessor -> Request
-scheduler.add_request(request:Request)
+LLMEngine.add_request
+    Input(request_id, prompt, params, arrival_time) -> InputProcessor -> Request
+    scheduler.add_request(request: Request)
 
-engine.step
+LLMEngine.step
+    Request -> RequestProcessor -> SequenceGroup (lazy RequestProcessor)
     seq_group_metadata_list, scheduler_outputs = scheduler.schedule()
 
     List[SequenceGroupMetadata], SchedulerOutputs -> ModelPreProcessor -> ExecuteInput

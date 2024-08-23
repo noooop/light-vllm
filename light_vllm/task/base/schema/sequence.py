@@ -9,7 +9,7 @@ from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple,
 from light_vllm.layers.sampling_params import SamplingParams
 
 if TYPE_CHECKING:
-    from light_vllm.task.chat.workflow.inputs import PromptInput
+    from light_vllm.task.chat.schema import PromptInput
 
 
 
@@ -273,11 +273,11 @@ class Sequence:
 
     @property
     def prompt(self) -> Optional[str]:
-        return self.input.get("prompt")
+        return self.input.prompt
 
     @property
     def prompt_token_ids(self) -> List[int]:
-        return self.input["prompt_token_ids"]
+        return self.input.prompt_token_ids
 
     def get_output_text_to_return(self, buffer_length: int):
         # We return the full output text if the sequence is finished.

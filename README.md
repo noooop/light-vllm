@@ -54,12 +54,13 @@ Capture Graph需要额外的时间，Graph占额外的显存空间。如果真�
 将工程拆分成可以即插即用的模型，并提过Workflow配置
 
 ```
-抽象 Workflow:
+抽象 Workflow::
 
-AnyInput(*args, **kwargs) -> InputProcessor -> Request
-scheduler.add_request(request:Request)
+Input(request_id, prompt, params, arrival_time) -> InputProcessor -> Request
+scheduler.add_request(request: Request)
 
 engine.step
+    Request -> RequestProcessor -> SequenceGroup (lazy RequestProcessor)
     seq_group_metadata_list, scheduler_outputs = scheduler.schedule()
 
     List[SequenceGroupMetadata], SchedulerOutputs -> ModelPreProcessor -> ExecuteInput
@@ -75,6 +76,7 @@ engine.step
 ```
 class ChatWorkflow(Workflow):
     InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
+    RequestProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelRequestProcessor"
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
     ModelPreProcessor: str = "light_vllm.task.chat.processor.model_pre_processor:ChatModelPreProcessor"
     Worker: str = "light_vllm.task.chat.worker.gpu_worker:Worker"

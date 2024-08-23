@@ -1,7 +1,9 @@
-from typing import TypedDict
+from dataclasses import dataclass
 
 
-class Request(TypedDict):
+@dataclass
+class Request:
     request_id: str
+    arrival_time: float
 
 

@@ -12,6 +12,8 @@ from light_vllm.core.policy import Policy, PolicyFactory
 from light_vllm.logger import init_logger
 from light_vllm.task.base.schema.sequence import (Sequence, SequenceData, SequenceGroup,
                                                   SequenceGroupMetadata, SequenceStatus)
+from light_vllm.task.base.schema.inputs import Request
+from light_vllm.task.base.processor.input_processor import RequestProcessor
 
 logger = init_logger(__name__)
 
@@ -233,10 +235,11 @@ class Scheduler:
             self,
             scheduler_config: SchedulerConfig,
             cache_config: CacheConfig,
-            pipeline_parallel_size: int = 1,
+            request_processor: RequestProcessor,
     ) -> None:
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
+        self.request_processor = request_processor
 
         version = "v1"
         if self.scheduler_config.use_v2_block_manager:
@@ -246,12 +249,7 @@ class Scheduler:
             version)
 
         num_gpu_blocks = cache_config.num_gpu_blocks
-        if num_gpu_blocks:
-            num_gpu_blocks //= pipeline_parallel_size
-
         num_cpu_blocks = cache_config.num_cpu_blocks
-        if num_cpu_blocks:
-            num_cpu_blocks //= pipeline_parallel_size
 
         # Create the block space manager.
         self.block_manager = BlockSpaceManagerImpl(
@@ -263,7 +261,7 @@ class Scheduler:
 
         # Sequence groups in the WAITING state.
         # Contain new prefill or preempted requests.
-        self.waiting: Deque[SequenceGroup] = deque()
+        self.waiting: Deque[Union[Request, SequenceGroup]] = deque()
         # Sequence groups in the RUNNING state.
         # Contain decode requests.
         self.running: Deque[SequenceGroup] = deque()
@@ -292,9 +290,9 @@ class Scheduler:
         """The number of new tokens."""
         return 1
 
-    def add_seq_group(self, seq_group: SequenceGroup) -> None:
-        # Add sequence groups to the waiting queue.
-        self.waiting.append(seq_group)
+    def add_request(self, request: Union[Request, SequenceGroup]) -> None:
+        # Add request or sequence groups to the waiting queue.
+        self.waiting.append(request)
 
     def abort_seq_group(self, request_id: Union[str, Iterable[str]]) -> None:
         """Aborts a sequence group with the given ID.
@@ -313,7 +311,7 @@ class Scheduler:
             request_id = (request_id,)
         request_ids = set(request_id)
         for state_queue in [self.waiting, self.running, self.swapped]:
-            aborted_groups: List[SequenceGroup] = []
+            aborted_groups: List[Union[Request, SequenceGroup]] = []
             for seq_group in state_queue:
                 if not request_ids:
                     # Using 'break' here may add two extra iterations,
@@ -326,11 +324,12 @@ class Scheduler:
             for aborted_group in aborted_groups:
                 # Remove the sequence group from the state queue.
                 state_queue.remove(aborted_group)
-                for seq in aborted_group.get_seqs():
-                    if seq.is_finished():
-                        continue
-                    seq.status = SequenceStatus.FINISHED_ABORTED
-                    self.free_seq(seq)
+                if isinstance(aborted_group, SequenceGroup):
+                    for seq in aborted_group.get_seqs():
+                        if seq.is_finished():
+                            continue
+                        seq.status = SequenceStatus.FINISHED_ABORTED
+                        self.free_seq(seq)
 
     def has_unfinished_seqs(self) -> bool:
         return len(self.waiting) != 0 or len(self.running) != 0 or len(
@@ -585,7 +584,11 @@ class Scheduler:
 
         leftover_waiting_sequences: Deque[SequenceGroup] = deque()
         while self._passed_delay(time.time()) and waiting_queue:
-            seq_group = waiting_queue[0]
+            request = waiting_queue[0]
+            if isinstance(request, Request):
+                seq_group = self.request_processor(request)
+            else:
+                seq_group = request
 
             waiting_seqs = seq_group.get_seqs(status=SequenceStatus.WAITING)
             assert len(waiting_seqs) == 1, (
@@ -1059,8 +1062,13 @@ class Scheduler:
         self.prev_time, self.prev_prompt = now, False
         # Delay scheduling prompts to let waiting queue fill up
         if self.scheduler_config.delay_factor > 0 and self.waiting:
-            earliest_arrival_time = min(
-                [e.metrics.arrival_time for e in self.waiting])
+            earliest_arrival_time = 100000000000000000.
+            for e in self.waiting:
+                if isinstance(e, Request):
+                    arrival_time = e.arrival_time
+                else:
+                    arrival_time = e.metrics.arrival_time
+                earliest_arrival_time = min(earliest_arrival_time, arrival_time)
             passed_delay = (
                     (now - earliest_arrival_time) >
                     (self.scheduler_config.delay_factor * self.last_prompt_latency)
