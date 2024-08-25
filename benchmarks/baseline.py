@@ -111,7 +111,7 @@ if __name__ == '__main__':
     args.use_beam_search = False
     args.num_prompts = 1000
     args.dtype = 'auto'
-    args.max_model_len = 10000
+    args.max_model_len = 5000
     args.enforce_eager = True
     args.kv_cache_dtype = "auto"
     args.device = "cuda"
