@@ -1,12 +1,22 @@
 import torch
 import time
 
-from vllm.utils import FlexibleArgumentParser
-from vllm import _custom_ops as ops
+try:
+    from vllm.utils import FlexibleArgumentParser
+    from vllm import _custom_ops as ops
+
+    from vllm.utils import is_pin_memory_available
+except:
+    from light_vllm.utils import FlexibleArgumentParser
+    from light_vllm.layers import _custom_ops as ops
+
+    from light_vllm.utils import is_pin_memory_available
+
+pin_memory = is_pin_memory_available()
 
 
 def benchmark_swap_in_blocks(src_shape, num_blocks):
-    src = torch.randn(src_shape, dtype=torch.float16).cpu()
+    src = torch.randn(src_shape, dtype=torch.float16, pin_memory=pin_memory, device="cpu")
     dst = torch.zeros_like(src).cuda()
 
     block_mapping = [(i, i) for i in range(num_blocks)]
@@ -31,7 +41,7 @@ def benchmark_swap_in_blocks(src_shape, num_blocks):
 
 def benchmark_swap_out_blocks(src_shape, num_blocks):
     src = torch.randn(src_shape, dtype=torch.float16).cuda()
-    dst = torch.zeros_like(src).cpu()
+    dst = torch.zeros_like(src, pin_memory=pin_memory, device="cpu")
     block_mapping = [(i, i) for i in range(num_blocks)]
     blocks_to_swap = torch.tensor(block_mapping,
                                   device="cpu",
@@ -60,6 +70,7 @@ if __name__ == "__main__":
     parser.add_argument("--head-size", type=int, default=32)
     args = parser.parse_args()
     print(args)
+    print("is_pin_memory_available: ", pin_memory)
 
     src_shape = (args.num_blocks, args.block_size, args.num_kv_heads,
                  args.head_size)
