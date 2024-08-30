@@ -6,8 +6,8 @@ from vllm import _custom_ops as ops
 
 
 def benchmark_swap_in_blocks(src_shape, num_blocks):
-    dst = torch.randn(src_shape, dtype=torch.float16).cuda()
-    src = torch.zeros_like(dst).cpu()
+    src = torch.randn(src_shape, dtype=torch.float16).cpu()
+    dst = torch.zeros_like(src).cuda()
 
     block_mapping = [(i, i) for i in range(num_blocks)]
     blocks_to_swap = torch.tensor(block_mapping,
