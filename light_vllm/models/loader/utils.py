@@ -6,7 +6,7 @@ import torch
 from torch import nn
 
 from light_vllm.config import ModelConfig
-from light_vllm.models.zoo import ModelRegistry
+from light_vllm.task.base.modelzoo import ModelRegistry
 
 
 @contextlib.contextmanager
@@ -21,17 +21,23 @@ def set_default_torch_dtype(dtype: torch.dtype):
 def get_model_architecture(
         model_config: ModelConfig) -> Tuple[Type[nn.Module], str]:
     architectures = getattr(model_config.hf_config, "architectures", [])
-    # Special handling for quantized Mixtral.
-    # FIXME(woosuk): This is a temporary hack.
-    if (model_config.quantization is not None
-            and model_config.quantization != "fp8"
-            and "MixtralForCausalLM" in architectures):
-        architectures = ["QuantMixtralForCausalLM"]
 
     for arch in architectures:
         model_cls = ModelRegistry.load_model_cls(arch)
         if model_cls is not None:
             return (model_cls, arch)
+    raise ValueError(
+        f"Model architectures {architectures} are not supported for now. "
+        f"Supported architectures: {ModelRegistry.get_supported_archs()}")
+
+
+def get_model_workflow(model_config: ModelConfig) -> str:
+    architectures = getattr(model_config.hf_config, "architectures", [])
+
+    for arch in architectures:
+        workflow = ModelRegistry.get_workflow(arch)
+        if workflow is not None:
+            return workflow
     raise ValueError(
         f"Model architectures {architectures} are not supported for now. "
         f"Supported architectures: {ModelRegistry.get_supported_archs()}")

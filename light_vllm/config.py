@@ -9,7 +9,6 @@ from transformers import PretrainedConfig
 import light_vllm.envs as envs
 from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
-from light_vllm.models.zoo import ModelRegistry
 from light_vllm.models.transformers_utils.config import get_config, get_hf_text_config
 from light_vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
                               is_hip, is_neuron, is_openvino, is_tpu, is_xpu,
@@ -174,7 +173,9 @@ class ModelConfig:
             self._verify_tokenizer_mode()
         self._verify_quantization()
         self._verify_cuda_graph()
-        self.workflow = self.get_model_workflow()
+
+        from light_vllm.models.loader.utils import get_model_workflow
+        self.workflow = get_model_workflow(self)
 
     def _verify_tokenizer_mode(self) -> None:
         tokenizer_mode = self.tokenizer_mode.lower()
@@ -258,9 +259,6 @@ class ModelConfig:
                 and not self.hf_text_config.use_sliding_window):
             return None
         return getattr(self.hf_text_config, "sliding_window", None)
-
-    def get_model_workflow(self) -> str:
-        return "light_vllm.task.chat.workflow:ChatWorkflow"
 
     def get_sliding_window(self) -> Optional[int]:
         """Get the sliding window size, or None if disabled.
