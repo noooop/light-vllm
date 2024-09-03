@@ -25,6 +25,13 @@ class ChatModelOutputProcessor(OutputProcessor):
             max_model_len=scheduler_config.max_model_len,
         )
 
+    @classmethod
+    def from_engine(cls, engine):
+        return cls(engine.scheduler_config,
+                   engine.scheduler,
+                   engine.tokenizer,
+                   engine.seq_counter)
+
     def __call__(self,
                  outputs: SamplerOutput,
                  scheduled_seq_groups: List[ScheduledSequenceGroup],

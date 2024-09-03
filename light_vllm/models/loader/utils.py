@@ -7,6 +7,7 @@ from torch import nn
 
 from light_vllm.config import ModelConfig
 from light_vllm.task.base.modelzoo import ModelRegistry
+from transformers import PretrainedConfig
 
 
 @contextlib.contextmanager
@@ -31,8 +32,8 @@ def get_model_architecture(
         f"Supported architectures: {ModelRegistry.get_supported_archs()}")
 
 
-def get_model_workflow(model_config: ModelConfig) -> str:
-    architectures = getattr(model_config.hf_config, "architectures", [])
+def get_model_workflow(hf_config: PretrainedConfig) -> str:
+    architectures = getattr(hf_config, "architectures", [])
 
     for arch in architectures:
         workflow = ModelRegistry.get_workflow(arch)

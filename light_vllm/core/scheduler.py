@@ -284,6 +284,12 @@ class Scheduler:
                                        else 0)
         self.num_cumulative_preemption: int = 0
 
+    @classmethod
+    def from_engine(cls, engine):
+        return cls(engine.scheduler_config,
+                   engine.cache_config,
+                   engine.request_processor)
+
     @property
     def num_decoding_tokens_per_seq(self) -> int:
         """The number of new tokens."""

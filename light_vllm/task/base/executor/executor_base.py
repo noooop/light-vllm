@@ -29,6 +29,17 @@ class ExecutorBase(ABC):
         self.workflow = workflow
         self._init_executor()
 
+    @classmethod
+    def from_engine(cls, engine):
+        return cls(
+            model_config=engine.model_config,
+            cache_config=engine.cache_config,
+            scheduler_config=engine.scheduler_config,
+            device_config=engine.device_config,
+            load_config=engine.load_config,
+            workflow=engine.workflow
+        )
+
     @abstractmethod
     def _init_executor(self) -> None:
         pass

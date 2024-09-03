@@ -58,7 +58,7 @@ class WorkerInput:
 
 @dataclass(frozen=True)
 class ExecuteInput(ABC):
-    worker_input: WorkerInput
+    worker_input: Optional[WorkerInput]
     model_input: ModelInput
 
 

@@ -18,6 +18,11 @@ class InputProcessor(ABC):
                  arrival_time: Optional[float] = None) -> Request:
         raise NotImplementedError
 
+    @classmethod
+    @abstractmethod
+    def from_engine(cls, engine):
+        raise NotImplementedError
+
 
 class RequestProcessor(ABC):
     """
@@ -25,4 +30,9 @@ class RequestProcessor(ABC):
     """
     @abstractmethod
     def __call__(self, request: Request) -> SequenceGroup:
+        raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def from_engine(cls, engine):
         raise NotImplementedError

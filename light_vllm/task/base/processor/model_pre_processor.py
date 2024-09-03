@@ -16,6 +16,12 @@ class ModelPreProcessor(ABC):
     (seq_group_metadata_list: List[SequenceGroupMetadata], scheduler_outputs: SchedulerOutputs) -> ModelPreProcessor -> ExecuteInput
     """
 
+    @classmethod
+    @abstractmethod
+    def from_engine(cls, engine):
+        raise NotImplementedError
+
+
     @torch.inference_mode()
     def prepare_model_input(self, seq_group_metadata_list: List[SequenceGroupMetadata]) -> ModelInput:
         raise NotImplementedError

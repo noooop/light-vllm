@@ -24,6 +24,10 @@ class ChatModelInputProcessor(InputProcessor):
                               arrival_time=arrival_time)
         return request
 
+    @classmethod
+    def from_engine(cls, engine):
+        return cls()
+
 
 class ChatModelPromptProcessor(object):
     """
@@ -135,11 +139,17 @@ class ChatModelRequestProcessor(RequestProcessor):
         self.prompt_processor = ChatModelPromptProcessor(tokenizer)
         self.sequence_processor = ChatModelSequenceProcessor(model_config, cache_config, tokenizer, seq_counter)
 
+    @classmethod
+    def from_engine(cls, engine):
+        engine.seq_counter = Counter()
+
+        return cls(engine.model_config,
+                   engine.cache_config,
+                   engine.tokenizer,
+                   engine.seq_counter)
+
     def __call__(self, request: ChatRequest) -> SequenceGroup:
-        try:
-            if not isinstance(request.input, ChatInput):
-                request.input = self.prompt_processor(request.input)
-            seq_group = self.sequence_processor(request, request.arrival_time)
-            return seq_group
-        except Exception:
-            print(request)
+        if not isinstance(request.input, ChatInput):
+            request.input = self.prompt_processor(request.input)
+        seq_group = self.sequence_processor(request, request.arrival_time)
+        return seq_group

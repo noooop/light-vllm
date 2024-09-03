@@ -14,8 +14,6 @@ from transformers import PretrainedConfig
 
 import light_vllm.envs as envs
 from light_vllm.config import ModelConfig
-from light_vllm.engine.arg_utils import EngineArgs
-from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.logger import init_logger
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
@@ -429,44 +427,3 @@ def serialize_vllm_model(
         serializer.close()
     logger.info("Successfully serialized model to %s", str(output_file))
     return model
-
-
-def tensorize_vllm_model(engine_args: EngineArgs,
-                         tensorizer_config: TensorizerConfig,
-                         generate_keyfile: bool = True):
-    """Utility to load a model and then serialize it with Tensorizer
-
-       Intended to be used separately from running a vLLM server since it
-       creates its own Engine instance.
-    """
-    engine_config = engine_args.create_engine_config()
-    tensorizer_config.verify_with_model_config(engine_config.model_config)
-    tensorizer_config.verify_with_parallel_config(
-        engine_config.parallel_config)
-
-    # generate the encryption key before creating the engine to support sharding
-    if generate_keyfile and (keyfile :=
-                             tensorizer_config.encryption_keyfile) is not None:
-        encryption_params = EncryptionParams.random()
-        with _write_stream(
-                keyfile,
-                s3_access_key_id=tensorizer_config.s3_access_key_id,
-                s3_secret_access_key=tensorizer_config.s3_secret_access_key,
-                s3_endpoint=tensorizer_config.s3_endpoint,
-        ) as stream:
-            stream.write(encryption_params.key)
-
-    engine = LLMEngine.from_engine_args(engine_args)
-    if tensorizer_config._is_sharded:
-        # if the engine is a distributed engine (for tensor parallel) then each
-        # worker shard needs to serialize its part of the model.
-        engine.model_executor._run_workers(
-            "save_tensorized_model",
-            tensorizer_config=tensorizer_config,
-        )
-    else:
-        # with a single worker, we can get to the underlying model directly
-        serialize_vllm_model(
-            engine.model_executor.driver_worker.model_runner.model,
-            tensorizer_config,
-        )

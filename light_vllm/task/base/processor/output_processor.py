@@ -8,3 +8,8 @@ class OutputProcessor(ABC):
     @abstractmethod
     def __call__(self, *args, **kwargs) -> ExecuteOutput:
         raise NotImplementedError
+
+    @classmethod
+    @abstractmethod
+    def from_engine(cls, engine):
+        raise NotImplementedError

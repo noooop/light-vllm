@@ -3,8 +3,6 @@ from typing import ClassVar, List, Optional, Sequence, Union, cast, overload
 
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-
-from light_vllm.engine.arg_utils import EngineArgs
 from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
                                parse_and_batch_prompt)
@@ -129,7 +127,7 @@ class LLM:
         if any(k in kwargs for k in removed_vision_keys):
             raise TypeError(
                 "There is no need to pass vision-related arguments anymore.")
-        engine_args = EngineArgs(
+        engine_args = dict(
             model=model,
             tokenizer=tokenizer,
             tokenizer_mode=tokenizer_mode,

@@ -15,6 +15,15 @@ class Tokenizer(object):
     def __init__(self, tokenizer_name: str, **kwargs):
         self.tokenizer = get_tokenizer(tokenizer_name=tokenizer_name, **kwargs)
 
+    @classmethod
+    def from_engine(cls, engine):
+        init_kwargs = dict(tokenizer_name=engine.model_config.tokenizer,
+                           tokenizer_mode=engine.model_config.tokenizer_mode,
+                           trust_remote_code=engine.model_config.trust_remote_code,
+                           revision=engine.model_config.tokenizer_revision)
+
+        return cls(**init_kwargs)
+
     def apply_chat_template(self, *args, **kwargs):
         return self.tokenizer.apply_chat_template(*args, **kwargs)
 

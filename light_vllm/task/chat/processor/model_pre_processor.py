@@ -1,5 +1,3 @@
-
-
 import dataclasses
 from typing import List, Tuple
 
@@ -33,9 +31,18 @@ class ChatModelPreProcessor(ModelPreProcessor):
         self.attn_backend = attn_backend
         self.cuda_graph = cuda_graph
 
+    @classmethod
+    def from_engine(cls, engine):
+        return cls(engine.device_config,
+                   engine.model_config,
+                   engine.scheduler_config,
+                   engine.cache_config,
+                   attn_backend=engine.executor.driver_worker.model_runner.attn_backend,
+                   cuda_graph=engine.executor.driver_worker.model_runner.cuda_graph)
+
     def _prepare_model_input_tensors(
-        self,
-        seq_group_metadata_list: List[SequenceGroupMetadata]
+            self,
+            seq_group_metadata_list: List[SequenceGroupMetadata]
     ) -> ModelInputForGPUWithSamplingMetadata:
         """Helper method to prepare the model input based on a given sequence
         group. Prepares metadata needed for the base model forward pass but not
@@ -63,7 +70,8 @@ class ChatModelPreProcessor(ModelPreProcessor):
             builder.add_seq_group(seq_group_metadata)
         return builder.build()  # type: ignore
 
-    def prepare_model_input(self, seq_group_metadata_list: List[SequenceGroupMetadata]) -> ModelInputForGPUWithSamplingMetadata:
+    def prepare_model_input(self, seq_group_metadata_list: List
+    [SequenceGroupMetadata]) -> ModelInputForGPUWithSamplingMetadata:
         model_input = self._prepare_model_input_tensors(
             seq_group_metadata_list)
 

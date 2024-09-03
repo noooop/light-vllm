@@ -6,11 +6,7 @@ from typing import Sequence as GenericSequence
 from typing import Type, Union
 
 from light_vllm.version import __version__ as VLLM_VERSION
-
-from light_vllm.engine.arg_utils import EngineArgs
 from light_vllm.task.base.schema.outputs import RequestOutput
-
-from light_vllm.utils import Counter
 from light_vllm.logger import init_logger
 
 logger = init_logger(__name__)
@@ -74,7 +70,7 @@ class LLMEngine:
 
         return outputs_
 
-    def __init__(self, engine_config) -> None:
+    def __init__(self, engine_config, workflow) -> None:
         # config
         self.engine_config = engine_config
         self.model_config = engine_config.model_config
@@ -85,49 +81,29 @@ class LLMEngine:
         self._log_config()
 
         # workflow
-        self.workflow = lazy_import(self.model_config.workflow)
+        self.workflow = workflow
 
         # executor
-        self.executor = lazy_import(self.workflow.Executor)(
-            model_config=self.model_config,
-            cache_config=self.cache_config,
-            scheduler_config=self.scheduler_config,
-            device_config=self.device_config,
-            load_config=self.load_config,
-            workflow=self.workflow
-        )
-
-        # model_pre_processor
-        self.model_pre_processor = lazy_import(self.workflow.ModelPreProcessor)(self.device_config,
-                                                                                self.model_config,
-                                                                                self.scheduler_config,
-                                                                                self.cache_config,
-                                                                                attn_backend=self.executor.driver_worker.model_runner.attn_backend,
-                                                                                cuda_graph=self.executor.driver_worker.model_runner.cuda_graph)
-
-        self._initialize_kv_caches()
+        self.executor = lazy_import(self.workflow.Executor).from_engine(self)
 
         # tokenizer
-        self.tokenizer = lazy_import(self.workflow.Tokenizer)(**self._init_tokenizer_kwargs())
+        self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
+
+        # model_pre_processor
+        self.model_pre_processor = lazy_import(self.workflow.ModelPreProcessor).from_engine(self)
+
+        if self.cache_config is not None:
+            self._initialize_kv_caches()
 
         # input_processor
-        self.seq_counter = Counter()
-        self.input_processor = lazy_import(self.workflow.InputProcessor)()
-        self.request_processor = lazy_import(self.workflow.RequestProcessor)(self.model_config,
-                                                                             self.cache_config,
-                                                                             self.tokenizer,
-                                                                             self.seq_counter)
+        self.input_processor = lazy_import(self.workflow.InputProcessor).from_engine(self)
+        self.request_processor = lazy_import(self.workflow.RequestProcessor).from_engine(self)
 
         # scheduler
-        self.scheduler = lazy_import(self.workflow.Scheduler)(self.scheduler_config,
-                                                              self.cache_config,
-                                                              self.request_processor)
+        self.scheduler = lazy_import(self.workflow.Scheduler).from_engine(self)
 
         # output_processor
-        self.output_processor = lazy_import(self.workflow.OutputProcessor)(self.scheduler_config,
-                                                                           self.scheduler,
-                                                                           self.tokenizer,
-                                                                           self.seq_counter)
+        self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
 
     def _log_config(self):
         logger.info(
@@ -158,13 +134,13 @@ class LLMEngine:
             self.load_config.load_format,
             self.model_config.quantization,
             self.model_config.enforce_eager,
-            self.cache_config.cache_dtype,
+            "None" if self.cache_config is None else self.cache_config.cache_dtype,
             self.model_config.quantization_param_path,
             self.device_config.device,
             self.model_config.seed,
             self.model_config.served_model_name,
             self.scheduler_config.use_v2_block_manager,
-            self.cache_config.enable_prefix_caching,
+            "None" if self.cache_config is None else self.cache_config.enable_prefix_caching,
         )
 
     def _initialize_kv_caches(self) -> None:
@@ -193,23 +169,27 @@ class LLMEngine:
 
         del self.executor.driver_worker.model_runner.prepare_model_input
 
-    def _init_tokenizer_kwargs(self) -> Dict:
-        init_kwargs = dict(tokenizer_name=self.model_config.tokenizer,
-                           tokenizer_mode=self.model_config.tokenizer_mode,
-                           trust_remote_code=self.model_config.trust_remote_code,
-                           revision=self.model_config.tokenizer_revision)
-
-        return init_kwargs
-
     @classmethod
     def from_engine_args(
             cls,
-            engine_args: EngineArgs = None,
+            engine_args: Dict,
     ) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
+        from light_vllm.models.transformers_utils.config import get_config
+
+        hf_config = get_config(engine_args["model"],
+                               engine_args.get("trust_remote_code", False),
+                               engine_args.get("revision", None),
+                               engine_args.get("code_revision", None))
+
+        from light_vllm.models.loader.utils import get_model_workflow
+        workflow_class = get_model_workflow(hf_config)
+        workflow = lazy_import(workflow_class)
+
+        engine_args = lazy_import(workflow.EngineArgs)(**engine_args)
 
         engine_config = engine_args.create_engine_config()
-        engine = cls(engine_config)
+        engine = cls(engine_config, workflow)
         return engine
 
     def add_request(self,
