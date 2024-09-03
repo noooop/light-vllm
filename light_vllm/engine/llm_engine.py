@@ -204,19 +204,15 @@ class LLMEngine:
         self.scheduler.abort_seq_group(request_id)
 
     def step(self) -> List[RequestOutput]:
-        seq_group_metadata_list, scheduler_outputs = self.scheduler.schedule()
+        scheduler_outputs = self.scheduler.schedule()
 
         if not scheduler_outputs.is_empty():
-            execute_input = self.model_pre_processor(seq_group_metadata_list, scheduler_outputs)
+            execute_input = self.model_pre_processor(scheduler_outputs)
             execute_output = self.executor.execute_model(execute_input)
         else:
             execute_output = []
 
-        request_outputs = self.output_processor(execute_output,
-                                                scheduler_outputs.scheduled_seq_groups,
-                                                scheduler_outputs.ignored_seq_groups,
-                                                seq_group_metadata_list)
-
+        request_outputs = self.output_processor(scheduler_outputs, execute_output)
         self.scheduler.free_finished_seq_groups()
 
         return request_outputs

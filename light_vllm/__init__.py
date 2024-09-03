@@ -1,6 +1,5 @@
 """vLLM: a high-throughput and memory-efficient inference engine for LLMs"""
 
-from light_vllm.engine.arg_utils import AsyncEngineArgs, EngineArgs
 from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.entrypoints.llm import LLM
 from light_vllm.inputs import PromptInputs, TextPrompt, TokensPrompt
@@ -20,7 +19,5 @@ __all__ = [
     "TokensPrompt",
     "SamplingParams",
     "LLMEngine",
-    "EngineArgs",
-    "AsyncEngineArgs",
     "PoolingParams",
 ]

@@ -4,7 +4,7 @@ import random
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union, Optional
 
 from light_vllm.config import CacheConfig, SchedulerConfig
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
@@ -130,6 +130,8 @@ class SchedulerOutputs:
     # The number of requests in the running queue
     running_queue_size: int
     preempted: int
+
+    seq_group_metadata_list: Optional[List[SequenceGroupMetadata]] = None
 
     def is_empty(self) -> bool:
         # NOTE: We do not consider the ignored sequence groups.
@@ -820,7 +822,7 @@ class Scheduler:
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill),
         )
 
-    def schedule(self) -> Tuple[List[SequenceGroupMetadata], SchedulerOutputs]:
+    def schedule(self) -> SchedulerOutputs:
         # Schedule sequence groups.
         # This function call changes the internal states of the scheduler
         # such as self.running, self.swapped, and self.waiting.
@@ -887,7 +889,9 @@ class Scheduler:
             self.block_manager.mark_blocks_as_computed(
                 scheduled_seq_group.seq_group)
 
-        return seq_group_metadata_list, scheduler_outputs
+        scheduler_outputs.seq_group_metadata_list = seq_group_metadata_list
+
+        return scheduler_outputs
 
     def fork_seq(self, parent_seq: Sequence, child_seq: Sequence) -> None:
         self.block_manager.fork(parent_seq, child_seq)

@@ -9,6 +9,7 @@ from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
 from light_vllm.logger import init_logger
 
 from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.chat.schema.outputs import ChatModelRequestOutput
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.inputs.tokenizer import get_cached_tokenizer
@@ -525,7 +526,7 @@ class LLM:
                 if output.finished:
                     outputs.append(output)
                     if use_tqdm:
-                        if isinstance(output, RequestOutput):
+                        if isinstance(output, ChatModelRequestOutput):
                             # Calculate tokens only for RequestOutput
                             total_in_toks += len(output.prompt_token_ids)
                             in_spd = total_in_toks / pbar.format_dict["elapsed"]

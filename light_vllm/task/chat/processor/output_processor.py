@@ -32,19 +32,19 @@ class ChatModelOutputProcessor(OutputProcessor):
                    engine.tokenizer,
                    engine.seq_counter)
 
-    def __call__(self,
-                 outputs: SamplerOutput,
-                 scheduled_seq_groups: List[ScheduledSequenceGroup],
-                 ignored_seq_groups: List[SequenceGroup],
-                 seq_group_metadata_list: List[SequenceGroupMetadata]) -> List[ChatModelRequestOutput]:
+    def __call__(self, scheduler_outputs, execute_output) -> List[ChatModelRequestOutput]:
         now = time.time()
+
+        scheduled_seq_groups = scheduler_outputs.scheduled_seq_groups
+        ignored_seq_groups = scheduler_outputs.ignored_seq_groups
+        seq_group_metadata_list = scheduler_outputs.seq_group_metadata_list
 
         # Organize outputs by [sequence group][step] instead of
         # [step][sequence group].
         output_by_sequence_group: List[List[SequenceGroupOutput]] = [
-            [] for _ in range(len(outputs[0]))
+            [] for _ in range(len(execute_output[0]))
         ]
-        for step in outputs:
+        for step in execute_output:
             for i, sequence_group_output in enumerate(step):
                 output_by_sequence_group[i].append(sequence_group_output)
 

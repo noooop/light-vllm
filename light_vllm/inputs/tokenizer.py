@@ -24,6 +24,9 @@ class Tokenizer(object):
 
         return cls(**init_kwargs)
 
+    def __call__(self, *args, **kwargs):
+        return self.tokenizer(*args, **kwargs)
+
     def apply_chat_template(self, *args, **kwargs):
         return self.tokenizer.apply_chat_template(*args, **kwargs)
 

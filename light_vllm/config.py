@@ -174,9 +174,6 @@ class ModelConfig:
         self._verify_quantization()
         self._verify_cuda_graph()
 
-        from light_vllm.models.loader.utils import get_model_workflow
-        self.workflow = get_model_workflow(self)
-
     def _verify_tokenizer_mode(self) -> None:
         tokenizer_mode = self.tokenizer_mode.lower()
         if tokenizer_mode not in ["auto", "slow"]:
@@ -919,7 +916,7 @@ class EngineConfig:
     """
 
     model_config: ModelConfig
-    cache_config: CacheConfig
+    cache_config: Optional[CacheConfig]
     scheduler_config: SchedulerConfig
     device_config: DeviceConfig
     load_config: LoadConfig
