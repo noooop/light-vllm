@@ -5,12 +5,13 @@ import torch.nn as nn
 import functools
 import importlib
 from light_vllm.task.chat.modelzoo import CHAT_MODELS
+from light_vllm.task.encode_only.modelzoo import ENCODE_ONLY_MODELS
 
 from light_vllm.logger import init_logger
 logger = init_logger(__name__)
 
 
-_MODELS_LIST = [CHAT_MODELS]
+_MODELS_LIST = [CHAT_MODELS, ENCODE_ONLY_MODELS]
 
 _MODELS = dict()
 for m in _MODELS_LIST:
