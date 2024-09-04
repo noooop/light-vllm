@@ -529,8 +529,6 @@ class XLMRobertaEncoder(nn.Module):
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
 
-        print(hidden_states)
-
         return tuple(
             v
             for v in [

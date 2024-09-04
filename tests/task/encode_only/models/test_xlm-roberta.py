@@ -144,6 +144,7 @@ def compare_embeddings(embeddings1, embeddings2):
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["float"])
+@torch.inference_mode
 def test_models(
     hf_runner,
     vllm_runner,
@@ -156,7 +157,6 @@ def test_models(
 
     with vllm_runner(model, dtype=dtype) as vllm_model:
         vllm_outputs = vllm_model.encode(example_prompts)
-        print(vllm_outputs.shape)
 
     similarities = compare_embeddings(hf_outputs, vllm_outputs)
     all_similarities = torch.stack(similarities)
