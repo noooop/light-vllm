@@ -5,7 +5,7 @@ import torch.nn as nn
 
 from light_vllm.layers.attention.backends.abstract import AttentionMetadata, AttentionType
 from light_vllm.layers.attention.selector import get_attn_backend
-from light_vllm.config import CacheConfig
+from light_vllm.task.base.config import CacheConfig
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 from light_vllm.layers.quantization.kv_cache import BaseKVCacheMethod

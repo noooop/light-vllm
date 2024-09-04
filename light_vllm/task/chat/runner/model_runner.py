@@ -10,19 +10,17 @@ import torch.distributed
 import torch.nn as nn
 import light_vllm.envs as envs
 from light_vllm.layers.attention import AttentionMetadata, get_attn_backend
-from light_vllm.layers.sampling_metadata import SamplingMetadata
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
-                               ModelConfig, SchedulerConfig)
+
+from light_vllm.task.base.config import DeviceConfig, LoadConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 
 from light_vllm.task.base.runner.model_runner_base import ModelRunnerBase
 from light_vllm.task.base.runner.cuda_graph_util import CUDAGraph
+from light_vllm.task.chat.loader import get_model
 
 from light_vllm.inputs import INPUT_REGISTRY
 from light_vllm.logger import init_logger
-
-from light_vllm.models.loader import get_model
-from light_vllm.models.loader.tensorizer import TensorizerConfig
 from light_vllm.models.utils import set_cpu_offload_max_bytes
 
 from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
@@ -132,30 +130,6 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
             self.model = torch.compile(self.model,
                                        fullgraph=True,
                                        backend="eager")
-
-    def save_sharded_state(
-        self,
-        path: str,
-        pattern: Optional[str] = None,
-        max_size: Optional[int] = None,
-    ) -> None:
-        from light_vllm.models.loader.loader import ShardedStateLoader
-        ShardedStateLoader.save_model(
-            self.model,
-            path,
-            pattern=pattern,
-            max_size=max_size,
-        )
-
-    def save_tensorized_model(
-        self,
-        tensorizer_config: TensorizerConfig,
-    ) -> None:
-        from light_vllm.models.loader.loader import TensorizerLoader
-        TensorizerLoader.save_model(
-            self.model,
-            tensorizer_config=tensorizer_config,
-        )
 
     @torch.inference_mode()
     def profile_run(self) -> None:

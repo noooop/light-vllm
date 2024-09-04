@@ -29,7 +29,7 @@ from torch import nn
 from transformers import Qwen2Config
 
 from light_vllm.layers.attention import Attention, AttentionMetadata
-from light_vllm.config import CacheConfig
+from light_vllm.task.base.config import CacheConfig
 from light_vllm.layers.activation import SiluAndMul
 from light_vllm.layers.layernorm import RMSNorm
 from light_vllm.layers.linear import (MergedColumnParallelLinear,
@@ -42,7 +42,7 @@ from light_vllm.layers.rotary_embedding import get_rope
 from light_vllm.layers.sampler import Sampler
 from light_vllm.layers.vocab_embedding import (
     ParallelLMHead, VocabParallelEmbedding)
-from light_vllm.models.loader.weight_utils import (
+from light_vllm.task.base.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from light_vllm.layers.sampling_metadata import SamplingMetadata
 from light_vllm.models.utils import is_pp_missing_parameter, make_layers

@@ -2,7 +2,7 @@
 import time
 from typing import List
 
-from light_vllm.core.scheduler import ScheduledSequenceGroup
+from light_vllm.task.chat.scheduler import SchedulerOutputs
 from light_vllm.task.base.schema.sequence import SequenceGroup, SequenceGroupMetadata
 from light_vllm.task.chat.schema.execute_io import SequenceGroupOutput, SamplerOutput
 from light_vllm.task.chat.schema.outputs import ChatModelRequestOutput
@@ -11,8 +11,8 @@ from light_vllm.task.base.processor.output_processor import OutputProcessor
 
 class ChatModelOutputProcessor(OutputProcessor):
     def __init__(self, scheduler_config, scheduler, tokenizer, seq_counter):
-        from light_vllm.engine.output_processor.stop_checker import StopChecker
-        from light_vllm.engine.output_processor.single_step import SingleStepOutputProcessor
+        from light_vllm.task.chat.processor.utils.stop_checker import StopChecker
+        from light_vllm.task.chat.processor.utils.single_step import SingleStepOutputProcessor
         self.scheduler = scheduler
 
         self.output_processor = SingleStepOutputProcessor(
@@ -32,7 +32,7 @@ class ChatModelOutputProcessor(OutputProcessor):
                    engine.tokenizer,
                    engine.seq_counter)
 
-    def __call__(self, scheduler_outputs, execute_output) -> List[ChatModelRequestOutput]:
+    def __call__(self, scheduler_outputs: SchedulerOutputs, execute_output) -> List[ChatModelRequestOutput]:
         now = time.time()
 
         scheduled_seq_groups = scheduler_outputs.scheduled_seq_groups

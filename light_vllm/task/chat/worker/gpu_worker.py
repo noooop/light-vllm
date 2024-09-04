@@ -4,17 +4,14 @@ import os
 from typing import List, Optional, Set, Tuple, Type
 
 import torch
-import torch.distributed
-
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
-                               ModelConfig, SchedulerConfig)
 from light_vllm.layers.utils import set_random_seed
-from light_vllm.models.loader.tensorizer import TensorizerConfig
 from light_vllm.platforms import current_platform
 from light_vllm.task.chat.runner.model_runner import GPUModelRunnerBase, ModelRunner
 
 from light_vllm.task.base.worker.cache_engine import CacheEngine
 from light_vllm.task.base.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
+from light_vllm.task.base.config import DeviceConfig, LoadConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig, ChatEngineConfig
 
 
 class Worker(LocalOrDistributedWorkerBase):
@@ -27,19 +24,15 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def __init__(
         self,
-        model_config: ModelConfig,
-        scheduler_config: SchedulerConfig,
-        device_config: DeviceConfig,
-        cache_config: CacheConfig,
-        load_config: LoadConfig,
+        engine_config: ChatEngineConfig,
         is_driver_worker: bool = False,
         model_runner_cls: Optional[Type[GPUModelRunnerBase]] = None,
     ) -> None:
-        self.model_config = model_config
-        self.scheduler_config = scheduler_config
-        self.device_config = device_config
-        self.cache_config = cache_config
-        self.load_config = load_config
+        self.model_config: ModelConfig = engine_config.model_config
+        self.scheduler_config: SchedulerConfig = engine_config.scheduler_config
+        self.device_config: DeviceConfig = engine_config.device_config
+        self.cache_config: CacheConfig = engine_config.cache_config
+        self.load_config: LoadConfig = engine_config.load_config
 
         self.is_driver_worker = is_driver_worker
         if self.model_config.trust_remote_code:
@@ -51,11 +44,11 @@ class Worker(LocalOrDistributedWorkerBase):
         if model_runner_cls is not None:
             ModelRunnerClass = model_runner_cls
         self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
-            model_config,
-            scheduler_config,
-            device_config,
-            cache_config,
-            load_config=load_config,
+            self.model_config,
+            self.scheduler_config,
+            self.device_config,
+            self.cache_config,
+            load_config=self.load_config,
             kv_cache_dtype=self.cache_config.cache_dtype,
             is_driver_worker=is_driver_worker,
         )
@@ -92,25 +85,6 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def load_model(self):
         self.model_runner.load_model()
-
-    def save_sharded_state(
-        self,
-        path: str,
-        pattern: Optional[str] = None,
-        max_size: Optional[int] = None,
-    ) -> None:
-        self.model_runner.save_sharded_state(
-            path,
-            pattern=pattern,
-            max_size=max_size,
-        )
-
-    def save_tensorized_model(
-        self,
-        tensorizer_config: TensorizerConfig,
-    ) -> None:
-        self.model_runner.save_tensorized_model(
-            tensorizer_config=tensorizer_config, )
 
     @torch.inference_mode()
     def determine_num_available_blocks(self) -> Tuple[int, int]:

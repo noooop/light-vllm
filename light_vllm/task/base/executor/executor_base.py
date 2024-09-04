@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Optional, Set, Tuple
 
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
-                               ModelConfig, SchedulerConfig)
+from light_vllm.task.base.config import EngineConfig
+from light_vllm.task.base.workflow import Workflow
 from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteOutput
 
 
@@ -14,29 +14,17 @@ class ExecutorBase(ABC):
 
     def __init__(
         self,
-        model_config: ModelConfig,
-        cache_config: CacheConfig,
-        scheduler_config: SchedulerConfig,
-        device_config: DeviceConfig,
-        load_config: LoadConfig,
-        workflow
+        engine_config: EngineConfig,
+        workflow: Workflow
     ) -> None:
-        self.model_config = model_config
-        self.cache_config = cache_config
-        self.load_config = load_config
-        self.scheduler_config = scheduler_config
-        self.device_config = device_config
+        self.engine_config = engine_config
         self.workflow = workflow
         self._init_executor()
 
     @classmethod
     def from_engine(cls, engine):
         return cls(
-            model_config=engine.engine_config.model_config,
-            cache_config=engine.engine_config.cache_config,
-            scheduler_config=engine.engine_config.scheduler_config,
-            device_config=engine.engine_config.device_config,
-            load_config=engine.engine_config.load_config,
+            engine_config=engine.engine_config,
             workflow=engine.workflow
         )
 

@@ -16,23 +16,22 @@ import torch
 from huggingface_hub import HfApi, hf_hub_download
 from torch import nn
 
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig, LoadFormat,
-                               ModelConfig, SchedulerConfig)
+from light_vllm.task.base.config import DeviceConfig, LoadConfig, LoadFormat
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
+
 from light_vllm.envs import VLLM_USE_MODELSCOPE
 from light_vllm.logger import init_logger
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
-from light_vllm.models.loader.tensorizer import (
-    TensorizerConfig, is_vllm_tensorized, load_with_tensorizer,
-    serialize_vllm_model, tensorizer_weights_iterator)
-from light_vllm.models.loader.utils import (get_model_architecture,
-                                            set_default_torch_dtype)
-from light_vllm.models.loader.weight_utils import (
+
+from light_vllm.task.base.loader.utils import (get_model_architecture,
+                                               set_default_torch_dtype)
+from light_vllm.task.base.loader.tensorizer import TensorizerConfig, tensorizer_weights_iterator, load_with_tensorizer, serialize_vllm_model, is_vllm_tensorized
+from light_vllm.task.base.loader.weight_utils import (
     download_safetensors_index_file_from_hf, download_weights_from_hf,
     filter_duplicate_safetensors_files, filter_files_not_needed_for_inference,
     get_quant_config, initialize_dummy_weights, np_cache_weights_iterator,
     pt_weights_iterator, safetensors_weights_iterator)
-from light_vllm.models.interfaces import (has_inner_state)
 from light_vllm.layers.utils import set_weight_attrs
 from light_vllm.utils import is_pin_memory_available
 
@@ -105,18 +104,6 @@ def _get_quantization_config(
     return None
 
 
-def _get_model_initialization_kwargs(
-        model_class: Type[nn.Module],
-        scheduler_config: Optional[SchedulerConfig] = None) -> Dict[str, Any]:
-    """Get extra kwargs for model initialization."""
-    extra_kwargs: Dict[str, Any] = {}
-
-    if has_inner_state(model_class) and scheduler_config:
-        extra_kwargs["scheduler_config"] = scheduler_config
-
-    return extra_kwargs
-
-
 def _initialize_model(
         model_config: ModelConfig,
         load_config: LoadConfig,
@@ -128,9 +115,7 @@ def _initialize_model(
 
     return model_class(config=model_config.hf_config,
                        cache_config=cache_config,
-                       quant_config=quant_config,
-                       **_get_model_initialization_kwargs(
-                           model_class, scheduler_config))
+                       quant_config=quant_config)
 
 
 class BaseModelLoader(ABC):

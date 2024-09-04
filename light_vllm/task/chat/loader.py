@@ -1,10 +1,9 @@
 from torch import nn
 
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
-                               ModelConfig, SchedulerConfig)
-from light_vllm.models.loader.loader import (BaseModelLoader, get_model_loader)
-
-from light_vllm.models.loader.utils import (
+from light_vllm.task.base.config import DeviceConfig, LoadConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
+from light_vllm.task.chat.loader2 import BaseModelLoader, get_model_loader
+from light_vllm.task.base.loader.utils import (
     get_architecture_class_name, get_model_architecture)
 
 

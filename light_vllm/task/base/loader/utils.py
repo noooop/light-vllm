@@ -5,7 +5,7 @@ from typing import Tuple, Type
 import torch
 from torch import nn
 
-from light_vllm.config import ModelConfig
+from light_vllm.task.base.config import ModelConfig
 from light_vllm.task.base.modelzoo import ModelRegistry
 from transformers import PretrainedConfig
 

@@ -7,3 +7,4 @@ WORKFLOW = "light_vllm.task.chat.workflow:ChatWorkflow"
 CHAT_MODELS = {
         "Qwen2ForCausalLM": (TASK, "qwen2", "Qwen2ForCausalLM", WORKFLOW),
 }
+

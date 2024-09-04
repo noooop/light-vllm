@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Callable, List
 
-from light_vllm.config import SchedulerConfig
-from light_vllm.engine.output_processor.stop_checker import StopChecker
+from light_vllm.task.chat.config import SchedulerConfig
+from light_vllm.task.chat.processor.utils.stop_checker import StopChecker
 from light_vllm.task.base.schema.sequence import SequenceGroup
 from light_vllm.task.chat.schema.execute_io import SequenceGroupOutput
 from light_vllm.inputs.tokenizer import Tokenizer

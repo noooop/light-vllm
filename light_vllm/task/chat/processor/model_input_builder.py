@@ -2,7 +2,7 @@
 import weakref
 from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
                     TypeVar, Union)
-from light_vllm.config import CacheConfig, ModelConfig, SchedulerConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
 from light_vllm.task.chat.schema.execute_io import ModelInputForGPU, ModelInputForGPUWithSamplingMetadata
 from light_vllm.utils import flatten_2d_lists

@@ -5,7 +5,7 @@ from typing import Any, Dict, Optional, List
 
 import torch
 
-from light_vllm.core.scheduler import SchedulerOutputs
+from light_vllm.task.base.scheduler import SchedulerOutputs
 from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
 from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteModelInput, WorkerInput, ModelInput
 

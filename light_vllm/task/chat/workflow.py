@@ -26,3 +26,4 @@ class ChatWorkflow(Workflow):
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
     ModelPreProcessor: str = "light_vllm.task.chat.processor.model_pre_processor:ChatModelPreProcessor"
     Worker: str = "light_vllm.task.chat.worker.gpu_worker:Worker"
+    Scheduler: str = "light_vllm.task.chat.scheduler:Scheduler"

@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union, Optional
 
-from light_vllm.config import CacheConfig, SchedulerConfig
+from light_vllm.task.chat.config import CacheConfig, SchedulerConfig
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
 from light_vllm.logger import init_logger
 from light_vllm.task.base.schema.sequence import (Sequence, SequenceData, SequenceGroup,

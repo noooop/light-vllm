@@ -176,7 +176,7 @@ class LLMEngine:
         """Creates an LLM engine from the engine arguments."""
 
         from light_vllm.models.transformers_utils.config import get_config
-        from light_vllm.models.loader.utils import get_model_workflow
+        from light_vllm.task.base.loader.utils import get_model_workflow
 
         if isinstance(engine_args, EngineArgs):
             engine_args = engine_args.to_dict()

@@ -129,7 +129,7 @@ class InputRegistry:
             :ref:`enabling_multimodal_inputs`
         """
         # Avoid circular import
-        from light_vllm.models.loader import get_model_architecture
+        from light_vllm.task.base.loader.utils import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
         dummy_factory = self._dummy_factories_by_model_type \
@@ -177,7 +177,7 @@ class InputRegistry:
             :ref:`input_processing_pipeline`
         """
         # Avoid circular import
-        from light_vllm.models.loader import get_model_architecture
+        from light_vllm.task.base.loader.utils import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
 

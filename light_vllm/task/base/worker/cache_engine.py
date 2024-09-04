@@ -4,7 +4,7 @@ from typing import List
 import torch
 
 from light_vllm.layers.attention import get_attn_backend
-from light_vllm.config import CacheConfig, DeviceConfig, ModelConfig
+from light_vllm.task.base.config import CacheConfig, DeviceConfig, ModelConfig
 from light_vllm.logger import init_logger
 from light_vllm.utils import (STR_DTYPE_TO_TORCH_DTYPE, get_dtype_size,
                               is_pin_memory_available)

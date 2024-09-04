@@ -1,8 +1,8 @@
 from typing import Dict, List, Optional, Tuple, Union
 
-from light_vllm.engine.output_processor.interfaces import (
+from light_vllm.task.chat.processor.utils.interfaces import (
     SequenceGroupOutputProcessor)
-from light_vllm.engine.output_processor.stop_checker import StopChecker
+from light_vllm.task.chat.processor.utils.stop_checker import StopChecker
 from light_vllm.logger import init_logger
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.task.base.schema.sequence import (Sequence, SequenceGroup, SequenceStatus)

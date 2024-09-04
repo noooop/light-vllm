@@ -13,7 +13,6 @@ from torch import nn
 from transformers import PretrainedConfig
 
 import light_vllm.envs as envs
-from light_vllm.config import ModelConfig
 from light_vllm.logger import init_logger
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
@@ -89,13 +88,6 @@ class TensorizerConfig:
                 "For a sharded model, tensorizer_uri should include a"
                 " string format template like '%04d' to be formatted"
                 " with the rank of the shard")
-
-    def verify_with_model_config(self, model_config: "ModelConfig") -> None:
-        if (model_config.quantization is not None
-                and self.tensorizer_uri is not None):
-            logger.warning(
-                "Loading a model using Tensorizer with quantization on vLLM"
-                " is unstable and may lead to errors.")
 
 
 def load_with_tensorizer(tensorizer_config: TensorizerConfig,

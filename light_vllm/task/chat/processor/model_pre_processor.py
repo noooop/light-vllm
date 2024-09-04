@@ -2,7 +2,8 @@ import dataclasses
 from typing import List, Tuple
 
 import torch
-from light_vllm.config import CacheConfig, ModelConfig, SchedulerConfig, DeviceConfig
+from light_vllm.task.base.config import DeviceConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 from light_vllm.layers.sampling_metadata import SamplingMetadata
 
 from light_vllm.task.base.schema.execute_io import ExecuteModelInput, WorkerInput, ExecuteInput

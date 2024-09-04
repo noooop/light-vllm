@@ -22,8 +22,6 @@ def cleanup():
         torch.cuda.empty_cache()
 
 
-
-
 class HfRunner:
     def wrap_device(self, input: _T) -> _T:
         if not is_cpu():
@@ -81,7 +79,6 @@ class HfRunner:
         cleanup()
 
 
-
 class VllmRunner:
     def __init__(
         self,
@@ -115,6 +112,7 @@ class VllmRunner:
 def hf_runner():
     return HfRunner
 
+
 @pytest.fixture(scope="session")
 def vllm_runner():
     return VllmRunner
@@ -131,19 +129,21 @@ def example_prompts():
 
 
 MODELS = [
-    'FacebookAI/xlm-roberta-base'
+    'FacebookAI/xlm-roberta-base',
+    'FacebookAI/xlm-roberta-large'
 ]
+
 
 def compare_embeddings(embeddings1, embeddings2):
     similarities = [
-        F.cosine_similarity(torch.tensor(e1), torch.tensor(e2), dim=0)
+        F.cosine_similarity(e1, e2, dim=0)
         for e1, e2 in zip(embeddings1, embeddings2)
     ]
     return similarities
 
 
 @pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize("dtype", ["float"])
+@pytest.mark.parametrize("dtype", ["half"])
 @torch.inference_mode
 def test_models(
     hf_runner,

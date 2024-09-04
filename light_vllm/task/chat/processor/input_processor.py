@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional
 import time
 from light_vllm.utils import Counter
 from light_vllm.inputs.tokenizer import Tokenizer
-from light_vllm.config import ModelConfig, CacheConfig
+from light_vllm.task.chat.config import CacheConfig, ModelConfig
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.task.chat.schema.inputs import PromptInput, ChatInput, ChatRequest
 from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup
