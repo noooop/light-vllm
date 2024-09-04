@@ -11,6 +11,8 @@ from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
 from light_vllm.utils import FlexibleArgumentParser
 
+from light_vllm.task.base.arg_utils import EngineArgs
+
 logger = init_logger(__name__)
 
 
@@ -21,20 +23,11 @@ def nullable_str(val: str):
 
 
 @dataclass
-class EngineArgs:
-    """Arguments for vLLM engine."""
-    model: str
-    served_model_name: Optional[Union[List[str]]] = None
-    tokenizer: Optional[str] = None
-    skip_tokenizer_init: bool = False
-    tokenizer_mode: str = 'auto'
-    trust_remote_code: bool = False
-    download_dir: Optional[str] = None
-    load_format: str = 'auto'
-    dtype: str = 'auto'
+class ChatEngineArgs(EngineArgs):
+    """Arguments for vLLM chat engine."""
     kv_cache_dtype: str = 'auto'
     quantization_param_path: Optional[str] = None
-    seed: int = 0
+
     max_model_len: Optional[int] = None
     worker_use_ray: bool = False
     # Note: Specifying a custom executor backend by passing a class
@@ -789,7 +782,7 @@ class EngineArgs:
 
 
 @dataclass
-class AsyncEngineArgs(EngineArgs):
+class AsyncEngineArgs(ChatEngineArgs):
     """Arguments for asynchronous vLLM engine."""
     engine_use_ray: bool = False
     disable_log_requests: bool = False

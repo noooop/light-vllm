@@ -27,7 +27,7 @@ class ChatModelOutputProcessor(OutputProcessor):
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(engine.scheduler_config,
+        return cls(engine.engine_config.scheduler_config,
                    engine.scheduler,
                    engine.tokenizer,
                    engine.seq_counter)

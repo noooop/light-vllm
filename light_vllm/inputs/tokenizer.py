@@ -17,10 +17,10 @@ class Tokenizer(object):
 
     @classmethod
     def from_engine(cls, engine):
-        init_kwargs = dict(tokenizer_name=engine.model_config.tokenizer,
-                           tokenizer_mode=engine.model_config.tokenizer_mode,
-                           trust_remote_code=engine.model_config.trust_remote_code,
-                           revision=engine.model_config.tokenizer_revision)
+        init_kwargs = dict(tokenizer_name=engine.engine_config.model_config.tokenizer,
+                           tokenizer_mode=engine.engine_config.model_config.tokenizer_mode,
+                           trust_remote_code=engine.engine_config.model_config.trust_remote_code,
+                           revision=engine.engine_config.model_config.tokenizer_revision)
 
         return cls(**init_kwargs)
 

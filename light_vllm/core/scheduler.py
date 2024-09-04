@@ -288,8 +288,8 @@ class Scheduler:
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(engine.scheduler_config,
-                   engine.cache_config,
+        return cls(engine.engine_config.scheduler_config,
+                   engine.engine_config.cache_config,
                    engine.request_processor)
 
     @property
@@ -301,7 +301,7 @@ class Scheduler:
         # Add request or sequence groups to the waiting queue.
         self.waiting.append(request)
 
-    def abort_seq_group(self, request_id: Union[str, Iterable[str]]) -> None:
+    def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         """Aborts a sequence group with the given ID.
 
         Check if the sequence group with the given ID
@@ -338,11 +338,11 @@ class Scheduler:
                         seq.status = SequenceStatus.FINISHED_ABORTED
                         self.free_seq(seq)
 
-    def has_unfinished_seqs(self) -> bool:
+    def has_unfinished_requests(self) -> bool:
         return len(self.waiting) != 0 or len(self.running) != 0 or len(
             self.swapped) != 0
 
-    def get_num_unfinished_seq_groups(self) -> int:
+    def get_num_unfinished_requests(self) -> int:
         return len(self.waiting) + len(self.running) + len(self.swapped)
 
     def _schedule_running(
@@ -900,7 +900,7 @@ class Scheduler:
         """Free a sequence from a block table."""
         self.block_manager.free(seq)
 
-    def free_finished_seq_groups(self) -> None:
+    def free_finished_request(self) -> None:
         remaining: Deque[SequenceGroup] = deque()
         for seq_group in self.running:
             if not seq_group.is_finished():

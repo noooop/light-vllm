@@ -3,6 +3,14 @@ from dataclasses import dataclass
 from typing import List, Union, Optional
 
 
+class Params:
+    pass
+
+
+class Prompt:
+    pass
+
+
 @dataclass
 class Request:
     request_id: str
@@ -10,7 +18,7 @@ class Request:
 
 
 @dataclass
-class TextPrompt:
+class TextPrompt(Prompt):
     """Schema for a text prompt."""
 
     prompt: str
@@ -18,7 +26,7 @@ class TextPrompt:
 
 
 @dataclass
-class TokensPrompt:
+class TokensPrompt(Prompt):
     """Schema for a tokenized prompt."""
 
     prompt_token_ids: List[int]

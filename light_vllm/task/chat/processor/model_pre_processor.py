@@ -33,10 +33,10 @@ class ChatModelPreProcessor(ModelPreProcessor):
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(engine.device_config,
-                   engine.model_config,
-                   engine.scheduler_config,
-                   engine.cache_config,
+        return cls(engine.engine_config.device_config,
+                   engine.engine_config.model_config,
+                   engine.engine_config.scheduler_config,
+                   engine.engine_config.cache_config,
                    attn_backend=engine.executor.driver_worker.model_runner.attn_backend,
                    cuda_graph=engine.executor.driver_worker.model_runner.cuda_graph)
 

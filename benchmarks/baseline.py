@@ -13,9 +13,8 @@ def benchmark(args):
 
     try:
         import light_vllm
-        from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
-        print("light_vllm:", light_vllm.__version__)
-
+        from light_vllm import LLMEngine, SamplingParams, TextPrompt
+        from light_vllm.task.chat.arg_utils import ChatEngineArgs as EngineArgs
     except Exception:
         import vllm
         from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
@@ -43,6 +42,7 @@ def benchmark(args):
         distributed_executor_backend=args.distributed_executor_backend,
         disable_log_stats=True
     )
+
     engine = LLMEngine.from_engine_args(engine_args)
 
     prompt = "hi" * (args.input_len - 1)

@@ -143,8 +143,8 @@ class ChatModelRequestProcessor(RequestProcessor):
     def from_engine(cls, engine):
         engine.seq_counter = Counter()
 
-        return cls(engine.model_config,
-                   engine.cache_config,
+        return cls(engine.engine_config.model_config,
+                   engine.engine_config.cache_config,
                    engine.tokenizer,
                    engine.seq_counter)
 

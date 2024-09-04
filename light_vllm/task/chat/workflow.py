@@ -20,7 +20,7 @@ from light_vllm.task.base.workflow import Workflow
 
 
 class ChatWorkflow(Workflow):
-    EngineArgs: str = "light_vllm.task.chat.arg_utils:EngineArgs"
+    EngineArgs: str = "light_vllm.task.chat.arg_utils:ChatEngineArgs"
     InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
     RequestProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelRequestProcessor"
     OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"

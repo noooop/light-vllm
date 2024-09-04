@@ -1,13 +1,17 @@
-import time
+
 from contextlib import contextmanager
-from typing import (TYPE_CHECKING, Any, ClassVar, Dict, Iterable, List,
-                    Mapping, Optional)
+from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, Optional)
 from typing import Sequence as GenericSequence
-from typing import Type, Union
 
 from light_vllm.version import __version__ as VLLM_VERSION
-from light_vllm.task.base.schema.outputs import RequestOutput
 from light_vllm.logger import init_logger
+
+from light_vllm.task.base.schema.inputs import Params, Prompt
+from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.workflow import Workflow
+from light_vllm.task.base.arg_utils import EngineArgs
+from light_vllm.task.base.config import EngineConfig
+
 
 logger = init_logger(__name__)
 _O = RequestOutput
@@ -70,14 +74,9 @@ class LLMEngine:
 
         return outputs_
 
-    def __init__(self, engine_config, workflow) -> None:
+    def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
         # config
         self.engine_config = engine_config
-        self.model_config = engine_config.model_config
-        self.cache_config = engine_config.cache_config
-        self.scheduler_config = engine_config.scheduler_config
-        self.device_config = engine_config.device_config
-        self.load_config = engine_config.load_config
         self._log_config()
 
         # workflow
@@ -92,7 +91,7 @@ class LLMEngine:
         # model_pre_processor
         self.model_pre_processor = lazy_import(self.workflow.ModelPreProcessor).from_engine(self)
 
-        if self.cache_config is not None:
+        if hasattr(self.engine_config, "cache_config") and self.engine_config.cache_config is not None:
             self._initialize_kv_caches()
 
         # input_processor
@@ -119,28 +118,28 @@ class LLMEngine:
             "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
             "enable_prefix_caching=%s)",
             VLLM_VERSION,
-            self.model_config.model,
-            self.model_config.tokenizer,
-            self.model_config.skip_tokenizer_init,
-            self.model_config.tokenizer_mode,
-            self.model_config.revision,
-            self.model_config.rope_scaling,
-            self.model_config.rope_theta,
-            self.model_config.tokenizer_revision,
-            self.model_config.trust_remote_code,
-            self.model_config.dtype,
-            self.model_config.max_model_len,
-            self.load_config.download_dir,
-            self.load_config.load_format,
-            self.model_config.quantization,
-            self.model_config.enforce_eager,
-            "None" if self.cache_config is None else self.cache_config.cache_dtype,
-            self.model_config.quantization_param_path,
-            self.device_config.device,
-            self.model_config.seed,
-            self.model_config.served_model_name,
-            self.scheduler_config.use_v2_block_manager,
-            "None" if self.cache_config is None else self.cache_config.enable_prefix_caching,
+            self.engine_config.model_config.model,
+            self.engine_config.model_config.tokenizer,
+            self.engine_config.model_config.skip_tokenizer_init,
+            self.engine_config.model_config.tokenizer_mode,
+            self.engine_config.model_config.revision,
+            self.engine_config.model_config.rope_scaling,
+            self.engine_config.model_config.rope_theta,
+            self.engine_config.model_config.tokenizer_revision,
+            self.engine_config.model_config.trust_remote_code,
+            self.engine_config.model_config.dtype,
+            self.engine_config.model_config.max_model_len,
+            self.engine_config.load_config.download_dir,
+            self.engine_config.load_config.load_format,
+            self.engine_config.model_config.quantization,
+            self.engine_config.model_config.enforce_eager,
+            "None" if self.engine_config.cache_config is None else self.engine_config.cache_config.cache_dtype,
+            self.engine_config.model_config.quantization_param_path,
+            self.engine_config.device_config.device,
+            self.engine_config.model_config.seed,
+            self.engine_config.model_config.served_model_name,
+            self.engine_config.scheduler_config.use_v2_block_manager,
+            "None" if self.engine_config.cache_config is None else self.engine_config.cache_config.enable_prefix_caching,
         )
 
     def _initialize_kv_caches(self) -> None:
@@ -154,16 +153,16 @@ class LLMEngine:
         num_gpu_blocks, num_cpu_blocks = (
             self.executor.determine_num_available_blocks())
 
-        if self.cache_config.num_gpu_blocks_override is not None:
-            num_gpu_blocks_override = self.cache_config.num_gpu_blocks_override
+        if self.engine_config.cache_config.num_gpu_blocks_override is not None:
+            num_gpu_blocks_override = self.engine_config.cache_config.num_gpu_blocks_override
             logger.info(
                 "Overriding num_gpu_blocks=%d with "
                 "num_gpu_blocks_override=%d", num_gpu_blocks,
                 num_gpu_blocks_override)
             num_gpu_blocks = num_gpu_blocks_override
 
-        self.cache_config.num_gpu_blocks = num_gpu_blocks
-        self.cache_config.num_cpu_blocks = num_cpu_blocks
+        self.engine_config.cache_config.num_gpu_blocks = num_gpu_blocks
+        self.engine_config.cache_config.num_cpu_blocks = num_cpu_blocks
 
         self.executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
@@ -172,17 +171,21 @@ class LLMEngine:
     @classmethod
     def from_engine_args(
             cls,
-            engine_args: Dict,
+            engine_args: Union[Dict, EngineArgs]
     ) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
+
         from light_vllm.models.transformers_utils.config import get_config
+        from light_vllm.models.loader.utils import get_model_workflow
+
+        if isinstance(engine_args, EngineArgs):
+            engine_args = engine_args.to_dict()
 
         hf_config = get_config(engine_args["model"],
                                engine_args.get("trust_remote_code", False),
                                engine_args.get("revision", None),
                                engine_args.get("code_revision", None))
 
-        from light_vllm.models.loader.utils import get_model_workflow
         workflow_class = get_model_workflow(hf_config)
         workflow = lazy_import(workflow_class)
 
@@ -194,36 +197,35 @@ class LLMEngine:
 
     def add_request(self,
                     request_id: str,
-                    prompt,
-                    params,
+                    prompt: Optional[Union[str, Prompt]] = None,
+                    params: Optional[Params] = None,
                     arrival_time: Optional[float] = None) -> None:
         request = self.input_processor(request_id, prompt, params, arrival_time)
         self.scheduler.add_request(request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
-        self.scheduler.abort_seq_group(request_id)
+        self.scheduler.abort_request(request_id)
 
     def step(self) -> List[RequestOutput]:
         scheduler_outputs = self.scheduler.schedule()
 
-        if not scheduler_outputs.is_empty():
-            execute_input = self.model_pre_processor(scheduler_outputs)
-            execute_output = self.executor.execute_model(execute_input)
-        else:
-            execute_output = []
+        if scheduler_outputs.is_empty():
+            return []
 
+        execute_input = self.model_pre_processor(scheduler_outputs)
+        execute_output = self.executor.execute_model(execute_input)
         request_outputs = self.output_processor(scheduler_outputs, execute_output)
-        self.scheduler.free_finished_seq_groups()
+        self.scheduler.free_finished_request()
 
         return request_outputs
 
     def get_num_unfinished_requests(self) -> int:
         """Gets the number of unfinished requests."""
-        return self.scheduler.get_num_unfinished_seq_groups()
+        return self.scheduler.get_num_unfinished_requests()
 
     def has_unfinished_requests(self) -> bool:
         """Returns True if there are unfinished requests."""
-        return self.scheduler.has_unfinished_seqs()
+        return self.scheduler.has_unfinished_requests()
 
     def __reduce__(self):
         # This is to ensure that the LLMEngine is not referenced in

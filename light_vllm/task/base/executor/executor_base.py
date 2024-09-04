@@ -32,11 +32,11 @@ class ExecutorBase(ABC):
     @classmethod
     def from_engine(cls, engine):
         return cls(
-            model_config=engine.model_config,
-            cache_config=engine.cache_config,
-            scheduler_config=engine.scheduler_config,
-            device_config=engine.device_config,
-            load_config=engine.load_config,
+            model_config=engine.engine_config.model_config,
+            cache_config=engine.engine_config.cache_config,
+            scheduler_config=engine.engine_config.scheduler_config,
+            device_config=engine.engine_config.device_config,
+            load_config=engine.engine_config.load_config,
             workflow=engine.workflow
         )
 
