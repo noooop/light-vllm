@@ -1,5 +1,4 @@
 
-import time
 from typing import List
 from light_vllm.task.base.processor.output_processor import OutputProcessor
 from light_vllm.task.encode_only.schema.outputs import EncodeOnlyRequestOutput

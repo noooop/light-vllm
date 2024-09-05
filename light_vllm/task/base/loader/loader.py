@@ -127,8 +127,8 @@ class BaseModelLoader(ABC):
     @abstractmethod
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         """Load a model with the given configurations."""
         ...
 
@@ -258,8 +258,8 @@ class DefaultModelLoader(BaseModelLoader):
 
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         target_device = torch.device(device_config.device)
         with set_default_torch_dtype(model_config.dtype):
             with target_device:
@@ -297,8 +297,8 @@ class DummyModelLoader(BaseModelLoader):
 
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         with set_default_torch_dtype(model_config.dtype):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config,
@@ -365,7 +365,7 @@ class TensorizerLoader(BaseModelLoader):
                 model_class = get_model_architecture(model_config)[0]
                 quant_config = _get_quantization_config(
                     model_config, self.load_config)
-                extra_kwargs = _get_model_initialization_kwargs(model_class)
+                extra_kwargs = dict()
                 extra_kwargs["quant_config"] = quant_config
                 extra_kwargs["cache_config"] = cache_config
 
@@ -379,8 +379,8 @@ class TensorizerLoader(BaseModelLoader):
 
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         self._verify_config(model_config)
 
         if is_vllm_tensorized(self.tensorizer_config):
@@ -472,8 +472,8 @@ class ShardedStateLoader(BaseModelLoader):
 
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         from safetensors.torch import safe_open
 
         local_model_path = self._prepare_weights(model_config.model,
@@ -843,8 +843,8 @@ class BitsAndBytesModelLoader(BaseModelLoader):
 
     def load_model(self, *, model_config: ModelConfig,
                    device_config: DeviceConfig,
-                   scheduler_config: SchedulerConfig,
-                   cache_config: CacheConfig) -> nn.Module:
+                   scheduler_config: Optional[SchedulerConfig] = None,
+                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
         with set_default_torch_dtype(model_config.dtype):
             with torch.device(device_config.device):
                 model = _initialize_model(model_config, self.load_config,

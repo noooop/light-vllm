@@ -1,9 +1,7 @@
 from typing import Any, Dict, Optional
 
 import time
-from light_vllm.utils import Counter
 from light_vllm.inputs.tokenizer import Tokenizer
-from light_vllm.config import ModelConfig, CacheConfig
 from light_vllm.task.encode_only.schema.inputs import PromptInput, EncodeOnlyInput, EncodeOnlyRequest
 from light_vllm.task.base.processor.input_processor import InputProcessor, RequestProcessor
 
@@ -35,19 +33,20 @@ class EncodeOnlyModelRequestProcessor(RequestProcessor):
         return cls(engine.tokenizer)
 
     def __call__(self, request: EncodeOnlyRequest) -> EncodeOnlyRequest:
-        input = request.input
-        if isinstance(request.input, str):
-            input = {"prompt": input}
+        if not isinstance(request.input, EncodeOnlyInput):
+            input = request.input
+            if isinstance(request.input, str):
+                input = {"prompt": input}
 
-        if "prompt_token_ids" not in input:
-            tokenizer = self.tokenizer
+            if "prompt_token_ids" not in input:
+                tokenizer = self.tokenizer
 
-            prompt_token_ids = tokenizer.encode(input["prompt"])
-        else:
-            prompt_token_ids = input["prompt_token_ids"]
+                prompt_token_ids = tokenizer.encode(input["prompt"])
+            else:
+                prompt_token_ids = input["prompt_token_ids"]
 
-        input = EncodeOnlyInput(prompt_token_ids=prompt_token_ids,
-                                prompt=input.get("prompt"))
-        request.input = input
+            input = EncodeOnlyInput(prompt_token_ids=prompt_token_ids,
+                                    prompt=input.get("prompt"))
+            request.input = input
 
         return request

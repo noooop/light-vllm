@@ -18,7 +18,7 @@ prompts = [
 ]
 
 # Create an LLM.
-llm = LLM(model="FacebookAI/xlm-roberta-base", dtype='float32')
+llm = LLM(model="FacebookAI/xlm-roberta-base")
 
 # Generate texts from the prompts. The output is a list of RequestOutput objects
 # that contain the prompt, generated text, and other information.

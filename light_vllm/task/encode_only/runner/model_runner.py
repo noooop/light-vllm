@@ -1,32 +1,18 @@
-import dataclasses
 
-import warnings
-import weakref
-from dataclasses import dataclass
 from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
                     TypeVar, Union)
-import torch
+
 import torch.distributed
 import torch.nn as nn
-import light_vllm.envs as envs
+
 from light_vllm.layers.attention import AttentionMetadata, get_attn_backend
-from light_vllm.layers.sampling_metadata import SamplingMetadata
-from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.config import (CacheConfig, DeviceConfig, LoadConfig,
-                               ModelConfig, SchedulerConfig)
 
+from light_vllm.task.base.config import DeviceConfig, LoadConfig
+from light_vllm.task.encode_only.config import ModelConfig, EncodeOnlySchedulerConfig
 from light_vllm.task.base.runner.model_runner_base import ModelRunnerBase
-from light_vllm.task.base.runner.cuda_graph_util import CUDAGraph
+from light_vllm.task.encode_only.loader import get_model
 
-from light_vllm.inputs import INPUT_REGISTRY
 from light_vllm.logger import init_logger
-
-from light_vllm.models.loader import get_model
-from light_vllm.models.loader.tensorizer import TensorizerConfig
-from light_vllm.models.utils import set_cpu_offload_max_bytes
-
-from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
-from light_vllm.task.base.schema.execute_io import ModelInput, ExecuteOutput
 from light_vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
                               is_hip,
                               is_pin_memory_available)
@@ -46,9 +32,8 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
     def __init__(
         self,
         model_config: ModelConfig,
-        scheduler_config: SchedulerConfig,
+        scheduler_config: EncodeOnlySchedulerConfig,
         device_config: DeviceConfig,
-        cache_config: CacheConfig,
         load_config: LoadConfig,
         kv_cache_dtype: Optional[str] = "auto",
         is_driver_worker: bool = False,
@@ -57,7 +42,6 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         self.model_config = model_config
         self.scheduler_config = scheduler_config
         self.device_config = device_config
-        self.cache_config = cache_config
         self.load_config = load_config
         self.is_driver_worker = is_driver_worker
         self.return_hidden_states = return_hidden_states
@@ -88,37 +72,11 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         with CudaMemoryProfiler() as m:
             self.model = get_model(model_config=self.model_config,
                                    device_config=self.device_config,
-                                   load_config=self.load_config,
-                                   scheduler_config=self.scheduler_config,
-                                   cache_config=self.cache_config)
+                                   load_config=self.load_config)
 
         self.model_memory_usage = m.consumed_memory
         logger.info("Loading model weights took %.4f GB",
                     self.model_memory_usage / float(2**30))
-
-    def save_sharded_state(
-        self,
-        path: str,
-        pattern: Optional[str] = None,
-        max_size: Optional[int] = None,
-    ) -> None:
-        from light_vllm.models.loader.loader import ShardedStateLoader
-        ShardedStateLoader.save_model(
-            self.model,
-            path,
-            pattern=pattern,
-            max_size=max_size,
-        )
-
-    def save_tensorized_model(
-        self,
-        tensorizer_config: TensorizerConfig,
-    ) -> None:
-        from light_vllm.models.loader.loader import TensorizerLoader
-        TensorizerLoader.save_model(
-            self.model,
-            tensorizer_config=tensorizer_config,
-        )
 
     @torch.inference_mode()
     def profile_run(self) -> None:
@@ -132,13 +90,7 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         return self.model_config.get_vocab_size()
 
 
-class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
-    """
-    GPU model runner with sampling step.
-    """
-    _model_input_cls: Type[ModelInputForGPUWithSamplingMetadata] = (
-        ModelInputForGPUWithSamplingMetadata)
-
+class ModelRunner(GPUModelRunnerBase):
     @torch.inference_mode()
     def execute_model(
         self,

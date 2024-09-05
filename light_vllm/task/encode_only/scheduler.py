@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from light_vllm.config import CacheConfig, SchedulerConfig
+from light_vllm.task.encode_only.config import EncodeOnlySchedulerConfig
 from light_vllm.logger import init_logger
 from light_vllm.task.encode_only.schema.inputs import EncodeOnlyInput, EncodeOnlyRequest
 from light_vllm.task.encode_only.processor.input_processor import EncodeOnlyModelRequestProcessor
@@ -15,65 +15,38 @@ logger = init_logger(__name__)
 
 @dataclass
 class SchedulingBudget:
-    """The available slots for scheduling.
-
-    TODO(sang): Right now, the budget is request_id-aware meaning it can ignore
-    budget update from the same request_id. It is because in normal scheduling
-    path, we update RUNNING num_seqs ahead of time, meaning it could be
-    updated more than once when scheduling RUNNING requests. Since this won't
-    happen if we only have chunked prefill scheduling, we can remove this
-    feature from the API when chunked prefill is enabled by default.
-    """
     token_budget: int
-    max_num_seqs: int
-    _request_ids_num_batched_tokens: Set[str] = field(default_factory=set)
-    _request_ids_num_curr_seqs: Set[str] = field(default_factory=set)
+    max_num_requests: int
+    _curr_requests: Set[str] = field(default_factory=set)
     _num_batched_tokens: int = 0
-    _num_curr_seqs: int = 0
 
-    def can_schedule(self, *, num_new_tokens: int, num_new_seqs: int):
+    def can_schedule(self, *, num_new_tokens: int, num_new_request: int = 1):
         assert num_new_tokens != 0
-        assert num_new_seqs != 0
+        assert num_new_request != 0
         return (self.num_batched_tokens + num_new_tokens <= self.token_budget
-                and self.num_curr_seqs + num_new_seqs <= self.max_num_seqs)
+                and self.num_curr_request + num_new_request <= self.max_num_requests)
 
     def remaining_token_budget(self):
         return self.token_budget - self.num_batched_tokens
 
     def add_num_batched_tokens(self, req_id: str, num_batched_tokens: int):
-        if req_id in self._request_ids_num_batched_tokens:
+        if req_id in self._curr_requests:
             return
 
-        self._request_ids_num_batched_tokens.add(req_id)
+        self._curr_requests.add(req_id)
         self._num_batched_tokens += num_batched_tokens
 
-    def subtract_num_batched_tokens(self, req_id: str,
-                                    num_batched_tokens: int):
-        if req_id in self._request_ids_num_batched_tokens:
-            self._request_ids_num_batched_tokens.remove(req_id)
-            self._num_batched_tokens -= num_batched_tokens
-
-    def add_num_seqs(self, req_id: str, num_curr_seqs: int):
-        if req_id in self._request_ids_num_curr_seqs:
-            return
-
-        self._request_ids_num_curr_seqs.add(req_id)
-        self._num_curr_seqs += num_curr_seqs
-
-    def subtract_num_seqs(self, req_id: str, num_curr_seqs: int):
-        if req_id in self._request_ids_num_curr_seqs:
-            self._request_ids_num_curr_seqs.remove(req_id)
-            self._num_curr_seqs -= num_curr_seqs
+    def subtract_num_batched_tokens(self, req_id: str):
+        if req_id in self._curr_requests:
+            self._curr_requests.remove(req_id)
 
     @property
     def num_batched_tokens(self):
         return self._num_batched_tokens
 
     @property
-    def num_curr_seqs(self):
-        return self._num_curr_seqs
-
-
+    def num_curr_request(self):
+        return len(self._curr_requests)
 
 
 @dataclass
@@ -88,7 +61,7 @@ class EncodeOnlyScheduler:
 
     def __init__(
             self,
-            scheduler_config: SchedulerConfig,
+            scheduler_config: EncodeOnlySchedulerConfig,
             request_processor: EncodeOnlyModelRequestProcessor,
     ) -> None:
         self.scheduler_config = scheduler_config
@@ -110,7 +83,7 @@ class EncodeOnlyScheduler:
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(engine.scheduler_config,
+        return cls(engine.engine_config.scheduler_config,
                    engine.request_processor)
 
     @property
@@ -122,31 +95,54 @@ class EncodeOnlyScheduler:
         # Add request to the waiting queue.
         self.waiting.append(request)
 
-    def abort_seq_group(self, request_id: Union[str, Iterable[str]]) -> None:
-        pass
+    def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
+        if isinstance(request_id, str):
+            request_id = (request_id,)
+        request_ids = set(request_id)
 
-    def has_unfinished_seqs(self) -> bool:
+        # abort from waiting
+        aborted_requests: List[EncodeOnlyRequest] = []
+        for request in self.waiting:
+            if not request_ids:
+                break
+
+            if request.request_id in request_ids:
+                request_ids.remove(request.request_id)
+                aborted_requests.append(request)
+        for request in aborted_requests:
+            self.waiting.remove(request)
+
+        # abort from running
+        for request_id in request_ids:
+            self.running.pop(request_id)
+
+    def has_unfinished_requests(self) -> bool:
         return len(self.waiting) != 0
 
-    def get_num_unfinished_seq_groups(self) -> int:
+    def get_num_unfinished_requests(self) -> int:
         return len(self.waiting) + len(self.running)
 
     def schedule(self):
         now = time.time()
 
+        budget = SchedulingBudget(
+            token_budget=self.scheduler_config.max_num_batched_tokens,
+            max_num_requests=self.scheduler_config.max_num_requests,
+        )
+
         waiting_queue = self.waiting
 
-        i = 0
         scheduler_outputs = []
         while waiting_queue:
             request = waiting_queue[0]
+            request = self.request_processor(request)
 
-            i+=1
+            num_new_tokens = request.num_new_tokens
 
-            if i == 32:
+            if not budget.can_schedule(num_new_tokens=num_new_tokens):
                 break
 
-            request = self.request_processor(request)
+            budget.add_num_batched_tokens(request.request_id, num_new_tokens)
 
             waiting_queue.popleft()
             scheduler_outputs.append(request)
@@ -154,5 +150,5 @@ class EncodeOnlyScheduler:
 
         return SchedulerOutputs(scheduled_requests=scheduler_outputs)
 
-    def free_finished_seq_groups(self):
-        pass
+    def free_finished_request(self):
+        return

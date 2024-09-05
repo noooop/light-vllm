@@ -2,8 +2,6 @@
 from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, Optional)
 from typing import Sequence as GenericSequence
-
-from light_vllm.version import __version__ as VLLM_VERSION
 from light_vllm.logger import init_logger
 
 from light_vllm.task.base.schema.inputs import Params, Prompt
@@ -77,7 +75,7 @@ class LLMEngine:
     def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
         # config
         self.engine_config = engine_config
-        self._log_config()
+        engine_config.log_config()
 
         # workflow
         self.workflow = workflow
@@ -103,44 +101,6 @@ class LLMEngine:
 
         # output_processor
         self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
-
-    def _log_config(self):
-        logger.info(
-            "Initializing an LLM engine (v%s) with config: "
-            "model=%r, tokenizer=%r, "
-            "skip_tokenizer_init=%s, tokenizer_mode=%s, revision=%s, "
-            "rope_scaling=%r, rope_theta=%r, tokenizer_revision=%s, "
-            "trust_remote_code=%s, dtype=%s, max_seq_len=%d, "
-            "download_dir=%r, load_format=%s, "
-            "quantization=%s, "
-            "enforce_eager=%s, kv_cache_dtype=%s, "
-            "quantization_param_path=%s, device_config=%s, "
-            "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
-            "enable_prefix_caching=%s)",
-            VLLM_VERSION,
-            self.engine_config.model_config.model,
-            self.engine_config.model_config.tokenizer,
-            self.engine_config.model_config.skip_tokenizer_init,
-            self.engine_config.model_config.tokenizer_mode,
-            self.engine_config.model_config.revision,
-            self.engine_config.model_config.rope_scaling,
-            self.engine_config.model_config.rope_theta,
-            self.engine_config.model_config.tokenizer_revision,
-            self.engine_config.model_config.trust_remote_code,
-            self.engine_config.model_config.dtype,
-            self.engine_config.model_config.max_model_len,
-            self.engine_config.load_config.download_dir,
-            self.engine_config.load_config.load_format,
-            self.engine_config.model_config.quantization,
-            self.engine_config.model_config.enforce_eager,
-            "None" if self.engine_config.cache_config is None else self.engine_config.cache_config.cache_dtype,
-            self.engine_config.model_config.quantization_param_path,
-            self.engine_config.device_config.device,
-            self.engine_config.model_config.seed,
-            self.engine_config.model_config.served_model_name,
-            self.engine_config.scheduler_config.use_v2_block_manager,
-            "None" if self.engine_config.cache_config is None else self.engine_config.cache_config.enable_prefix_caching,
-        )
 
     def _initialize_kv_caches(self) -> None:
         """Initialize the KV cache in the worker(s).

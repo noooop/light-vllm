@@ -12,3 +12,8 @@ class EncodeOnlyInput(TextOnlyInput):
 @dataclass
 class EncodeOnlyRequest(Request):
     input: Union[PromptInput, EncodeOnlyInput]
+
+    @property
+    def num_new_tokens(self):
+        if isinstance(self.input, EncodeOnlyInput):
+            return len(self.input.prompt_token_ids)

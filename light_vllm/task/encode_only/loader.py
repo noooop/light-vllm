@@ -8,14 +8,12 @@ from light_vllm.task.base.loader.utils import (
 
 
 def get_model(*, model_config: ModelConfig, load_config: LoadConfig,
-              device_config: DeviceConfig,
-              scheduler_config: SchedulerConfig,
-              cache_config: CacheConfig) -> nn.Module:
+              device_config: DeviceConfig) -> nn.Module:
     loader = get_model_loader(load_config)
     return loader.load_model(model_config=model_config,
                              device_config=device_config,
-                             scheduler_config=scheduler_config,
-                             cache_config=cache_config)
+                             cache_config=None,
+                             scheduler_config=None)
 
 
 __all__ = [

@@ -4,7 +4,7 @@ from light_vllm.task.base.workflow import Workflow
 
 
 class EncodeOnlyWorkflow(Workflow):
-    EngineArgs: str = "light_vllm.task.encode_only.arg_utils:EngineArgs"
+    EngineArgs: str = "light_vllm.task.encode_only.arg_utils:EncodeOnlyEngineArgs"
     InputProcessor: str = "light_vllm.task.encode_only.processor.input_processor:EncodeOnlyModelInputProcessor"
     RequestProcessor: str = "light_vllm.task.encode_only.processor.input_processor:EncodeOnlyModelRequestProcessor"
     OutputProcessor: str = "light_vllm.task.encode_only.processor.output_processor:EncodeOnlyModelOutputProcessor"

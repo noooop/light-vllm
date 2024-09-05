@@ -130,7 +130,7 @@ def example_prompts():
 
 MODELS = [
     'FacebookAI/xlm-roberta-base',
-    'FacebookAI/xlm-roberta-large'
+#    'FacebookAI/xlm-roberta-large'
 ]
 
 

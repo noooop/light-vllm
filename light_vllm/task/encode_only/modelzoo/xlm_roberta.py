@@ -27,11 +27,9 @@ from transformers.utils import logging
 
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from light_vllm.config import CacheConfig
-from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.activation import get_act_fn
-from light_vllm.models.loader.weight_utils import (
-    default_weight_loader, maybe_remap_kv_scale_name)
+from light_vllm.task.base.loader.weight_utils import (
+    default_weight_loader)
 
 from transformers.pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 

@@ -256,15 +256,6 @@ class ModelConfig:
             type is FP8_E4M3 on ROCm (AMD GPU). In the future these will also
             be used to load activation and weight scaling factors when the
             model dtype is FP8_E4M3 on ROCm.
-        enforce_eager: Whether to enforce eager execution. If True, we will
-            disable CUDA graph and always execute the model in eager mode.
-            If False, we will use CUDA graph and eager execution in hybrid.
-        max_context_len_to_capture: Maximum context len covered by CUDA graphs.
-            When a sequence has context length larger than this, we fall back
-            to eager mode (DEPRECATED. Use max_seq_len_to_capture instead).
-        max_seq_len_to_capture: Maximum sequence len covered by CUDA graphs.
-            When a sequence has context length larger than this, we fall back
-            to eager mode
         disable_sliding_window: Whether to disable sliding window. If True,
             we will disable the sliding window functionality of the model.
             If the model does not support sliding window, this argument is
@@ -287,10 +278,13 @@ class ModelConfig:
         seed: int,
         revision: Optional[str] = None,
         code_revision: Optional[str] = None,
+        rope_scaling: Optional[dict] = None,
+        rope_theta: Optional[float] = None,
         tokenizer_revision: Optional[str] = None,
+        max_model_len: Optional[int] = None,
         quantization: Optional[str] = None,
         quantization_param_path: Optional[str] = None,
-        enforce_eager: bool = True,
+        disable_sliding_window: bool = False,
         skip_tokenizer_init: bool = False,
         served_model_name: Optional[Union[str, List[str]]] = None,
     ) -> None:
@@ -301,6 +295,8 @@ class ModelConfig:
         self.seed = seed
         self.revision = revision
         self.code_revision = code_revision
+        self.rope_scaling = rope_scaling
+        self.rope_theta = rope_theta
         # The tokenizer version is consistent with the model version by default.
         if tokenizer_revision is None:
             self.tokenizer_revision = revision
@@ -308,13 +304,29 @@ class ModelConfig:
             self.tokenizer_revision = tokenizer_revision
         self.quantization = quantization
         self.quantization_param_path = quantization_param_path
-        self.enforce_eager = enforce_eager
+        self.disable_sliding_window = disable_sliding_window
         self.skip_tokenizer_init = skip_tokenizer_init
 
         self.hf_config = get_config(self.model, trust_remote_code, revision,
-                                    code_revision)
+                                    code_revision, rope_scaling, rope_theta)
         self.hf_text_config = get_hf_text_config(self.hf_config)
         self.dtype = _get_and_verify_dtype(self.hf_text_config, dtype)
+
+        if (not self.disable_sliding_window
+                and self.hf_text_config.model_type == "gemma2"
+                and self.hf_text_config.sliding_window is not None):
+            print_warning_once(
+                "Gemma 2 uses sliding window attention for every odd layer, "
+                "which is currently not supported by vLLM. Disabling sliding "
+                "window and capping the max length to the sliding window size "
+                f"({self.hf_text_config.sliding_window}).")
+            self.disable_sliding_window = True
+
+        self.max_model_len = _get_and_verify_max_len(
+            hf_config=self.hf_text_config,
+            max_model_len=max_model_len,
+            disable_sliding_window=self.disable_sliding_window,
+            sliding_window_len=self.get_hf_config_sliding_window())
         self.served_model_name = get_served_model_name(model,
                                                        served_model_name)
 
@@ -387,6 +399,26 @@ class ModelConfig:
                     "%s quantization is not fully "
                     "optimized yet. The speed can be slower than "
                     "non-quantized models.", self.quantization)
+
+    def get_hf_config_sliding_window(self) -> Optional[int]:
+        """Get the sliding window size, or None if disabled."""
+
+        # Some models, like Qwen2 and Qwen1.5, use `use_sliding_window` in
+        # addition to sliding window size. We check if that field is present
+        # and if it's False, return None.
+        if (hasattr(self.hf_text_config, "use_sliding_window")
+                and not self.hf_text_config.use_sliding_window):
+            return None
+        return getattr(self.hf_text_config, "sliding_window", None)
+
+    def get_sliding_window(self) -> Optional[int]:
+        """Get the sliding window size, or None if disabled.
+        """
+        # If user disables sliding window, return None.
+        if self.disable_sliding_window:
+            return None
+        # Otherwise get the value from the hf config.
+        return self.get_hf_config_sliding_window()
 
     def get_vocab_size(self) -> int:
         return self.hf_text_config.vocab_size
@@ -560,6 +592,124 @@ def get_served_model_name(model: str,
     return served_model_name
 
 
+def _get_and_verify_max_len(
+    hf_config: PretrainedConfig,
+    max_model_len: Optional[int],
+    disable_sliding_window: bool,
+    sliding_window_len: Optional[int],
+) -> int:
+    """Get and verify the model's maximum length."""
+    derived_max_model_len = float("inf")
+    possible_keys = [
+        # OPT
+        "max_position_embeddings",
+        # GPT-2
+        "n_positions",
+        # MPT
+        "max_seq_len",
+        # ChatGLM2
+        "seq_length",
+        # Command-R
+        "model_max_length",
+        # Others
+        "max_sequence_length",
+        "max_seq_length",
+        "seq_len",
+    ]
+    # Choose the smallest "max_length" from the possible keys.
+    max_len_key = None
+    for key in possible_keys:
+        max_len = getattr(hf_config, key, None)
+        if max_len is not None:
+            max_len_key = key if max_len < derived_max_model_len \
+                else max_len_key
+            derived_max_model_len = min(derived_max_model_len, max_len)
+
+    # If sliding window is manually disabled, max_length should be less
+    # than the sliding window length in the model config.
+    if disable_sliding_window and sliding_window_len is not None:
+        max_len_key = "sliding_window" \
+            if sliding_window_len < derived_max_model_len else max_len_key
+        derived_max_model_len = min(derived_max_model_len, sliding_window_len)
+
+    # If none of the keys were found in the config, use a default and
+    # log a warning.
+    if derived_max_model_len == float("inf"):
+        if max_model_len is not None:
+            # If max_model_len is specified, we use it.
+            return max_model_len
+
+        default_max_len = 2048
+        logger.warning(
+            "The model's config.json does not contain any of the following "
+            "keys to determine the original maximum length of the model: "
+            "%s. Assuming the model's maximum length is %d.", possible_keys,
+            default_max_len)
+        derived_max_model_len = default_max_len
+
+    rope_scaling = getattr(hf_config, "rope_scaling", None)
+    if rope_scaling is not None:
+        if "type" in rope_scaling:
+            rope_type = rope_scaling["type"]
+        elif "rope_type" in rope_scaling:
+            rope_type = rope_scaling["rope_type"]
+        else:
+            raise ValueError(
+                "rope_scaling must have a 'type' or 'rope_type' key.")
+
+        # The correct one should be "longrope", kept "su" here
+        # to be backward compatible
+        if rope_type not in ("su", "longrope", "llama3"):
+            if disable_sliding_window:
+                # TODO(robertgshaw): Find a model that supports rope_scaling
+                # with sliding window to see if this case should be allowed.
+                raise NotImplementedError(
+                    "Disabling sliding window is not supported for models "
+                    "with rope_scaling. Please raise an issue so we can "
+                    "investigate.")
+
+            assert "factor" in rope_scaling
+            scaling_factor = rope_scaling["factor"]
+            if rope_type == "yarn":
+                derived_max_model_len = rope_scaling[
+                    "original_max_position_embeddings"]
+            derived_max_model_len *= scaling_factor
+
+    # If the user specified a max length, make sure it is smaller than the
+    # derived length from the HF model config.
+    if max_model_len is None:
+        max_model_len = int(derived_max_model_len)
+    elif max_model_len > derived_max_model_len:
+        # Some models might have a separate key for specifying model_max_length
+        # that will be bigger than derived_max_model_len. We compare user input
+        # with model_max_length and allow this override when it's smaller.
+        model_max_length = getattr(hf_config, "model_max_length", None)
+        if model_max_length is not None and max_model_len <= model_max_length:
+            if disable_sliding_window:
+                # TODO(robertgshaw): Find a model that has model_max_length
+                # with sliding window to see if this case should be allowed.
+                raise NotImplementedError(
+                    "Disabling sliding window is not supported for models "
+                    "model_max_length in the config. Please raise an issue "
+                    "so we can investigate.")
+        else:
+            msg = (
+                f"User-specified max_model_len ({max_model_len}) is greater "
+                f"than the derived max_model_len ({max_len_key}="
+                f"{derived_max_model_len} or model_max_length="
+                f"{model_max_length} in model's config.json). This may lead "
+                "to incorrect model outputs or CUDA errors.")
+            if envs.VLLM_ALLOW_LONG_MAX_MODEL_LEN:
+                logger.warning(
+                    "%s Make sure the value is correct and within the "
+                    "model context size.", msg)
+            else:
+                raise ValueError(
+                    f"{msg} To allow overriding this maximum, set "
+                    "the env var VLLM_ALLOW_LONG_MAX_MODEL_LEN=1")
+    return int(max_model_len)
+
+
 @dataclass(frozen=True)
 class EngineConfig:
     model_config: ModelConfig
@@ -572,5 +722,47 @@ class EngineConfig:
         return dict(
             (field.name, getattr(self, field.name)) for field in fields(self))
 
+    def log_config(self):
+        from light_vllm.version import __version__ as VLLM_VERSION
+        logger.info(
+            "Initializing an LLM engine (v%s) with config: "
+            "model=%r, tokenizer=%r, "
+            "skip_tokenizer_init=%s, tokenizer_mode=%s, revision=%s, "
+            "rope_scaling=%r, rope_theta=%r, tokenizer_revision=%s, "
+            "trust_remote_code=%s, dtype=%s, max_seq_len=%d, "
+            "download_dir=%r, load_format=%s, "
+            "quantization=%s, "
+            "quantization_param_path=%s, device_config=%s, "
+            "seed=%d, served_model_name=%s)",
+            VLLM_VERSION,
+            self.model_config.model,
+            self.model_config.tokenizer,
+            self.model_config.skip_tokenizer_init,
+            self.model_config.tokenizer_mode,
+            self.model_config.revision,
+            self.model_config.rope_scaling,
+            self.model_config.rope_theta,
+            self.model_config.tokenizer_revision,
+            self.model_config.trust_remote_code,
+            self.model_config.dtype,
+            self.model_config.max_model_len,
+            self.load_config.download_dir,
+            self.load_config.load_format,
+            self.model_config.quantization,
+            self.model_config.quantization_param_path,
+            self.device_config.device,
+            self.model_config.seed,
+            self.model_config.served_model_name,
+        )
 
 
+def filter_unexpected_fields(cls):
+    original_init = cls.__init__
+
+    def new_init(self, *args, **kwargs):
+        expected_fields = {field.name for field in fields(cls)}
+        cleaned_kwargs = {key: value for key, value in kwargs.items() if key in expected_fields}
+        original_init(self, *args, **cleaned_kwargs)
+
+    cls.__init__ = new_init
+    return cls

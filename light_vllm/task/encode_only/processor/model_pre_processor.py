@@ -4,20 +4,16 @@ from dataclasses import dataclass
 from typing import List, Tuple
 
 import torch
-from light_vllm.config import CacheConfig, ModelConfig, SchedulerConfig, DeviceConfig
+
 
 from light_vllm.task.base.schema.execute_io import ExecuteModelInput, WorkerInput, ModelInput, ExecuteInput
-from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
 from light_vllm.task.base.processor.model_pre_processor import ModelPreProcessor
 from light_vllm.task.encode_only.scheduler import SchedulerOutputs
-from light_vllm.utils import is_pin_memory_available
 
 
 @dataclass(frozen=True)
 class ModelInputForGPU(ModelInput):
     batch_data: object
-
-
 
 
 class EncodeOnlyModelPreProcessor(ModelPreProcessor):
