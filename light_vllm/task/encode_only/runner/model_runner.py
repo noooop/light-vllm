@@ -98,5 +98,5 @@ class ModelRunner(GPUModelRunnerBase):
         kv_caches: List[torch.Tensor],
     ):
         batch_data = model_input.batch_data.to("cuda")
-        return self.model(**batch_data)[0]
+        return self.model(**batch_data)
 
