@@ -19,14 +19,17 @@
 import math
 from typing import Iterable, List, Optional, Tuple, Union
 
-
 import torch
 from torch import nn
 from transformers import XLMRobertaConfig
 from transformers.utils import logging
 from light_vllm.layers.activation import get_act_fn
+from light_vllm.layers.linear import QKVParallelLinear, RowParallelLinear
+from light_vllm.layers.quantization.base_config import (
+    QuantizationConfig)
 from light_vllm.task.base.loader.weight_utils import (
-    default_weight_loader)
+    default_weight_loader, maybe_remap_kv_scale_name)
+from light_vllm.models.utils import is_pp_missing_parameter
 
 logger = logging.get_logger(__name__)
 
@@ -36,8 +39,9 @@ class XLMRobertaEmbeddings(nn.Module):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
@@ -61,7 +65,7 @@ class XLMRobertaEmbeddings(nn.Module):
         )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+            self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         if position_ids is None:
             if input_ids is not None:
@@ -118,9 +122,11 @@ class XLMRobertaEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfAttention with Roberta->XLMRoberta
 class XLMRobertaSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None,
+                 position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -128,13 +134,28 @@ class XLMRobertaSelfAttention(nn.Module):
                 f"heads ({config.num_attention_heads})"
             )
 
+        hidden_size = config.hidden_size
+        num_heads = config.num_attention_heads
+        num_kv_heads = config.num_attention_heads
+
+        self.num_heads = num_heads
+        self.num_kv_heads = num_kv_heads
+        self.head_dim = hidden_size // num_heads
+        self.q_size = self.num_heads * self.head_dim
+        self.kv_size = self.num_kv_heads * self.head_dim
+
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
+        self.qkv_proj = QKVParallelLinear(
+            config.hidden_size,
+            self.head_dim,
+            num_heads,
+            num_kv_heads,
+            bias=True,
+            quant_config=quant_config,
+        )
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
@@ -150,16 +171,18 @@ class XLMRobertaSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        mixed_query_layer = self.query(hidden_states)
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        qkv, _ = self.qkv_proj(hidden_states)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        key_layer = self.transpose_for_scores(k)
+        value_layer = self.transpose_for_scores(v)
+
+        query_layer = self.transpose_for_scores(q)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -201,9 +224,10 @@ class XLMRobertaSelfAttention(nn.Module):
         return context_layer
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaSelfOutput with Roberta->XLMRoberta
 class XLMRobertaSelfOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -221,20 +245,22 @@ XLM_ROBERTA_SELF_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaAttention with Roberta->XLMRoberta,ROBERTA->XLM_ROBERTA
 class XLMRobertaAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None,
+                 position_embedding_type=None):
         super().__init__()
         self.self = XLM_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
             config, position_embedding_type=position_embedding_type
         )
-        self.output = XLMRobertaSelfOutput(config)
+        self.output = XLMRobertaSelfOutput(config, quant_config)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-    ) -> Tuple[torch.Tensor]:
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -243,70 +269,79 @@ class XLMRobertaAttention(nn.Module):
         return attention_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaIntermediate with Roberta->XLMRoberta
 class XLMRobertaIntermediate(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense = RowParallelLinear(config.hidden_size,
+                                       config.intermediate_size,
+                                       bias=True,
+                                       quant_config=quant_config)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = get_act_fn(config.hidden_act)
         else:
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states, _ = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaOutput with Roberta->XLMRoberta
 class XLMRobertaOutput(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dense = RowParallelLinear(config.intermediate_size, config.hidden_size,
+                                       bias=True,
+                                       quant_config=quant_config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
+        hidden_states, _ = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         hidden_states = self.LayerNorm(hidden_states + input_tensor)
         return hidden_states
 
 
 class XLMRobertaLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.attention = XLMRobertaAttention(config)
-        self.intermediate = XLMRobertaIntermediate(config)
-        self.output = XLMRobertaOutput(config)
+        self.attention = XLMRobertaAttention(config, quant_config)
+        self.intermediate = XLMRobertaIntermediate(config, quant_config)
+        self.output = XLMRobertaOutput(config, quant_config)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-    ) -> Tuple[torch.Tensor]:
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
         )
-
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
 
 class XLMRobertaEncoder(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.layer = nn.ModuleList([XLMRobertaLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([XLMRobertaLayer(config, quant_config) for _ in range(config.num_hidden_layers)])
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
@@ -316,7 +351,9 @@ class XLMRobertaEncoder(nn.Module):
 
 
 class XLMRobertaPooler(nn.Module):
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.activation = nn.Tanh()
@@ -330,22 +367,23 @@ class XLMRobertaPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
-
 class XLMRobertaModel(nn.Module):
-    def __init__(self, config, add_pooling_layer=True):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None,
+                 add_pooling_layer=True):
         super().__init__()
-        self.embeddings = XLMRobertaEmbeddings(config)
-        self.encoder = XLMRobertaEncoder(config)
-        self.pooler = XLMRobertaPooler(config) if add_pooling_layer else None
+        self.embeddings = XLMRobertaEmbeddings(config, quant_config)
+        self.encoder = XLMRobertaEncoder(config, quant_config)
+        self.pooler = XLMRobertaPooler(config, quant_config) if add_pooling_layer else None
 
     def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+            self,
+            input_ids: Optional[torch.Tensor] = None,
+            attention_mask: Optional[torch.Tensor] = None,
+            token_type_ids: Optional[torch.Tensor] = None,
+            position_ids: Optional[torch.Tensor] = None,
+            inputs_embeds: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor]:
 
         if input_ids is not None and inputs_embeds is not None:
@@ -378,7 +416,8 @@ class XLMRobertaModel(nn.Module):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, dtype=embedding_output.dtype)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape,
+                                                                                 dtype=embedding_output.dtype)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -405,9 +444,9 @@ class XLMRobertaModel(nn.Module):
             # If the pad token is equal to either BOS, EOS, or SEP, we do not know whether the user should use an
             # attention_mask or not. In this case, we should still show a warning because this is a rare case.
             if (
-                (self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id)
-                or (self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id)
-                or (self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id)
+                    (self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id)
+                    or (self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id)
+                    or (self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id)
             ):
                 warn_string += (
                     f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
@@ -418,7 +457,7 @@ class XLMRobertaModel(nn.Module):
             logger.warning_once(warn_string)
 
     def get_extended_attention_mask(
-        self, attention_mask: torch.Tensor, input_shape: Tuple[int], dtype: torch.float = None
+            self, attention_mask: torch.Tensor, input_shape: Tuple[int], dtype: torch.float = None
     ) -> torch.Tensor:
         """
         Makes broadcastable attention and causal masks so that future and masked tokens are ignored.
@@ -455,21 +494,26 @@ class XLMRobertaModel(nn.Module):
 
 
 class XLMRobertaForMaskedLM(nn.Module):
-    _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
+    _ignore_weights_keys = ["roberta.pooler.dense.weight", "roberta.pooler.dense.bias"]
 
-    def __init__(self, config, cache_config, quant_config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None,
+                 *args, **kwargs):
         super().__init__()
         self.config = config
-        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
-        self.lm_head = XLMRobertaLMHead(config)
+        self.quant_config = quant_config
+
+        self.roberta = XLMRobertaModel(config, quant_config, add_pooling_layer=False)
+        self.lm_head = XLMRobertaLMHead(config, quant_config)
 
     def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+            self,
+            input_ids: Optional[torch.LongTensor] = None,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            token_type_ids: Optional[torch.LongTensor] = None,
+            position_ids: Optional[torch.LongTensor] = None,
+            inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.Tensor]:
         sequence_output = self.roberta(
             input_ids,
@@ -482,17 +526,48 @@ class XLMRobertaForMaskedLM(nn.Module):
         return prediction_scores
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
+        stacked_params_mapping = [
+            # (param_name, shard_name, shard_id)
+            ("qkv_proj", "query", "q"),
+            ("qkv_proj", "key", "k"),
+            ("qkv_proj", "value", "v")
+        ]
+
         params_dict = dict(self.named_parameters(remove_duplicate=False))
 
         for name, loaded_weight in weights:
-            print(name)
-            if name not in params_dict:
+            if name in self._ignore_weights_keys:
                 continue
 
-            param = params_dict[name]
-            weight_loader = getattr(param, "weight_loader",
-                                    default_weight_loader)
-            weight_loader(param, loaded_weight)
+            for (param_name, weight_name, shard_id) in stacked_params_mapping:
+                if weight_name not in name:
+                    continue
+
+                name = name.replace(weight_name, param_name)
+
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                if is_pp_missing_parameter(name, self):
+                    continue
+
+                param = params_dict[name]
+                weight_loader = param.weight_loader
+                weight_loader(param, loaded_weight, shard_id)
+                break
+            else:
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                # Remapping the name of FP8 kv-scale.
+                name = maybe_remap_kv_scale_name(name, params_dict)
+                if name is None:
+                    continue
+                if is_pp_missing_parameter(name, self):
+                    continue
+                param = params_dict[name]
+                weight_loader = getattr(param, "weight_loader",
+                                        default_weight_loader)
+                weight_loader(param, loaded_weight)
 
         self.tie_weights()
 
@@ -504,7 +579,9 @@ class XLMRobertaForMaskedLM(nn.Module):
 class XLMRobertaLMHead(nn.Module):
     """Roberta Head for masked language modeling."""
 
-    def __init__(self, config):
+    def __init__(self,
+                 config: XLMRobertaConfig,
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -520,7 +597,6 @@ class XLMRobertaLMHead(nn.Module):
         return x
 
 
-# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
