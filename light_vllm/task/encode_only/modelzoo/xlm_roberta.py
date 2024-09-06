@@ -26,6 +26,9 @@ from light_vllm.layers.activation import get_act_fn
 from light_vllm.layers.linear import QKVParallelLinear, RowParallelLinear
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
+import torch.nn.functional as F
+from vllm_flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
+#from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 
 from light_vllm.task.base.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
@@ -171,9 +174,10 @@ class XLMRobertaSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        extended_attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
 
         qkv, _ = self.qkv_proj(hidden_states)
@@ -205,9 +209,9 @@ class XLMRobertaSelfAttention(nn.Module):
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
+        if extended_attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in XLMRobertaModel forward() function)
-            attention_scores = attention_scores + attention_mask
+            attention_scores = attention_scores + extended_attention_mask
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -234,11 +238,7 @@ class XLMRobertaSPDASelfAttention(XLMRobertaSelfAttention):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        output_attentions: Optional[bool] = False,
+        extended_attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
 
         bsz, tgt_len, _ = hidden_states.size()
@@ -263,12 +263,11 @@ class XLMRobertaSPDASelfAttention(XLMRobertaSelfAttention):
             key_layer = key_layer.contiguous()
             value_layer = value_layer.contiguous()
 
-
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_layer,
             key_layer,
             value_layer,
-            attn_mask=attention_mask,
+            attn_mask=extended_attention_mask,
             dropout_p=self.dropout_prob if self.training else 0.0,
             is_causal=False,
         )
@@ -276,6 +275,63 @@ class XLMRobertaSPDASelfAttention(XLMRobertaSelfAttention):
         attn_output = attn_output.transpose(1, 2)
         attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
         return attn_output
+
+
+class XLMRobertaFLashAttentionSelfAttention(XLMRobertaSelfAttention):
+    def __init__(self, config):
+        super().__init__(config)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = False
+        self.scaling = self.head_dim ** -0.5
+
+    def unpad_input(self, hidden_states, attention_mask):
+        valid_mask = attention_mask.squeeze(1).squeeze(1).eq(0)
+        seqlens_in_batch = valid_mask.sum(dim=-1, dtype=torch.int32)
+        indices = torch.nonzero(valid_mask.flatten(), as_tuple=False).flatten()
+        max_seqlen_in_batch = seqlens_in_batch.max().item()
+        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.torch.int32), (1, 0))
+        hidden_states = hidden_states[indices]
+        return hidden_states, indices, cu_seqlens, max_seqlen_in_batch
+
+    def forward(
+            self,
+            hidden_states: torch.Tensor,
+            attention_mask: Optional[torch.FloatTensor] = None,
+            extended_attention_mask: Optional[torch.FloatTensor] = None,
+    ) -> torch.Tensor:
+        batch_size, seqlen, _ = hidden_states.size()
+        qkv, _ = self.qkv_proj(hidden_states)
+        query_states, key_states, value_states = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+
+        query_states = query_states.view(-1, self.num_heads, self.head_dim)
+        key_states = key_states.view(-1, self.num_kv_heads, self.head_dim)
+        value_states = value_states.view(-1, self.num_kv_heads, self.head_dim)
+
+        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+        indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+        max_seqlen_in_batch = seqlens_in_batch.max().item()
+        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+
+        query_states = query_states[indices]
+        key_states = key_states[indices]
+        value_states = value_states[indices]
+
+        attn_output_unpad = flash_attn_varlen_func(
+            query_states,
+            key_states,
+            value_states,
+            cu_seqlens_q=cu_seqlens,
+            cu_seqlens_k=cu_seqlens,
+            max_seqlen_q=max_seqlen_in_batch,
+            max_seqlen_k=max_seqlen_in_batch,
+            softmax_scale=self.scaling,
+            causal=False
+        )
+        hidden_states = torch.empty_like(hidden_states)
+        hidden_states = hidden_states.view(batch_size * seqlen, -1)
+        hidden_states[indices] = attn_output_unpad.view(-1, self.num_heads*self.head_dim)
+        out = hidden_states.view(batch_size, seqlen, -1)
+        return out
 
 
 class XLMRobertaSelfOutput(nn.Module):
@@ -299,17 +355,19 @@ class XLMRobertaAttention(nn.Module):
                  config: XLMRobertaConfig,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.self = XLMRobertaSPDASelfAttention(config)
+        self.self = XLMRobertaSelfAttention(config)
         self.output = XLMRobertaSelfOutput(config, quant_config)
 
     def forward(
             self,
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.FloatTensor] = None,
+            extended_attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
+            extended_attention_mask
         )
         attention_output = self.output(self_outputs, hidden_states)
         return attention_output
@@ -366,10 +424,12 @@ class XLMRobertaLayer(nn.Module):
             self,
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.FloatTensor] = None,
+            extended_attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
             attention_mask,
+            extended_attention_mask
         )
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
@@ -387,11 +447,13 @@ class XLMRobertaEncoder(nn.Module):
             self,
             hidden_states: torch.Tensor,
             attention_mask: Optional[torch.FloatTensor] = None,
+            extended_attention_mask: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
                 attention_mask,
+                extended_attention_mask
             )
         return hidden_states
 
@@ -467,7 +529,8 @@ class XLMRobertaModel(nn.Module):
 
         encoder_outputs = self.encoder(
             embedding_output,
-            attention_mask=extended_attention_mask,
+            attention_mask,
+            extended_attention_mask=extended_attention_mask,
         )
         return encoder_outputs
 
