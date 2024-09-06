@@ -134,7 +134,7 @@ def example_prompts():
         "The president of the United States is",
         "The capital of France is",
         "The future of AI is",
-    ] * 10
+    ] * 11
     random.shuffle(prompts)
     return prompts
 
