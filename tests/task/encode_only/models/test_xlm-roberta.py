@@ -1,6 +1,6 @@
 
 import pytest
-
+import random
 from typing import (Any, Callable, Dict, List, Optional, Tuple, TypedDict,
                     TypeVar, Union)
 
@@ -69,7 +69,14 @@ class HfRunner:
                                        padding=True,
                                        truncation=True,
                                        return_tensors='pt').to("cuda")
-        return self.model(**encoded_input).logits
+
+        logits = self.model(**encoded_input).logits
+        seq_len = encoded_input.attention_mask.sum(axis=1)
+
+        logits_list = []
+        for e, s in zip(logits, seq_len):
+            logits_list.append(e[:s])
+        return logits_list
 
     def __enter__(self):
         return self
@@ -83,6 +90,7 @@ class VllmRunner:
     def __init__(
         self,
         model_name: str,
+        max_num_seqs: int = 4,
         tokenizer_name: Optional[str] = None,
         dtype: str = "half",
     ) -> None:
@@ -90,6 +98,7 @@ class VllmRunner:
             model=model_name,
             tokenizer=tokenizer_name,
             trust_remote_code=True,
+            max_num_seqs=max_num_seqs,
             dtype=dtype)
 
     def encode(self, prompts: List[str]) -> List[List[float]]:
@@ -98,7 +107,7 @@ class VllmRunner:
         for req_output in req_outputs:
             embedding = req_output.outputs
             outputs.append(embedding)
-        return torch.stack(outputs)
+        return outputs
 
     def __enter__(self):
         return self
@@ -120,12 +129,14 @@ def vllm_runner():
 
 @pytest.fixture(scope="session")
 def example_prompts():
-    return [
+    prompts = [
         "Hello, my name is",
         "The president of the United States is",
         "The capital of France is",
         "The future of AI is",
-    ]
+    ] * 10
+    random.shuffle(prompts)
+    return prompts
 
 
 MODELS = [
@@ -144,6 +155,7 @@ def compare_embeddings(embeddings1, embeddings2):
 
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["half"])
+@pytest.mark.parametrize("max_num_seqs", [4, 8])
 @torch.inference_mode
 def test_models(
     hf_runner,
@@ -151,11 +163,12 @@ def test_models(
     example_prompts,
     model: str,
     dtype: str,
+    max_num_seqs: int
 ) -> None:
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.encode(example_prompts)
 
-    with vllm_runner(model, dtype=dtype) as vllm_model:
+    with vllm_runner(model, dtype=dtype, max_num_seqs=max_num_seqs) as vllm_model:
         vllm_outputs = vllm_model.encode(example_prompts)
 
     similarities = compare_embeddings(hf_outputs, vllm_outputs)
