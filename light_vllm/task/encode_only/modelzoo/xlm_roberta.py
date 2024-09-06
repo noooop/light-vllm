@@ -18,7 +18,6 @@
 
 import math
 from typing import Iterable, List, Optional, Tuple, Union
-
 import torch
 from torch import nn
 from transformers import XLMRobertaConfig
@@ -27,6 +26,7 @@ from light_vllm.layers.activation import get_act_fn
 from light_vllm.layers.linear import QKVParallelLinear, RowParallelLinear
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
+
 from light_vllm.task.base.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from light_vllm.models.utils import is_pp_missing_parameter
@@ -224,6 +224,60 @@ class XLMRobertaSelfAttention(nn.Module):
         return context_layer
 
 
+class XLMRobertaSPDASelfAttention(XLMRobertaSelfAttention):
+    def __init__(self, config):
+        super().__init__(config)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> torch.Tensor:
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        qkv, _ = self.qkv_proj(hidden_states)
+        query, key, value = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+
+        query_layer = self.transpose_for_scores(query)
+
+        attention_mask = attention_mask
+
+        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
+
+        key_layer = self.transpose_for_scores(key)
+        value_layer = self.transpose_for_scores(value)
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=False,
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+        return attn_output
+
+
 class XLMRobertaSelfOutput(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
@@ -240,20 +294,12 @@ class XLMRobertaSelfOutput(nn.Module):
         return hidden_states
 
 
-XLM_ROBERTA_SELF_ATTENTION_CLASSES = {
-    "eager": XLMRobertaSelfAttention,
-}
-
-
 class XLMRobertaAttention(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
-                 quant_config: Optional[QuantizationConfig] = None,
-                 position_embedding_type=None):
+                 quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.self = XLM_ROBERTA_SELF_ATTENTION_CLASSES[config._attn_implementation](
-            config, position_embedding_type=position_embedding_type
-        )
+        self.self = XLMRobertaSPDASelfAttention(config)
         self.output = XLMRobertaSelfOutput(config, quant_config)
 
     def forward(
@@ -522,8 +568,14 @@ class XLMRobertaForMaskedLM(nn.Module):
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
         )
-        prediction_scores = self.lm_head(sequence_output)
-        return prediction_scores
+        logits = self.lm_head(sequence_output)
+
+        seq_len = attention_mask.sum(axis=1)
+
+        logits_list = []
+        for e, s in zip(logits, seq_len):
+            logits_list.append(e[:s])
+        return logits_list
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
         stacked_params_mapping = [
