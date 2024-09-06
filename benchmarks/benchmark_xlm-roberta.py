@@ -54,26 +54,29 @@ def benchmark_vllm(args):
         max_model_len=args.max_model_len,
         quantization_param_path=args.quantization_param_path,
         device=args.device,
-        max_num_seqs=args.max_num_seqs,
+        max_num_seqs=32,
     )
 
     engine = LLMEngine.from_engine_args(engine_args)
 
-    start = time.perf_counter()
-    for request_id, prompt in enumerate(requests):
-        engine.add_request(str(request_id), prompt)
+    for batchsize in args.batchsize:
+        engine.engine_config.scheduler_config.set_args(max_num_seqs=batchsize)
 
-    n_step = 0
-    while engine.has_unfinished_requests():
-        engine.step()
-        n_step += 1
-    end = time.perf_counter()
+        start = time.perf_counter()
+        for request_id, prompt in enumerate(requests):
+            engine.add_request(str(request_id), prompt)
 
-    elapsed_time = end - start
-    delay = elapsed_time / n_step
+        n_step = 0
+        while engine.has_unfinished_requests():
+            engine.step()
+            n_step += 1
+        end = time.perf_counter()
 
-    print(f"Batchsize {args.max_num_seqs}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
-          f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
+        elapsed_time = end - start
+        delay = elapsed_time / n_step
+
+        print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
+              f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
 
 
 if __name__ == '__main__':
@@ -94,9 +97,7 @@ if __name__ == '__main__':
 
     args.dtype = "half"
     args.device = "cuda"
-
-    batchsize = [1, 2, 4, 8, 16, 32, 64]
-
+    args.batchsize = [1, 2, 4, 8, 16, 32, 64]
     from concurrent.futures import ProcessPoolExecutor
 
     def run_hf(args):
@@ -104,8 +105,6 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_hf, args)
             f.result()
 
-
-    #args.batchsize = batchsize
     #run_hf(args)
 
     def run_vllm(args):
@@ -113,6 +112,4 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    for bs in batchsize:
-        args.max_num_seqs = bs
-        run_vllm(args)
+    run_vllm(args)

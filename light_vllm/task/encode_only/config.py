@@ -1,7 +1,5 @@
-
 from dataclasses import dataclass, field, fields
 from typing import TYPE_CHECKING, ClassVar, List, Optional, Tuple, Type, Union
-
 
 from light_vllm.logger import init_logger
 from light_vllm.task.base.config import EngineConfig, ModelConfig
@@ -29,12 +27,22 @@ class EncodeOnlySchedulerConfig:
 
     def __init__(self,
                  max_model_len: int,
-                 max_num_batched_tokens: Optional[int],
+                 max_num_batched_tokens: Optional[int] = None,
                  max_num_requests: Optional[int] = None,
                  max_num_seqs: Optional[int] = None,
                  ) -> None:
         self.max_model_len = max_model_len
+        self.max_num_requests: int = 0
+        self.max_num_batched_tokens: int = 0
 
+        self.set_args(max_num_batched_tokens,
+                      max_num_requests,
+                      max_num_seqs)
+
+    def set_args(self,
+                 max_num_batched_tokens: Optional[int] = None,
+                 max_num_requests: Optional[int] = None,
+                 max_num_seqs: Optional[int] = None, ):
         if max_num_seqs is not None:
             self.max_num_requests = max_num_seqs
         else:
@@ -43,8 +51,7 @@ class EncodeOnlySchedulerConfig:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
         else:
-            self.max_num_batched_tokens = max_model_len * self.max_num_requests
-
+            self.max_num_batched_tokens = self.max_model_len * self.max_num_requests
 
         self._verify_args()
 
