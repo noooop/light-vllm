@@ -4,7 +4,6 @@ from typing import Iterable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 import torch.nn.functional as F
-
 from light_vllm.task.encode_only.modelzoo.xlm_roberta import XLMRobertaModel, XLMRobertaConfig
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
@@ -27,33 +26,24 @@ class BGEM3Model(nn.Module):
         self.config = config
         self.quant_config = quant_config
         self.sentence_pooling_method = sentence_pooling_method
+        assert self.sentence_pooling_method == 'cls'
         self.normlized = normlized
-
-        self.roberta = XLMRobertaModel(config, quant_config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, quant_config)
 
     def forward(
             self,
             input_ids: Optional[torch.LongTensor] = None,
             attention_mask: Optional[torch.FloatTensor] = None,
-            token_type_ids: Optional[torch.LongTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> Tuple[torch.Tensor]:
+        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
 
         sequence_output = self.roberta(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            inputs_embeds=inputs_embeds,
         )
 
-        if self.sentence_pooling_method == 'cls':
-            dense_vecs = sequence_output[:, 0]
-        elif self.sentence_pooling_method == 'mean':
-            s = torch.sum(sequence_output * attention_mask.unsqueeze(-1).float(), dim=1)
-            d = attention_mask.sum(axis=1, keepdim=True).float()
-            dense_vecs = s / d
+        dense_vecs = sequence_output[cu_seqlens[:-1]]
 
         if self.normlized:
             dense_vecs = torch.nn.functional.normalize(dense_vecs, dim=-1)
@@ -74,6 +64,12 @@ class BGEM3Model(nn.Module):
             name = "roberta." + name
 
             if name in self._ignore_weights_keys:
+                continue
+
+            if name == "roberta.embeddings.token_type_embeddings.weight":
+                # token_type_ids is all zero, so we only need token_type_embeddings[0]
+                self.roberta.embeddings.init_token_type_embeddings0()
+                default_weight_loader(self.roberta.embeddings.token_type_embeddings0, loaded_weight[0])
                 continue
 
             for (param_name, weight_name, shard_id) in stacked_params_mapping:

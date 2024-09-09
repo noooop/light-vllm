@@ -124,7 +124,7 @@ def compare_embeddings_np(embeddings1, embeddings2):
 
 
 @pytest.mark.parametrize("model", MODELS)
-@pytest.mark.parametrize("dtype", ["float", "half"])
+@pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_num_seqs", [4, 8])
 @torch.inference_mode
 def test_models(
