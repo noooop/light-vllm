@@ -5,37 +5,21 @@ from typing import TYPE_CHECKING, TypedDict, List, Optional, Tuple, Dict
 import torch
 from light_vllm.task.base.schema.sequence import Logprob, PromptLogprobs
 from light_vllm.task.base.schema.execute_io import ModelInput, ExecuteOutput
-
-
-if TYPE_CHECKING:
-    from light_vllm.layers.attention import AttentionMetadata
-    from light_vllm.layers.sampling_metadata import SamplingMetadata
+from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttentionMetadata
 
 
 @dataclass(frozen=True)
 class ModelInputForGPU(ModelInput):
-    """
-    This base class contains metadata needed for the base model forward pass
-    but not metadata for possible additional steps, e.g., sampling. Model
-    runners that run additional steps should subclass this method to add
-    additional fields.
-    """
-    input_tokens: Optional[torch.Tensor] = None
-    input_positions: Optional[torch.Tensor] = None
-    seq_lens: Optional[List[int]] = None
-    query_lens: Optional[List[int]] = None
-    attn_metadata: Optional["AttentionMetadata"] = None
+    input_ids: torch.Tensor
+    positions: torch.Tensor
+    attn_metadata: EncodeOnlyAttentionMetadata
 
+    def to(self, device):
+        for k in self.__dict__.keys():
+            self.__dict__[k] = self.__dict__[k].to(device)
 
-@dataclass(frozen=True)
-class ModelInputForGPUWithSamplingMetadata(ModelInputForGPU):
-    """
-    Used by the ModelRunner.
-    """
-    sampling_metadata: Optional["SamplingMetadata"] = None
-    # Used for speculative decoding. We do not broadcast it because it is only
-    # used by the driver worker.
-    is_prompt: Optional[bool] = None
+    def to_dict(self):
+        return self.__dict__
 
 
 class SequenceOutput:

@@ -27,8 +27,8 @@ from light_vllm.layers.linear import QKVParallelLinear, RowParallelLinear, Colum
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 import torch.nn.functional as F
-from vllm_flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
-#from flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
+
+from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttention, EncodeOnlyAttentionMetadata
 
 from light_vllm.task.base.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
@@ -60,7 +60,7 @@ class XLMRobertaEmbeddings(nn.Module):
                         device=self.word_embeddings.weight.device)
         )
 
-    def forward(self, input_ids, position_ids):
+    def forward(self, input_ids, positions):
         embeddings = self.word_embeddings(input_ids)
 
         # token_type_embeddings is all zero in FacebookAI/xlm-roberta, so we don't need it.
@@ -69,7 +69,7 @@ class XLMRobertaEmbeddings(nn.Module):
             token_type_embeddings = self.token_type_embeddings0
             embeddings += token_type_embeddings
 
-        embeddings += self.position_embeddings(position_ids)
+        embeddings += self.position_embeddings(positions)
         embeddings = self.LayerNorm(embeddings)
         return embeddings
 
@@ -89,9 +89,7 @@ class XLMRobertaFLashAttentionSelfAttention(nn.Module):
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
 
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.scaling = self.head_dim ** -0.5
 
         self.qkv_proj = QKVParallelLinear(
             config.hidden_size,
@@ -102,7 +100,11 @@ class XLMRobertaFLashAttentionSelfAttention(nn.Module):
             quant_config=quant_config,
         )
 
-        self.scaling = self.head_dim ** -0.5
+        self.attn = EncodeOnlyAttention(self.num_heads,
+                                        self.head_dim,
+                                        self.scaling,
+                                        num_kv_heads=self.num_kv_heads,
+                                        quant_config=quant_config)
 
     def forward(
             self,
@@ -110,26 +112,8 @@ class XLMRobertaFLashAttentionSelfAttention(nn.Module):
             attn_metadata=None,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
-        query_states, key_states, value_states = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-
-        query_states = query_states.view(-1, self.num_heads, self.head_dim)
-        key_states = key_states.view(-1, self.num_kv_heads, self.head_dim)
-        value_states = value_states.view(-1, self.num_kv_heads, self.head_dim)
-
-        seqlens_in_batch, max_seqlen_in_batch, cu_seqlens = attn_metadata
-
-        attn_output = flash_attn_varlen_func(
-            query_states,
-            key_states,
-            value_states,
-            cu_seqlens_q=cu_seqlens,
-            cu_seqlens_k=cu_seqlens,
-            max_seqlen_q=max_seqlen_in_batch,
-            max_seqlen_k=max_seqlen_in_batch,
-            softmax_scale=self.scaling,
-            causal=False
-        )
-        attn_output = attn_output.view(-1, self.num_heads*self.head_dim)
+        q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
+        attn_output = self.attn(q, k, v, attn_metadata)
         return attn_output
 
 
@@ -213,7 +197,7 @@ class XLMRobertaLayer(nn.Module):
     def forward(
             self,
             hidden_states: torch.Tensor,
-            attn_metadata=None,
+            attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         attention_output = self.attention(
             hidden_states,
@@ -255,30 +239,20 @@ class XLMRobertaModel(nn.Module):
 
     def forward(
             self,
-            input_ids: Optional[torch.Tensor] = None,
-            attention_mask: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-        indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
-        max_seqlen_in_batch = seqlens_in_batch.max().item()
-        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-
-        input_ids = input_ids.view(-1)[indices]
-        position_ids = torch.zeros_like(input_ids)
-        for offset, n in zip(cu_seqlens, seqlens_in_batch):
-            position_ids[offset:offset+n] = torch.arange(self.config.pad_token_id+1,
-                                                          self.config.pad_token_id+1+n,
-                                                          dtype=position_ids.dtype,
-                                                          device=position_ids.device)
+            input_ids: torch.Tensor,
+            positions: torch.Tensor,
+            attn_metadata: EncodeOnlyAttentionMetadata,
+    ) -> torch.Tensor:
+        positions += self.config.pad_token_id
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
-            position_ids=position_ids,
+            positions=positions,
         )
 
         encoder_outputs = self.encoder(
             hidden_states=embedding_output,
-            attn_metadata=(seqlens_in_batch, max_seqlen_in_batch, cu_seqlens)
+            attn_metadata=attn_metadata
         )
 
         return encoder_outputs
@@ -324,23 +298,17 @@ class XLMRobertaForMaskedLM(nn.Module):
 
     def forward(
             self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        batchsize = input_ids.shape[0]
-        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
-
+            input_ids: torch.Tensor,
+            positions: torch.Tensor,
+            attn_metadata: EncodeOnlyAttentionMetadata,
+    ) -> torch.Tensor:
         sequence_output = self.roberta(
             input_ids,
-            attention_mask=attention_mask,
+            positions,
+            attn_metadata,
         )
         logits = self.lm_head(sequence_output)
-
-        logits_list = []
-        for i in range(batchsize):
-            logits_list.append(logits[cu_seqlens[i]:cu_seqlens[i+1]])
-        return logits_list
+        return logits
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
         stacked_params_mapping = [

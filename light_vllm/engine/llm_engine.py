@@ -80,6 +80,9 @@ class LLMEngine:
         # workflow
         self.workflow = workflow
 
+        # attn_backend
+        self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
+
         # executor
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
 

@@ -16,7 +16,7 @@ from light_vllm.logger import init_logger
 from light_vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
                               is_hip,
                               is_pin_memory_available)
-from light_vllm.task.chat.schema.execute_io import ModelInputForGPUWithSamplingMetadata
+from light_vllm.task.encode_only.schema.execute_io import ModelInputForGPU
 
 logger = init_logger(__name__)
 
@@ -94,9 +94,9 @@ class ModelRunner(GPUModelRunnerBase):
     @torch.inference_mode()
     def execute_model(
         self,
-        model_input: ModelInputForGPUWithSamplingMetadata,
+        model_input: ModelInputForGPU,
         kv_caches: List[torch.Tensor],
     ):
-        batch_data = model_input.batch_data.to("cuda")
-        return self.model(**batch_data)
+        model_input.to(self.device)
+        return self.model(**model_input.to_dict())
 

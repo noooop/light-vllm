@@ -5,6 +5,7 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 from light_vllm.task.encode_only.modelzoo.xlm_roberta import XLMRobertaModel, XLMRobertaConfig
+from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttentionMetadata
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 
@@ -32,18 +33,20 @@ class BGEM3Model(nn.Module):
 
     def forward(
             self,
-            input_ids: Optional[torch.LongTensor] = None,
-            attention_mask: Optional[torch.FloatTensor] = None,
-    ) -> Tuple[torch.Tensor]:
-        seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
-        cu_seqlens = F.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+            input_ids: torch.Tensor,
+            positions: torch.Tensor,
+            attn_metadata: EncodeOnlyAttentionMetadata,
+    ) -> torch.Tensor:
 
         sequence_output = self.roberta(
             input_ids,
-            attention_mask=attention_mask,
+            positions,
+            attn_metadata,
         )
 
-        dense_vecs = sequence_output[cu_seqlens[:-1]]
+        seq_start_loc = attn_metadata.seq_start_loc
+
+        dense_vecs = sequence_output[seq_start_loc[:-1]]
 
         if self.normlized:
             dense_vecs = torch.nn.functional.normalize(dense_vecs, dim=-1)

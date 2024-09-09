@@ -1,6 +1,6 @@
 
 TASK = "retriever"
-WORKFLOW = "light_vllm.task.encode_only.workflow:EncodeOnlyWorkflow"
+WORKFLOW = "light_vllm.task.retriever.workflow:RetrieverWorkflow"
 
 # Architecture -> (task, module, class, workflow).
 RETRIEVER_MODELS = {

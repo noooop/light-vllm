@@ -30,5 +30,6 @@ class Workflow:
     OutputProcessor: str = "light_vllm.task.base.processor.output_processor:OutputProcessor"
     ModelPreProcessor: str = "light_vllm.base.chat.processor.model_pre_processor:PreProcessor"
     Worker: str = "light_vllm.task.base.worker.gpu_worker:Worker"
+    GetAttnBackend: str
 
 
