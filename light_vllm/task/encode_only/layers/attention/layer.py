@@ -3,9 +3,8 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.nn as nn
 
-from light_vllm.task.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend, EncodeOnlyAttentionMetadata, EncodeOnlyAttentionImpl, AttentionType
-
-from light_vllm.task.encode_only.layers.attention.selector import get_attn_backend
+from light_vllm.task.base.layers.attention.abstract import AttentionType
+from light_vllm.task.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend, EncodeOnlyAttentionMetadata
 from light_vllm.task.base.config import CacheConfig
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
@@ -36,6 +35,7 @@ class EncodeOnlyAttention(nn.Module):
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
         prefix: str = "",
+        attn_backend: Optional[EncodeOnlyAttentionBackend] = None,
     ) -> None:
         super().__init__()
         if cache_config is not None:
@@ -73,13 +73,6 @@ class EncodeOnlyAttention(nn.Module):
             self.quant_method = quant_method
             self.quant_method.create_weights(self)
 
-        # During model initialization, the default dtype is set as the model
-        # weight and activation dtype.
-        dtype = torch.get_default_dtype()
-        attn_backend = get_attn_backend(num_heads, head_size, num_kv_heads,
-                                        sliding_window, dtype, kv_cache_dtype,
-                                        block_size, blocksparse_params
-                                        is not None)
         impl_cls = attn_backend.get_impl_cls()
         self.impl = impl_cls(num_heads, head_size, scale, num_kv_heads,
                              alibi_slopes, sliding_window, kv_cache_dtype,

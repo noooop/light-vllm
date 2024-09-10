@@ -1,8 +1,8 @@
 
 from dataclasses import dataclass
-from typing import List
+from typing import List, Iterable
 import torch
-from light_vllm.task.base.schema.engine_io import Request, PromptInput, TextOnlyInputs, SchedulableRequest, RequestOutput
+from light_vllm.task.base.schema.engine_io import Request, PromptInput, TextOnlyInputs, SchedulableRequest, RequestOutput, SchedulerOutput
 
 
 @dataclass
@@ -22,6 +22,14 @@ class EncodeOnlySchedulableRequest(SchedulableRequest):
     @property
     def num_new_tokens(self):
         return len(self.inputs.prompt_token_ids)
+
+
+@dataclass
+class EncodeOnlySchedulerOutput(SchedulerOutput):
+    scheduled_requests: Iterable[EncodeOnlyRequest]
+
+    def is_empty(self) -> bool:
+        return not self.scheduled_requests
 
 
 class EncodeOnlyRequestOutput(RequestOutput):

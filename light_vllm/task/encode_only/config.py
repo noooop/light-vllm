@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, ClassVar, List, Optional, Tuple, Type, Union
+from dataclasses import dataclass, fields
+from typing import Optional
 
 from light_vllm.logger import init_logger
-from light_vllm.task.base.config import EngineConfig, ModelConfig
+from light_vllm.task.base.config import EngineConfig, ModelConfig, SchedulerConfig
 
 logger = init_logger(__name__)
 
@@ -13,7 +13,7 @@ class EncodeOnlyModelConfig(ModelConfig):
     pass
 
 
-class EncodeOnlySchedulerConfig:
+class EncodeOnlySchedulerConfig(SchedulerConfig):
     """Scheduler configuration.
 
     Args:

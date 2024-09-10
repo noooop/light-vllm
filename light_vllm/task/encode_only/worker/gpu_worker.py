@@ -1,54 +1,38 @@
-"""A GPU worker class."""
-import gc
+
 import os
-from typing import List, Optional, Set, Tuple, Type
-
 import torch
-import torch.distributed
-
-from light_vllm.task.base.config import DeviceConfig, LoadConfig
-from light_vllm.task.encode_only.config import ModelConfig, EncodeOnlySchedulerConfig, EncodeOnlyEngineConfig
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.platforms import current_platform
-from light_vllm.task.encode_only.runner.model_runner import GPUModelRunnerBase, ModelRunner
-from light_vllm.task.base.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
+from light_vllm.task.base.config import DeviceConfig, LoadConfig
+from light_vllm.task.encode_only.config import ModelConfig, EncodeOnlySchedulerConfig, EncodeOnlyEngineConfig
+
+from light_vllm.task.encode_only.runner.model_runner import ModelRunner
+from light_vllm.task.encode_only.schema.execute_io import EncodeOnlyExecuteInput
+from light_vllm.task.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
 
 
-class Worker(LocalOrDistributedWorkerBase):
-    """A worker class that executes (a partition of) the model on a GPU.
-
-    Each worker is associated with a single GPU. The worker is responsible for
-    maintaining the KV cache and executing the model on the GPU. In case of
-    distributed inference, each worker is assigned a partition of the model.
-    """
-
+class Worker:
     def __init__(
         self,
         engine_config: EncodeOnlyEngineConfig,
-        is_driver_worker: bool = False,
-        model_runner_cls: Optional[Type[GPUModelRunnerBase]] = None,
+        attn_backend: EncodeOnlyAttentionBackend,
     ) -> None:
         self.model_config: ModelConfig = engine_config.model_config
         self.scheduler_config: EncodeOnlySchedulerConfig = engine_config.scheduler_config
         self.device_config: DeviceConfig = engine_config.device_config
         self.load_config: LoadConfig = engine_config.load_config
 
-        self.is_driver_worker = is_driver_worker
         if self.model_config.trust_remote_code:
             # note: lazy import to avoid importing torch before initializing
             from light_vllm.utils import init_cached_hf_modules
             init_cached_hf_modules()
 
-        ModelRunnerClass: Type[GPUModelRunnerBase] = ModelRunner
-        if model_runner_cls is not None:
-            ModelRunnerClass = model_runner_cls
-
-        self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
+        self.model_runner = ModelRunner(
             self.model_config,
             self.scheduler_config,
             self.device_config,
-            load_config=self.load_config,
-            is_driver_worker=is_driver_worker,
+            self.load_config,
+            attn_backend
         )
 
     def init_device(self) -> None:
@@ -81,45 +65,10 @@ class Worker(LocalOrDistributedWorkerBase):
         self.model_runner.load_model()
 
     @torch.inference_mode
-    def __call__(
-        self,
-        execute_input
-    ):
-        """Executes at least one model step on the given sequences, unless no
-        sequences are provided."""
-
-        self.execute_worker(execute_input.worker_input)
-
+    def __call__(self, execute_input: EncodeOnlyExecuteInput):
         output = self.model_runner.execute_model(
-            execute_input.model_input,
-            self.kv_cache if self.kv_cache is not None else None)
-
+            execute_input.model_input)
         return output
-
-    @torch.inference_mode()
-    def execute_worker(self, worker_input: WorkerInput) -> None:
-        pass
-
-    @property
-    def max_model_len(self) -> int:
-        return self.model_config.max_model_len
-
-    @property
-    def vocab_size(self) -> int:
-        return self.model_runner.vocab_size
-
-    def get_cache_block_size_bytes(self) -> int:
-        return 0
-
-    def determine_num_available_blocks(self):
-        pass
-
-    def initialize_cache(self, num_gpu_blocks: int,
-                         num_cpu_blocks: int) -> None:
-        pass
-    @property
-    def kv_cache(self) -> Optional[List[List[torch.Tensor]]]:
-        return None
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):
@@ -134,19 +83,3 @@ def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):
                 f"{compute_capability[0]}.{compute_capability[1]}. "
                 "You can use float16 instead by explicitly setting the"
                 "`dtype` flag in CLI, for example: --dtype=half.")
-
-
-def raise_if_cache_size_invalid(num_gpu_blocks, block_size,
-                                max_model_len) -> None:
-    if num_gpu_blocks <= 0:
-        raise ValueError("No available memory for the cache blocks. "
-                         "Try increasing `gpu_memory_utilization` when "
-                         "initializing the engine.")
-    max_seq_len = block_size * num_gpu_blocks
-    if max_model_len > max_seq_len:
-        raise ValueError(
-            f"The model's max seq len ({max_model_len}) "
-            "is larger than the maximum number of tokens that can be "
-            f"stored in KV cache ({max_seq_len}). Try increasing "
-            "`gpu_memory_utilization` or decreasing `max_model_len` when "
-            "initializing the engine.")

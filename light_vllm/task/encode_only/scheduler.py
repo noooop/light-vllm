@@ -1,20 +1,14 @@
-import enum
-import os
-import random
-import time
-from collections import deque
+
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union
+from typing import Set
 
-from light_vllm.task.encode_only.config import EncodeOnlySchedulerConfig
-from light_vllm.logger import init_logger
-from light_vllm.task.encode_only.schema.engine_io import EncodeOnlyRequest
-from light_vllm.task.encode_only.processor.input_processor import EncodeOnlyModelRequestProcessor
-
-from light_vllm.task.base.schema.engine_io import SchedulableRequest, SchedulerOutputs
+from light_vllm.task.base.schema.engine_io import SchedulableRequest
 from light_vllm.task.base.scheduler import Scheduler
+from light_vllm.task.encode_only.schema.engine_io import EncodeOnlySchedulerOutput
+from light_vllm.task.encode_only.processor.input_processor import EncodeOnlyModelRequestProcessor
+from light_vllm.task.encode_only.config import EncodeOnlySchedulerConfig
 
-
+from light_vllm.logger import init_logger
 logger = init_logger(__name__)
 
 
@@ -52,14 +46,6 @@ class SchedulingBudget:
     @property
     def num_curr_request(self):
         return len(self._curr_requests)
-
-
-@dataclass
-class EncodeOnlySchedulerOutputs(SchedulerOutputs):
-    scheduled_requests: Iterable[EncodeOnlyRequest]
-
-    def is_empty(self) -> bool:
-        return not self.scheduled_requests
 
 
 class EncodeOnlyScheduler(Scheduler):
@@ -108,7 +94,7 @@ class EncodeOnlyScheduler(Scheduler):
             scheduler_outputs.append(request)
             self.requests.remove(request.request_id)
 
-        return EncodeOnlySchedulerOutputs(scheduled_requests=scheduler_outputs)
+        return EncodeOnlySchedulerOutput(scheduled_requests=scheduler_outputs)
 
     def free_finished_request(self):
         return

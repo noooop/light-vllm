@@ -515,6 +515,10 @@ class ModelConfig:
         ])
 
 
+class SchedulerConfig:
+    pass
+
+
 _STR_DTYPE_TO_TORCH_DTYPE = {
     "half": torch.float16,
     "float16": torch.float16,
@@ -715,6 +719,7 @@ class EngineConfig:
     model_config: ModelConfig
     device_config: DeviceConfig
     load_config: LoadConfig
+    scheduler_config: SchedulerConfig
 
     def to_dict(self):
         """Return the configs as a dictionary, for use in **kwargs.

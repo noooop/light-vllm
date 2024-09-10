@@ -4,7 +4,8 @@ from abc import ABC, abstractmethod
 from typing import Deque, Union, Iterable, List
 from collections import deque
 from light_vllm.engine.llm_engine import LLMEngine
-from light_vllm.task.base.schema.engine_io import Request, SchedulableRequest, SchedulerOutputs, RequestOutput
+from light_vllm.task.base.config import SchedulerConfig
+from light_vllm.task.base.schema.engine_io import Request, SchedulableRequest, SchedulerOutput, RequestOutput
 from light_vllm.task.base.processor.input_processor import RequestProcessor
 
 from light_vllm.logger import init_logger
@@ -14,7 +15,7 @@ logger = init_logger(__name__)
 class Scheduler(ABC):
     def __init__(
             self,
-            scheduler_config,
+            scheduler_config: SchedulerConfig,
             request_processor: RequestProcessor,
     ) -> None:
         self.scheduler_config = scheduler_config
@@ -61,7 +62,7 @@ class Scheduler(ABC):
         return len(self.requests)
 
     @abstractmethod
-    def schedule(self) -> SchedulerOutputs:
+    def schedule(self) -> SchedulerOutput:
         raise NotImplementedError
 
     @abstractmethod

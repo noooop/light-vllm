@@ -28,7 +28,7 @@ class Workflow:
     InputProcessor: str
     RequestProcessor: str
     OutputProcessor: str
-    ModelProcessor: str
+    ModelInputBuilder: str
     Executor: str
     Worker: str
 

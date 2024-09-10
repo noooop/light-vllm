@@ -15,18 +15,17 @@ import numpy as np
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from torch import nn
+from light_vllm.envs import VLLM_USE_MODELSCOPE
+from light_vllm.logger import init_logger
 
 from light_vllm.task.base.config import DeviceConfig, LoadConfig, LoadFormat
 from light_vllm.task.chat.config import CacheConfig, ModelConfig, SchedulerConfig
-
-from light_vllm.envs import VLLM_USE_MODELSCOPE
-from light_vllm.logger import init_logger
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 
+from light_vllm.task.base.layers.attention.abstract import AttentionBackend
 from light_vllm.task.base.loader.utils import (get_model_architecture,
                                                set_default_torch_dtype)
-from light_vllm.task.base.loader.tensorizer import TensorizerConfig, tensorizer_weights_iterator, load_with_tensorizer, serialize_vllm_model, is_vllm_tensorized
 from light_vllm.task.base.loader.weight_utils import (
     download_safetensors_index_file_from_hf, download_weights_from_hf,
     filter_duplicate_safetensors_files, filter_files_not_needed_for_inference,
@@ -104,18 +103,24 @@ def _get_quantization_config(
     return None
 
 
-def _initialize_model(
-        model_config: ModelConfig,
-        load_config: LoadConfig,
-        cache_config: CacheConfig,
-        scheduler_config: Optional[SchedulerConfig] = None) -> nn.Module:
+def initialize_model(model_config: ModelConfig,
+                     load_config: LoadConfig,
+                     device_config: DeviceConfig,
+                     attn_backend: AttentionBackend,
+                     cache_config: Optional[CacheConfig] = None,
+                     ) -> nn.Module:
     """Initialize a model with the given configurations."""
-    model_class = get_model_architecture(model_config)[0]
-    quant_config = _get_quantization_config(model_config, load_config)
 
-    return model_class(config=model_config.hf_config,
-                       cache_config=cache_config,
-                       quant_config=quant_config)
+    target_device = torch.device(device_config.device)
+    with set_default_torch_dtype(model_config.dtype):
+        with target_device:
+            model_class = get_model_architecture(model_config)[0]
+            quant_config = _get_quantization_config(model_config, load_config)
+
+            return model_class(config=model_config.hf_config,
+                               cache_config=cache_config,
+                               quant_config=quant_config,
+                               attn_backend=attn_backend)
 
 
 class BaseModelLoader(ABC):
@@ -125,7 +130,8 @@ class BaseModelLoader(ABC):
         self.load_config = load_config
 
     @abstractmethod
-    def load_model(self, *, model_config: ModelConfig,
+    def load_model(self, model: nn.Module, *,
+                   model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
                    cache_config: Optional[CacheConfig] = None) -> nn.Module:
@@ -256,15 +262,13 @@ class DefaultModelLoader(BaseModelLoader):
 
         return weights_iterator
 
-    def load_model(self, *, model_config: ModelConfig,
+    def load_model(self, model: nn.Module, *,
+                   model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
                    cache_config: Optional[CacheConfig] = None) -> nn.Module:
         target_device = torch.device(device_config.device)
         with set_default_torch_dtype(model_config.dtype):
-            with target_device:
-                model = _initialize_model(model_config, self.load_config,
-                                          cache_config, scheduler_config)
             model.load_weights(
                 self._get_weights_iterator(model_config.model,
                                            model_config.revision,
@@ -295,265 +299,12 @@ class DummyModelLoader(BaseModelLoader):
             raise ValueError(f"Model loader extra config is not supported for "
                              f"load format {load_config.load_format}")
 
-    def load_model(self, *, model_config: ModelConfig,
+    def load_model(self, model: nn.Module, *,
+                   model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
                    cache_config: Optional[CacheConfig] = None) -> nn.Module:
-        with set_default_torch_dtype(model_config.dtype):
-            with torch.device(device_config.device):
-                model = _initialize_model(model_config, self.load_config,
-                                          cache_config, scheduler_config)
-            # NOTE(woosuk): For accurate performance evaluation, we assign
-            # random values to the weights.
-            initialize_dummy_weights(model)
         return model.eval()
-
-
-class TensorizerLoader(BaseModelLoader):
-    """Model loader using CoreWeave's tensorizer library."""
-
-    def __init__(self, load_config: LoadConfig):
-        super().__init__(load_config)
-        if isinstance(load_config.model_loader_extra_config, TensorizerConfig):
-            self.tensorizer_config = load_config.model_loader_extra_config
-        else:
-            self.tensorizer_config = TensorizerConfig(
-                **load_config.model_loader_extra_config)
-
-    def _verify_config(self, model_config: ModelConfig):
-        self.tensorizer_config.verify_with_model_config(model_config)
-
-    def _get_weights_iterator(
-            self) -> Generator[Tuple[str, torch.Tensor], None, None]:
-        tensorizer_args = self.tensorizer_config._construct_tensorizer_args()
-        return tensorizer_weights_iterator(tensorizer_args)
-
-    def _load_model_serialized_cpu(
-        self,
-        model_config: ModelConfig,
-        device_config: DeviceConfig,
-        cache_config: CacheConfig,
-    ) -> nn.Module:
-        """Load a serialized model with tensorizer to the CPU.
-
-        This is only necessary when the model isn't vLLM-tensorized (see
-        examples/tensorize_vllm_model.py) This should still be faster than
-        default HuggingFace loading, but will be slower than loading a
-        vLLM-tensorized model.
-        """
-        with set_default_torch_dtype(model_config.dtype):
-            with torch.device(device_config.device):
-                model = _initialize_model(model_config, self.load_config,
-                                          cache_config)
-
-            model.load_weights(self._get_weights_iterator())
-        return model.eval()
-
-    def _load_model_serialized(
-        self,
-        model_config: ModelConfig,
-        device_config: DeviceConfig,
-        cache_config: CacheConfig,
-    ) -> nn.Module:
-        """Load a serialized model with tensorizer.
-
-        Expects a vLLM-tensorized model. See the
-        examples/tensorize_vllm_model.py example script
-        for serializing vLLM models."""
-        with set_default_torch_dtype(model_config.dtype):
-            with torch.device(device_config.device):
-                model_class = get_model_architecture(model_config)[0]
-                quant_config = _get_quantization_config(
-                    model_config, self.load_config)
-                extra_kwargs = dict()
-                extra_kwargs["quant_config"] = quant_config
-                extra_kwargs["cache_config"] = cache_config
-
-                tensorizer_config = copy.copy(self.tensorizer_config)
-                tensorizer_config.model_class = model_class
-                tensorizer_config.hf_config = model_config.hf_config
-                tensorizer_config.dtype = model_config.dtype
-
-                model = load_with_tensorizer(tensorizer_config, **extra_kwargs)
-        return model.eval()
-
-    def load_model(self, *, model_config: ModelConfig,
-                   device_config: DeviceConfig,
-                   scheduler_config: Optional[SchedulerConfig] = None,
-                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
-        self._verify_config(model_config)
-
-        if is_vllm_tensorized(self.tensorizer_config):
-            return self._load_model_serialized(model_config, device_config,
-                                               cache_config)
-        return self._load_model_serialized_cpu(model_config, device_config,
-                                               cache_config)
-
-    @staticmethod
-    def save_model(
-        model: torch.nn.Module,
-        tensorizer_config: TensorizerConfig,
-    ) -> None:
-        serialize_vllm_model(
-            model=model,
-            tensorizer_config=tensorizer_config,
-        )
-
-
-class ShardedStateLoader(BaseModelLoader):
-    """
-    Model loader that directly loads each worker's model state dict, which
-    enables a fast load path for large tensor-parallel models where each worker
-    only needs to read its own shard rather than the entire checkpoint. See
-    `examples/save_sharded_state.py` for creating a sharded checkpoint.
-    """
-
-    DEFAULT_PATTERN = "model-rank-{rank}-part-{part}.safetensors"
-
-    def __init__(self, load_config: LoadConfig):
-        super().__init__(load_config)
-        extra_config = ({} if load_config.model_loader_extra_config is None
-                        else load_config.model_loader_extra_config.copy())
-        self.pattern = extra_config.pop("pattern", self.DEFAULT_PATTERN)
-        if extra_config:
-            raise ValueError(f"Unexpected extra config keys for load format "
-                             f"{load_config.load_format}: "
-                             f"{load_config.model_loader_extra_config.keys()}")
-
-    @staticmethod
-    def _filter_subtensors(
-            tensors: Dict[str, torch.Tensor]) -> Dict[str, torch.Tensor]:
-        """
-        Filter out all tensors that share the same memory or a subset of the
-        memory of another tensor.
-        """
-        same_storage_groups: Dict[Any, List[Tuple[
-            str, torch.Tensor]]] = collections.defaultdict(list)
-        for key, tensor in tensors.items():
-            if tensor.numel():
-                ptr = tensor.untyped_storage().data_ptr()
-                same_storage_groups[tensor.device, ptr].append((key, tensor))
-
-        def get_end_ptr(tensor: torch.Tensor) -> int:
-            return tensor.view(-1)[-1].data_ptr() + tensor.element_size()
-
-        result: Dict[str, torch.Tensor] = {}
-        for group in same_storage_groups.values():
-            for k, t in group:
-                a, b = t.data_ptr(), get_end_ptr(t)
-                for k2, t2 in group:
-                    if not t2.is_contiguous():
-                        continue
-                    a2, b2 = t2.data_ptr(), get_end_ptr(t2)
-                    if a < a2 or b2 < b:
-                        continue
-                    if a2 < a or b < b2 or not t.is_contiguous():
-                        break  # t2 covers strictly more memory than t.
-                    if k2 < k:
-                        # Same tensors, keep the one with the smaller key.
-                        break
-                else:
-                    result[k] = t
-        return result
-
-    def _prepare_weights(self, model_name_or_path: str,
-                         revision: Optional[str]):
-        if os.path.isdir(model_name_or_path):
-            return model_name_or_path
-        else:
-            allow_patterns = ["*.safetensors"]
-            return download_weights_from_hf(
-                model_name_or_path,
-                self.load_config.download_dir,
-                allow_patterns,
-                revision,
-                ignore_patterns=self.load_config.ignore_patterns,
-            )
-
-    def load_model(self, *, model_config: ModelConfig,
-                   device_config: DeviceConfig,
-                   scheduler_config: Optional[SchedulerConfig] = None,
-                   cache_config: Optional[CacheConfig] = None) -> nn.Module:
-        from safetensors.torch import safe_open
-
-        local_model_path = self._prepare_weights(model_config.model,
-                                                 model_config.revision)
-
-        with set_default_torch_dtype(model_config.dtype):
-            with torch.device(device_config.device):
-                model = _initialize_model(model_config, self.load_config,
-                                          cache_config)
-            rank = 0
-            pattern = os.path.join(
-                local_model_path,
-                self.pattern.format(rank=rank, part="*"),
-            )
-            filepaths = glob.glob(pattern)
-            if not filepaths:
-                # TODO: support un-sharded checkpoints too
-                raise ValueError(
-                    f"Could not find checkpoint files '{pattern}', only "
-                    f"pre-sharded checkpoints are currently supported!")
-            state_dict = self._filter_subtensors(model.state_dict())
-            for path in filepaths:
-                with safe_open(path, framework="pt") as f:
-                    for key in f.keys():  # noqa: SIM118
-                        tensor = f.get_tensor(key)
-                        # If loading with LoRA enabled, additional padding may
-                        # be added to certain parameters. We only load into a
-                        # narrowed view of the parameter data.
-                        param_data = state_dict[key].data
-                        param_shape = state_dict[key].shape
-                        for dim, size in enumerate(tensor.shape):
-                            if size < param_shape[dim]:
-                                param_data = param_data.narrow(dim, 0, size)
-                        if tensor.shape != param_shape:
-                            logger.warning(
-                                "loading tensor of shape %s into "
-                                "parameter '%s' of shape %s", tensor.shape,
-                                key, param_shape)
-                        param_data.copy_(tensor)
-                        state_dict.pop(key)
-            if state_dict:
-                raise ValueError(
-                    f"Missing keys {tuple(state_dict)} in loaded state!")
-        return model.eval()
-
-    @staticmethod
-    def save_model(
-        model: torch.nn.Module,
-        path: str,
-        pattern: Optional[str] = None,
-        max_size: Optional[int] = None,
-    ) -> None:
-        from safetensors.torch import save_file
-
-        if pattern is None:
-            pattern = ShardedStateLoader.DEFAULT_PATTERN
-        rank = 0
-        part_idx = 0
-        total_size = 0
-        state_dict = ShardedStateLoader._filter_subtensors(model.state_dict())
-        state_dict_part: Dict[str, torch.Tensor] = {}
-        for key, tensor in state_dict.items():
-            param_size = tensor.nelement() * tensor.element_size()
-            if max_size is not None and total_size + param_size > max_size:
-                filename = pattern.format(rank=rank, part=part_idx)
-                save_file(
-                    state_dict_part,
-                    os.path.join(path, filename),
-                )
-                part_idx += 1
-                total_size = 0
-                state_dict_part = {}
-            state_dict_part[key] = tensor
-            total_size += param_size
-        if len(state_dict_part) > 0:
-            filename = pattern.format(rank=rank, part=part_idx)
-            save_file(
-                state_dict_part,
-                os.path.join(path, filename),
-            )
 
 
 class BitsAndBytesModelLoader(BaseModelLoader):
@@ -841,15 +592,13 @@ class BitsAndBytesModelLoader(BaseModelLoader):
                 offsets = np.concatenate(([0], np.cumsum(num_elements)))
                 set_weight_attrs(param, {"bnb_shard_offsets": offsets})
 
-    def load_model(self, *, model_config: ModelConfig,
+    def load_model(self, model: nn.Module, *,
+                   model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
                    cache_config: Optional[CacheConfig] = None) -> nn.Module:
         with set_default_torch_dtype(model_config.dtype):
             with torch.device(device_config.device):
-                model = _initialize_model(model_config, self.load_config,
-                                          cache_config)
-
                 self._load_weights(model_config, model)
 
         return model.eval()
@@ -863,12 +612,6 @@ def get_model_loader(load_config: LoadConfig) -> BaseModelLoader:
 
     if load_config.load_format == LoadFormat.DUMMY:
         return DummyModelLoader(load_config)
-
-    if load_config.load_format == LoadFormat.TENSORIZER:
-        return TensorizerLoader(load_config)
-
-    if load_config.load_format == LoadFormat.SHARDED_STATE:
-        return ShardedStateLoader(load_config)
 
     if load_config.load_format == LoadFormat.BITSANDBYTES:
         return BitsAndBytesModelLoader(load_config)

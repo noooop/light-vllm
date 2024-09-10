@@ -16,8 +16,7 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model."""
 
-import math
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple
 import torch
 from torch import nn
 from transformers import XLMRobertaConfig
@@ -26,10 +25,8 @@ from light_vllm.layers.activation import get_act_fn
 from light_vllm.layers.linear import QKVParallelLinear, RowParallelLinear, ColumnParallelLinear
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
-import torch.nn.functional as F
-
 from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttention, EncodeOnlyAttentionMetadata
-
+from light_vllm.task.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
 from light_vllm.task.base.loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 from light_vllm.models.utils import is_pp_missing_parameter
@@ -74,9 +71,10 @@ class XLMRobertaEmbeddings(nn.Module):
         return embeddings
 
 
-class XLMRobertaFLashAttentionSelfAttention(nn.Module):
+class XLMRobertaSelfAttention(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -104,12 +102,13 @@ class XLMRobertaFLashAttentionSelfAttention(nn.Module):
                                         self.head_dim,
                                         self.scaling,
                                         num_kv_heads=self.num_kv_heads,
-                                        quant_config=quant_config)
+                                        quant_config=quant_config,
+                                        attn_backend=attn_backend)
 
     def forward(
             self,
             hidden_states: torch.Tensor,
-            attn_metadata=None,
+            attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
@@ -134,15 +133,16 @@ class XLMRobertaSelfOutput(nn.Module):
 class XLMRobertaAttention(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.self = XLMRobertaFLashAttentionSelfAttention(config)
+        self.self = XLMRobertaSelfAttention(config, attn_backend)
         self.output = XLMRobertaSelfOutput(config, quant_config)
 
     def forward(
             self,
             hidden_states: torch.Tensor,
-            attn_metadata=None,
+            attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         self_outputs = self.self(
             hidden_states,
@@ -188,9 +188,10 @@ class XLMRobertaOutput(nn.Module):
 class XLMRobertaLayer(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.attention = XLMRobertaAttention(config, quant_config)
+        self.attention = XLMRobertaAttention(config, attn_backend, quant_config)
         self.intermediate = XLMRobertaIntermediate(config, quant_config)
         self.output = XLMRobertaOutput(config, quant_config)
 
@@ -211,14 +212,16 @@ class XLMRobertaLayer(nn.Module):
 class XLMRobertaEncoder(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
-        self.layer = nn.ModuleList([XLMRobertaLayer(config, quant_config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([XLMRobertaLayer(config, attn_backend, quant_config)
+                                    for _ in range(config.num_hidden_layers)])
 
     def forward(
             self,
             hidden_states: torch.Tensor,
-            attn_metadata=None,
+            attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
@@ -231,11 +234,12 @@ class XLMRobertaEncoder(nn.Module):
 class XLMRobertaModel(nn.Module):
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.config = config
         self.embeddings = XLMRobertaEmbeddings(config)
-        self.encoder = XLMRobertaEncoder(config, quant_config)
+        self.encoder = XLMRobertaEncoder(config, attn_backend, quant_config)
 
     def forward(
             self,
@@ -243,7 +247,7 @@ class XLMRobertaModel(nn.Module):
             positions: torch.Tensor,
             attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
-        positions += self.config.pad_token_id
+        positions += self.config.pad_token_id + 1
 
         embedding_output = self.embeddings(
             input_ids=input_ids,
@@ -251,16 +255,14 @@ class XLMRobertaModel(nn.Module):
         )
 
         encoder_outputs = self.encoder(
-            hidden_states=embedding_output,
-            attn_metadata=attn_metadata
+            embedding_output,
+            attn_metadata
         )
 
         return encoder_outputs
 
 
 class XLMRobertaLMHead(nn.Module):
-    """Roberta Head for masked language modeling."""
-
     def __init__(self,
                  config: XLMRobertaConfig,
                  quant_config: Optional[QuantizationConfig] = None):
@@ -287,13 +289,14 @@ class XLMRobertaForMaskedLM(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None,
                  *args, **kwargs):
         super().__init__()
         self.config = config
         self.quant_config = quant_config
 
-        self.roberta = XLMRobertaModel(config, quant_config)
+        self.roberta = XLMRobertaModel(config, attn_backend, quant_config)
         self.lm_head = XLMRobertaLMHead(config, quant_config)
 
     def forward(

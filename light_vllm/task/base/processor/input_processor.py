@@ -1,6 +1,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Union
+from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.task.base.schema.engine_io import Params, Inputs, Request, SchedulableRequest
 
 
@@ -19,7 +20,7 @@ class InputProcessor(ABC):
 
     @classmethod
     @abstractmethod
-    def from_engine(cls, engine):
+    def from_engine(cls, engine: LLMEngine):
         raise NotImplementedError
 
 
@@ -33,5 +34,5 @@ class RequestProcessor(ABC):
 
     @classmethod
     @abstractmethod
-    def from_engine(cls, engine):
+    def from_engine(cls, engine: LLMEngine):
         raise NotImplementedError

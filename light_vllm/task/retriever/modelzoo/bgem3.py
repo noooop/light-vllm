@@ -1,11 +1,10 @@
 
 
-from typing import Iterable, List, Optional, Tuple, Union
+from typing import Iterable, Optional, Tuple
 import torch
 from torch import nn
-import torch.nn.functional as F
 from light_vllm.task.encode_only.modelzoo.xlm_roberta import XLMRobertaModel, XLMRobertaConfig
-from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttentionMetadata
+from light_vllm.task.encode_only.layers.attention import EncodeOnlyAttentionMetadata, EncodeOnlyAttentionBackend
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 
@@ -19,6 +18,7 @@ class BGEM3Model(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
+                 attn_backend: EncodeOnlyAttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None,
                  sentence_pooling_method="cls",
                  normlized=True,
@@ -29,7 +29,7 @@ class BGEM3Model(nn.Module):
         self.sentence_pooling_method = sentence_pooling_method
         assert self.sentence_pooling_method == 'cls'
         self.normlized = normlized
-        self.roberta = XLMRobertaModel(config, quant_config)
+        self.roberta = XLMRobertaModel(config, attn_backend, quant_config)
 
     def forward(
             self,

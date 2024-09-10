@@ -79,7 +79,7 @@ class LLMEngine:
         self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
-        self.model_processor = lazy_import(self.workflow.ModelProcessor).from_engine(self)
+        self.model_inputs_builder = lazy_import(self.workflow.ModelInputBuilder).from_engine(self)
 
         if hasattr(self.engine_config, "cache_config") and self.engine_config.cache_config is not None:
             self._initialize_kv_caches()
@@ -154,16 +154,13 @@ class LLMEngine:
         self.scheduler.abort_request(request_id)
 
     def step(self) -> List[RequestOutput]:
-        scheduler_outputs = self.scheduler.schedule()
-
-        print(scheduler_outputs)
-
-        if scheduler_outputs.is_empty():
+        scheduler_output = self.scheduler.schedule()
+        if scheduler_output.is_empty():
             return []
 
-        executor_input = self.model_processor(scheduler_outputs)
+        executor_input = self.model_inputs_builder(scheduler_output)
         executor_output = self.executor.execute_model(executor_input)
-        request_outputs = self.output_processor(scheduler_outputs, executor_output)
+        request_outputs = self.output_processor(scheduler_output, executor_output)
         self.scheduler.free_finished_request()
 
         request_outputs = self.scheduler.remove_abort_request(request_outputs)

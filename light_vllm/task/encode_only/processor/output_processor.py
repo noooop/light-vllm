@@ -1,7 +1,9 @@
 
 from typing import List
+import torch
+from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.task.base.processor.output_processor import OutputProcessor
-from light_vllm.task.encode_only.schema.engine_io import EncodeOnlyRequestOutput
+from light_vllm.task.encode_only.schema.engine_io import EncodeOnlyRequestOutput, EncodeOnlySchedulerOutput
 
 
 class EncodeOnlyModelOutputProcessor(OutputProcessor):
@@ -9,13 +11,15 @@ class EncodeOnlyModelOutputProcessor(OutputProcessor):
         pass
 
     @classmethod
-    def from_engine(cls, engine):
+    def from_engine(cls, engine: LLMEngine):
         return cls()
 
-    def __call__(self, scheduler_outputs, execute_output) -> List[EncodeOnlyRequestOutput]:
+    def __call__(self,
+                 scheduler_output: EncodeOnlySchedulerOutput,
+                 execute_output: torch.Tensor) -> List[EncodeOnlyRequestOutput]:
         request_outputs = []
         offset = 0
-        for request in scheduler_outputs.scheduled_requests:
+        for request in scheduler_output.scheduled_requests:
             prompt_token_ids = request.inputs.prompt_token_ids
             n_tokens = len(prompt_token_ids)
             request_outputs.append(

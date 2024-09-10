@@ -62,7 +62,7 @@ class SchedulableRequest(Request):
 
 
 @dataclass
-class SchedulerOutputs:
+class SchedulerOutput:
     pass
 
 

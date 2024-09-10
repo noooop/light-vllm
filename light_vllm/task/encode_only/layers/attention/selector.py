@@ -43,6 +43,6 @@ def get_attn_backend(
 
 class GetAttnBackend:
     @classmethod
-    def from_engine(cls, engine:LLMEngine):
+    def from_engine(cls, engine: LLMEngine):
         from light_vllm.task.encode_only.layers.attention.backends.flash_attn import EncodeOnlyFlashAttentionBackend
         return EncodeOnlyFlashAttentionBackend
