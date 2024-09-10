@@ -1,7 +1,7 @@
 
 from typing import List
 from light_vllm.task.base.processor.output_processor import OutputProcessor
-from light_vllm.task.encode_only.schema.outputs import EncodeOnlyRequestOutput
+from light_vllm.task.encode_only.schema.engine_io import EncodeOnlyRequestOutput
 
 
 class EncodeOnlyModelOutputProcessor(OutputProcessor):
@@ -16,7 +16,7 @@ class EncodeOnlyModelOutputProcessor(OutputProcessor):
         request_outputs = []
         offset = 0
         for request in scheduler_outputs.scheduled_requests:
-            prompt_token_ids = request.input.prompt_token_ids
+            prompt_token_ids = request.inputs.prompt_token_ids
             n_tokens = len(prompt_token_ids)
             request_outputs.append(
                 EncodeOnlyRequestOutput(

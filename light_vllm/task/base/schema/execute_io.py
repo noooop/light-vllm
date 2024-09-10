@@ -33,15 +33,7 @@ class ExecuteModelInput:
 
 @dataclass(frozen=True)
 class ModelInput(ABC):
-    """Local inputs to each worker's model runner. May contain
-    device-specific data. Different worker backends may have different methods
-    of converting from the global ExecuteModelRequest produced by the LLM
-    engine to the worker-local ModelRunnerInputBase objects.
-
-    Model runners that support multi-GPU execution should define a
-    ModelRunnerInputBase subclass, add their required fields, and specify how to
-    serialize/deserialize a ModelInput for broadcast between workers.
-    """
+    pass
 
 
 @dataclass(frozen=True)

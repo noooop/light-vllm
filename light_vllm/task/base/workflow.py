@@ -21,15 +21,16 @@ LLMEngine.step
 
 
 class Workflow:
-    Executor: str = "light_vllm.task.base.executor.gpu_executor:GPUExecutor"
-    Scheduler: str = "light_vllm.core.scheduler:Scheduler"
-    Tokenizer: str = "light_vllm.inputs.tokenizer:Tokenizer"
-    EngineArgs: str = "light_vllm.task.base.arg_utils:EngineArgs"
-    InputProcessor: str = "light_vllm.task.base.processor.input_processor:InputProcessor"
-    RequestProcessor: str = "light_vllm.task.base.processor.input_processor:RequestProcessor"
-    OutputProcessor: str = "light_vllm.task.base.processor.output_processor:OutputProcessor"
-    ModelPreProcessor: str = "light_vllm.base.chat.processor.model_pre_processor:PreProcessor"
-    Worker: str = "light_vllm.task.base.worker.gpu_worker:Worker"
+    EngineArgs: str
+    Scheduler: str
     GetAttnBackend: str
+    Tokenizer: str = "light_vllm.inputs.tokenizer:Tokenizer"
+    InputProcessor: str
+    RequestProcessor: str
+    OutputProcessor: str
+    ModelProcessor: str
+    Executor: str
+    Worker: str
+
 
 

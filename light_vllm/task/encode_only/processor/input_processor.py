@@ -1,8 +1,10 @@
-from typing import Any, Dict, Optional
+from typing import Optional, Union
 
 import time
 from light_vllm.inputs.tokenizer import Tokenizer
-from light_vllm.task.encode_only.schema.inputs import PromptInput, EncodeOnlyInput, EncodeOnlyRequest
+
+from light_vllm.task.base.schema.engine_io import Params, PromptInput
+from light_vllm.task.encode_only.schema.engine_io import EncodeOnlyInput, EncodeOnlyRequest, EncodeOnlySchedulableRequest
 from light_vllm.task.base.processor.input_processor import InputProcessor, RequestProcessor
 
 
@@ -13,13 +15,13 @@ class EncodeOnlyModelInputProcessor(InputProcessor):
 
     def __call__(self,
                  request_id: str,
-                 prompt: PromptInput,
-                 params,
+                 inputs: Optional[PromptInput] = None,
+                 params: Optional[Params] = None,
                  arrival_time: Optional[float] = None) -> EncodeOnlyRequest:
         if not arrival_time:
             arrival_time = time.time()
         request = EncodeOnlyRequest(request_id=str(request_id),
-                                    input=prompt,
+                                    inputs=inputs,
                                     arrival_time=arrival_time)
         return request
 
@@ -32,21 +34,26 @@ class EncodeOnlyModelRequestProcessor(RequestProcessor):
     def from_engine(cls, engine):
         return cls(engine.tokenizer)
 
-    def __call__(self, request: EncodeOnlyRequest) -> EncodeOnlyRequest:
-        if not isinstance(request.input, EncodeOnlyInput):
-            input = request.input
-            if isinstance(request.input, str):
-                input = {"prompt": input}
+    def __call__(self, request: EncodeOnlyRequest) -> EncodeOnlySchedulableRequest:
+        inputs = request.inputs
 
-            if "prompt_token_ids" not in input:
-                tokenizer = self.tokenizer
+        if isinstance(inputs, str):
+            inputs = {"prompt": inputs}
 
-                prompt_token_ids = tokenizer.encode(input["prompt"])
-            else:
-                prompt_token_ids = input["prompt_token_ids"]
+        if "prompt_token_ids" not in inputs:
+            tokenizer = self.tokenizer
 
-            input = EncodeOnlyInput(prompt_token_ids=prompt_token_ids,
-                                    prompt=input.get("prompt"))
-            request.input = input
+            prompt_token_ids = tokenizer.encode(inputs["prompt"])
+        else:
+            prompt_token_ids = inputs["prompt_token_ids"]
 
-        return request
+        schedulable_request = EncodeOnlySchedulableRequest(
+            request_id=request.request_id,
+            inputs=EncodeOnlyInput(
+                prompt_token_ids=prompt_token_ids,
+                prompt=inputs.get("prompt")
+            ),
+            arrival_time=request.arrival_time
+        )
+
+        return schedulable_request

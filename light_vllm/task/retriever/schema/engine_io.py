@@ -3,22 +3,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
                     Union)
+import torch
+from light_vllm.task.base.schema.engine_io import RequestOutput
 
-from light_vllm.task.base.schema.outputs import RequestOutput
 
-
-class EncodeOnlyRequestOutput(RequestOutput):
-    """
-    The output data of an embedding request to the LLM.
-
-    Args:
-        request_id (str): A unique identifier for the embedding request.
-        outputs (EmbeddingOutput): The embedding results for the given input.
-        prompt_token_ids (List[int]): A list of token IDs used in the prompt.
-        finished (bool): A flag indicating whether the embedding is completed.
-    """
-
-    def __init__(self, request_id: str, outputs: "EmbeddingOutput",
+class EmbeddingRequestOutput(RequestOutput):
+    def __init__(self, request_id: str, outputs: torch.Tensor,
                  prompt_token_ids: List[int], finished: bool):
         self.request_id = request_id
         self.prompt_token_ids = prompt_token_ids

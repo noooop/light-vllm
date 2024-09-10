@@ -6,7 +6,7 @@ from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
 
 import time
 from light_vllm.task.base.schema.sequence import PromptLogprobs, SampleLogprobs, RequestMetrics, SequenceGroup, SequenceStatus
-from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.schema.engine_io import RequestOutput
 
 
 @dataclass

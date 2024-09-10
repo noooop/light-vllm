@@ -4,8 +4,7 @@ from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, 
 from typing import Sequence as GenericSequence
 from light_vllm.logger import init_logger
 
-from light_vllm.task.base.schema.inputs import Params, Prompt
-from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.schema.engine_io import Params, Inputs, RequestOutput
 from light_vllm.task.base.workflow import Workflow
 from light_vllm.task.base.arg_utils import EngineArgs
 from light_vllm.task.base.config import EngineConfig
@@ -73,36 +72,21 @@ class LLMEngine:
         return outputs_
 
     def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
-        # config
         self.engine_config = engine_config
         engine_config.log_config()
 
-        # workflow
         self.workflow = workflow
-
-        # attn_backend
         self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
-
-        # executor
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
-
-        # tokenizer
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
-
-        # model_pre_processor
-        self.model_pre_processor = lazy_import(self.workflow.ModelPreProcessor).from_engine(self)
+        self.model_processor = lazy_import(self.workflow.ModelProcessor).from_engine(self)
 
         if hasattr(self.engine_config, "cache_config") and self.engine_config.cache_config is not None:
             self._initialize_kv_caches()
 
-        # input_processor
         self.input_processor = lazy_import(self.workflow.InputProcessor).from_engine(self)
         self.request_processor = lazy_import(self.workflow.RequestProcessor).from_engine(self)
-
-        # scheduler
         self.scheduler = lazy_import(self.workflow.Scheduler).from_engine(self)
-
-        # output_processor
         self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
 
     def _initialize_kv_caches(self) -> None:
@@ -160,10 +144,10 @@ class LLMEngine:
 
     def add_request(self,
                     request_id: str,
-                    prompt: Optional[Union[str, Prompt]] = None,
+                    inputs: Optional[Union[str, Inputs]] = None,
                     params: Optional[Params] = None,
                     arrival_time: Optional[float] = None) -> None:
-        request = self.input_processor(request_id, prompt, params, arrival_time)
+        request = self.input_processor(request_id, inputs, params, arrival_time)
         self.scheduler.add_request(request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -172,14 +156,17 @@ class LLMEngine:
     def step(self) -> List[RequestOutput]:
         scheduler_outputs = self.scheduler.schedule()
 
+        print(scheduler_outputs)
+
         if scheduler_outputs.is_empty():
             return []
 
-        execute_input = self.model_pre_processor(scheduler_outputs)
-        execute_output = self.executor.execute_model(execute_input)
-        request_outputs = self.output_processor(scheduler_outputs, execute_output)
+        executor_input = self.model_processor(scheduler_outputs)
+        executor_output = self.executor.execute_model(executor_input)
+        request_outputs = self.output_processor(scheduler_outputs, executor_output)
         self.scheduler.free_finished_request()
 
+        request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs
 
     def get_num_unfinished_requests(self) -> int:

@@ -8,7 +8,7 @@ from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
                                parse_and_batch_prompt)
 from light_vllm.logger import init_logger
 
-from light_vllm.task.base.schema.outputs import RequestOutput
+from light_vllm.task.base.schema.engine_io import RequestOutput
 from light_vllm.task.chat.schema.outputs import ChatModelRequestOutput
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams

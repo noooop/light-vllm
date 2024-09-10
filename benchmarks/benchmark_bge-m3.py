@@ -44,12 +44,10 @@ def benchmark_vllm(args):
     engine_args = EngineArgs(
         model=args.model,
         tokenizer=args.tokenizer,
-        quantization=args.quantization,
         seed=args.seed,
         trust_remote_code=args.trust_remote_code,
         dtype=args.dtype,
         max_model_len=args.max_model_len,
-        quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
     )
@@ -85,9 +83,15 @@ if __name__ == '__main__':
 
     args.model = 'BAAI/bge-m3'
 
+    args.trust_remote_code = False
     args.tokenizer = args.model
     args.seed = 0
+    args.max_model_len = None
+    args.dtype = "half"
+    args.device = "cuda"
     args.batchsize = [1, 2, 4, 8, 16, 32, 64]
+
+
     from concurrent.futures import ProcessPoolExecutor
 
     def run_hf(args):
@@ -95,11 +99,11 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_hf, args)
             f.result()
 
-    run_hf(args)
+    #run_hf(args)
 
     def run_vllm(args):
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    #run_vllm(args)
+    run_vllm(args)

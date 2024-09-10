@@ -1,5 +1,5 @@
-from dataclasses import dataclass
 
+from dataclasses import dataclass
 from typing import List, Union, Optional
 
 
@@ -7,7 +7,7 @@ class Params:
     pass
 
 
-class Prompt:
+class Inputs:
     pass
 
 
@@ -18,7 +18,7 @@ class Request:
 
 
 @dataclass
-class TextPrompt(Prompt):
+class TextPrompt(Inputs):
     """Schema for a text prompt."""
 
     prompt: str
@@ -26,7 +26,7 @@ class TextPrompt(Prompt):
 
 
 @dataclass
-class TokensPrompt(Prompt):
+class TokensPrompt(Inputs):
     """Schema for a tokenized prompt."""
 
     prompt_token_ids: List[int]
@@ -43,7 +43,7 @@ The inputs to the LLM, which can take one of the following forms:
 
 
 @dataclass
-class TextOnlyInput:
+class TextOnlyInputs(Inputs):
     """
     The inputs in :class:`~vllm.LLMEngine` before they are
     passed to the model executor.
@@ -55,3 +55,16 @@ class TextOnlyInput:
     """
     The original prompt text corresponding to the token IDs, if available.
     """
+
+
+class SchedulableRequest(Request):
+    pass
+
+
+@dataclass
+class SchedulerOutputs:
+    pass
+
+
+class RequestOutput(Request):
+    pass

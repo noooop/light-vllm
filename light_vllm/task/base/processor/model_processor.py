@@ -10,7 +10,7 @@ from light_vllm.task.base.schema.sequence import SequenceGroupMetadata
 from light_vllm.task.base.schema.execute_io import ExecuteInput, ExecuteModelInput, WorkerInput, ModelInput
 
 
-class ModelPreProcessor(ABC):
+class ModelProcessor(ABC):
     """
     seq_group_metadata_list, scheduler_outputs = scheduler.schedule()
     (seq_group_metadata_list: List[SequenceGroupMetadata], scheduler_outputs: SchedulerOutputs) -> ModelPreProcessor -> ExecuteInput

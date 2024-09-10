@@ -1,13 +1,9 @@
-try:
-    import light_vllm
-    from light_vllm import LLM, SamplingParams
 
-    print("light_vllm:", light_vllm.__version__)
+import light_vllm
+from light_vllm import LLM, SamplingParams
 
-except Exception:
-    import vllm
-    from vllm import LLM, SamplingParams
-    print("vllm:", vllm.__version__)
+print("light_vllm:", light_vllm.__version__)
+
 
 # Sample prompts.
 prompts = [
