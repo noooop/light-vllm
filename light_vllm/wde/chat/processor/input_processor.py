@@ -3,35 +3,36 @@ from typing import Any, Dict, Optional
 import time
 from light_vllm.utils import Counter
 from light_vllm.inputs.tokenizer import Tokenizer
+from light_vllm.engine.llm_engine import LLMEngine
 from light_vllm.wde.chat.config import CacheConfig, ModelConfig
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.wde.chat.schema.inputs import PromptInput, ChatInput, ChatRequest
+from light_vllm.wde.chat.schema.engine_io import PromptInput, ChatInput, ChatRequest
 from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup
 from light_vllm.wde.core.processor.input_processor import InputProcessor, RequestProcessor
 
 
 class ChatModelInputProcessor(InputProcessor):
+    @classmethod
+    def from_engine(cls, engine: LLMEngine):
+        return cls()
+
     def __call__(self,
                  request_id: str,
-                 prompt: PromptInput,
-                 params: SamplingParams,
+                 inputs: Optional[PromptInput] = None,
+                 params: Optional[SamplingParams] = None,
                  arrival_time: Optional[float] = None) -> ChatRequest:
         if not arrival_time:
             arrival_time = time.time()
         request = ChatRequest(request_id=str(request_id),
-                              input=prompt,
-                              sampling_params=params,
+                              inputs=inputs,
+                              params=params,
                               arrival_time=arrival_time)
         return request
-
-    @classmethod
-    def from_engine(cls, engine):
-        return cls()
 
 
 class ChatModelPromptProcessor(object):
     """
-    PromptInput -> ChatModelPromptProcessor -> ChatInput
+    PromptInput -> ChatPromptProcessor -> ChatInput
     """
 
     def __init__(self, tokenizer: Tokenizer):
@@ -55,7 +56,7 @@ class ChatModelPromptProcessor(object):
 
 class ChatModelSequenceProcessor(object):
     """
-    ChatRequest -> ChatModelSequenceProcessor -> SequenceGroup
+    ChatRequest -> ChatSequenceProcessor -> SequenceGroup
     """
 
     def __init__(self,
@@ -87,7 +88,7 @@ class ChatModelSequenceProcessor(object):
     def __call__(self, chat_request: ChatRequest, arrival_time: Optional[float] = None) -> SequenceGroup:
         """Creates a SequenceGroup with SamplingParams."""
 
-        sampling_params = chat_request.sampling_params
+        sampling_params = chat_request.params
 
         if arrival_time is None:
             arrival_time = time.time()
@@ -96,7 +97,7 @@ class ChatModelSequenceProcessor(object):
         eos_token_id = self.eos_token_id
         seq_id = next(self.seq_counter)
 
-        seq = Sequence(seq_id, chat_request.input, block_size, eos_token_id)
+        seq = Sequence(seq_id, chat_request.inputs, block_size, eos_token_id)
 
         max_logprobs = self.max_logprobs
         if (sampling_params.logprobs
@@ -149,7 +150,7 @@ class ChatModelRequestProcessor(RequestProcessor):
                    engine.seq_counter)
 
     def __call__(self, request: ChatRequest) -> SequenceGroup:
-        if not isinstance(request.input, ChatInput):
-            request.input = self.prompt_processor(request.input)
+        if not isinstance(request.inputs, ChatInput):
+            request.inputs = self.prompt_processor(request.inputs)
         seq_group = self.sequence_processor(request, request.arrival_time)
         return seq_group

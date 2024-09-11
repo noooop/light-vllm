@@ -5,7 +5,9 @@ from typing import Optional, Type
 import torch
 
 import light_vllm.envs as envs
-from light_vllm.layers.attention.backends.abstract import AttentionBackend
+from light_vllm.engine.llm_engine import LLMEngine
+
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import AttentionBackend
 from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
 from light_vllm.utils import is_cpu
@@ -37,30 +39,24 @@ def get_attn_backend(
 ) -> Type[AttentionBackend]:
     """Selects which attention backend to use and lazily imports it."""
 
-    if is_blocksparse:
-        logger.info("Using BlocksparseFlashAttention backend.")
-        from light_vllm.layers.attention.backends.blocksparse_attn import (
-            BlocksparseFlashAttentionBackend)
-        return BlocksparseFlashAttentionBackend
-
     backend = which_attn_to_use(num_heads, head_size, num_kv_heads,
                                 sliding_window, dtype, kv_cache_dtype,
                                 block_size)
     if backend == _Backend.FLASH_ATTN:
-        from light_vllm.layers.attention.backends.flash_attn import (  # noqa: F401
-            FlashAttentionBackend)
-        return FlashAttentionBackend
+        from light_vllm.wde.decode_only.layers.attention.backends.flash_attn import (  # noqa: F401
+            DecodeOnlyFlashAttentionBackend)
+        return DecodeOnlyFlashAttentionBackend
     if backend == _Backend.XFORMERS:
         logger.info("Using XFormers backend.")
-        from light_vllm.layers.attention.backends.xformers import (  # noqa: F401
-            XFormersBackend)
-        return XFormersBackend
+        from light_vllm.wde.decode_only.layers.attention.backends.xformers import (  # noqa: F401
+            DecodeOnlyXFormersBackend)
+        return DecodeOnlyXFormersBackend
     elif backend == _Backend.TORCH_SDPA:
         assert is_cpu(), RuntimeError(
             "Torch SDPA backend is only used for the CPU device.")
         logger.info("Using Torch SDPA backend.")
-        from light_vllm.layers.attention.backends.torch_sdpa import TorchSDPABackend
-        return TorchSDPABackend
+        from light_vllm.wde.decode_only.layers.attention.backends.torch_sdpa import DecodeOnlyTorchSDPABackend
+        return DecodeOnlyTorchSDPABackend
     else:
         raise ValueError("Invalid attention backend.")
 
@@ -125,11 +121,10 @@ def which_attn_to_use(
     if selected_backend == _Backend.FLASH_ATTN:
         try:
             import vllm_flash_attn  # noqa: F401
+            from light_vllm.wde.decode_only.layers.attention.backends.flash_attn import (  # noqa: F401
+                DecodeOnlyFlashAttentionBackend)
 
-            from light_vllm.layers.attention.backends.flash_attn import (  # noqa: F401
-                FlashAttentionBackend)
-
-            supported_sizes = FlashAttentionBackend.get_supported_head_sizes()
+            supported_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes()
             if head_size not in supported_sizes:
                 logger.info(
                     "Cannot use FlashAttention-2 backend for head size %d.",
@@ -143,3 +138,11 @@ def which_attn_to_use(
             selected_backend = _Backend.XFORMERS
 
     return selected_backend
+
+
+class GetAttnBackend:
+    @classmethod
+    def from_engine(cls, engine: LLMEngine):
+        from light_vllm.wde.decode_only.layers.attention.backends.flash_attn import (  # noqa: F401
+            DecodeOnlyFlashAttentionBackend)
+        return DecodeOnlyFlashAttentionBackend

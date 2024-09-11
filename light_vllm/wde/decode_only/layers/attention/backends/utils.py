@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING, Dict, List, Type, TypeVar, Union
 
 import torch
 
-from light_vllm.layers.attention.backends.abstract import AttentionMetadata, AttentionMetadataBuilder
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import DecodeOnlyAttentionMetadata, DecodeOnlyAttentionMetadataBuilder
 from light_vllm.utils import make_tensor_with_pad
 
 # Error string(s) for encoder/decoder
@@ -12,9 +12,6 @@ STR_NOT_IMPL_ENC_DEC_ROCM_HIP = ("ROCm/HIP is not currently supported "
                                  "with encoder/decoder models.")
 
 PAD_SLOT_ID = -1
-
-if TYPE_CHECKING:
-    from light_vllm.worker.model_runner import ModelInputForGPUBuilder
 
 
 def is_block_tables_empty(block_tables: Union[None, Dict]):
@@ -79,7 +76,7 @@ def compute_slot_mapping(is_profile_run: bool, slot_mapping: List[int],
 TAttentionMetadata = TypeVar("TAttentionMetadata", bound='AttentionMetadata')
 
 
-class CommonMetadataBuilder(AttentionMetadataBuilder[TAttentionMetadata]):
+class DecodeOnlyCommonMetadataBuilder(DecodeOnlyAttentionMetadataBuilder[TAttentionMetadata]):
 
     _metadata_cls: Type[TAttentionMetadata]
 

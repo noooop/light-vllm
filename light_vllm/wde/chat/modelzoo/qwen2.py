@@ -28,7 +28,8 @@ import torch
 from torch import nn
 from transformers import Qwen2Config
 
-from light_vllm.layers.attention import Attention, AttentionMetadata
+from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttention, DecodeOnlyAttentionMetadata, \
+    DecodeOnlyAttentionBackend
 from light_vllm.wde.core.config import CacheConfig
 from light_vllm.layers.activation import SiluAndMul
 from light_vllm.layers.layernorm import RMSNorm
@@ -86,6 +87,7 @@ class Qwen2Attention(nn.Module):
                  hidden_size: int,
                  num_heads: int,
                  num_kv_heads: int,
+                 attn_backend: DecodeOnlyAttentionBackend,
                  max_position: int = 4096 * 32,
                  rope_theta: float = 10000,
                  cache_config: Optional[CacheConfig] = None,
@@ -135,19 +137,20 @@ class Qwen2Attention(nn.Module):
             base=self.rope_theta,
             rope_scaling=rope_scaling,
         )
-        self.attn = Attention(self.num_heads,
-                              self.head_dim,
-                              self.scaling,
-                              num_kv_heads=self.num_kv_heads,
-                              cache_config=cache_config,
-                              quant_config=quant_config)
+        self.attn = DecodeOnlyAttention(self.num_heads,
+                                        self.head_dim,
+                                        self.scaling,
+                                        attn_backend=attn_backend,
+                                        num_kv_heads=self.num_kv_heads,
+                                        cache_config=cache_config,
+                                        quant_config=quant_config)
 
     def forward(
             self,
             positions: torch.Tensor,
             hidden_states: torch.Tensor,
             kv_cache: torch.Tensor,
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
@@ -162,6 +165,7 @@ class Qwen2DecoderLayer(nn.Module):
     def __init__(
             self,
             config: Qwen2Config,
+            attn_backend: DecodeOnlyAttentionBackend,
             cache_config: Optional[CacheConfig] = None,
             quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
@@ -178,7 +182,9 @@ class Qwen2DecoderLayer(nn.Module):
             rope_theta=rope_theta,
             cache_config=cache_config,
             quant_config=quant_config,
-            rope_scaling=rope_scaling)
+            rope_scaling=rope_scaling,
+            attn_backend=attn_backend
+        )
         self.mlp = Qwen2MLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
@@ -195,7 +201,7 @@ class Qwen2DecoderLayer(nn.Module):
             positions: torch.Tensor,
             hidden_states: torch.Tensor,
             kv_cache: torch.Tensor,
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
             residual: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
@@ -224,6 +230,7 @@ class Qwen2Model(nn.Module):
     def __init__(
             self,
             config: Qwen2Config,
+            attn_backend: DecodeOnlyAttentionBackend,
             cache_config: Optional[CacheConfig] = None,
             quant_config: Optional[QuantizationConfig] = None,
             prefix: str = "",
@@ -240,6 +247,7 @@ class Qwen2Model(nn.Module):
         self.start_layer, self.end_layer, self.layers = make_layers(
             config.num_hidden_layers,
             lambda prefix: Qwen2DecoderLayer(config=config,
+                                             attn_backend=attn_backend,
                                              cache_config=cache_config,
                                              quant_config=quant_config),
             prefix=f"{prefix}.layers",
@@ -255,7 +263,7 @@ class Qwen2Model(nn.Module):
             input_ids: torch.Tensor,
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
             inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if inputs_embeds is not None:
@@ -304,6 +312,7 @@ class Qwen2ForCausalLM(nn.Module):
     def __init__(
             self,
             config: Qwen2Config,
+            attn_backend: DecodeOnlyAttentionBackend,
             cache_config: Optional[CacheConfig] = None,
             quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
@@ -324,7 +333,7 @@ class Qwen2ForCausalLM(nn.Module):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Qwen2Model(config, cache_config, quant_config)
+        self.model = Qwen2Model(config, attn_backend, cache_config, quant_config)
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -341,7 +350,7 @@ class Qwen2ForCausalLM(nn.Module):
             input_ids: torch.Tensor,
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         hidden_states = self.model(input_ids, positions, kv_caches, attn_metadata)
         return hidden_states

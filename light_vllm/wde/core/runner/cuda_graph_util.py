@@ -7,7 +7,7 @@ import gc
 import torch
 import torch.nn as nn
 from contextlib import contextmanager
-from light_vllm.layers.attention import AttentionMetadata, get_attn_backend
+from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionMetadata
 from light_vllm.utils import make_tensor_with_pad
 
 from light_vllm.logger import init_logger
@@ -149,7 +149,7 @@ class CUDAGraphRunner:
             input_ids: torch.Tensor,
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
             memory_pool: Optional[Tuple[int, int]],
             stream: torch.cuda.Stream,
             **kwargs,
@@ -211,7 +211,7 @@ class CUDAGraphRunner:
             input_ids: torch.Tensor,
             positions: torch.Tensor,
             kv_caches: List[torch.Tensor],
-            attn_metadata: AttentionMetadata,
+            attn_metadata: DecodeOnlyAttentionMetadata,
             **kwargs,
     ) -> torch.Tensor:
         # KV caches are fixed tensors, so we don't need to copy them.

@@ -11,8 +11,7 @@ from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
 from light_vllm.logger import init_logger
 from light_vllm.wde.core.schema.sequence import (Sequence, SequenceData, SequenceGroup,
                                                  SequenceGroupMetadata, SequenceStatus)
-
-from light_vllm.wde.core.schema.inputs import Request
+from light_vllm.wde.core.schema.engine_io import Request, SchedulableRequest, SchedulerOutput, RequestOutput
 from light_vllm.wde.core.processor.input_processor import RequestProcessor
 logger = init_logger(__name__)
 
@@ -109,7 +108,7 @@ class ScheduledSequenceGroup:
 
 
 @dataclass
-class SchedulerOutputs:
+class SchedulerOutput:
     """The scheduling decision made from a scheduler."""
     # Scheduled sequence groups.
     scheduled_seq_groups: Iterable[ScheduledSequenceGroup]
@@ -641,7 +640,7 @@ class Scheduler:
             ignored_seq_groups=ignored_seq_groups,
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill=True))
 
-    def _schedule_default(self) -> SchedulerOutputs:
+    def _schedule_default(self) -> SchedulerOutput:
         """Schedule queued requests.
 
         The current policy is designed to optimize the throughput. First,
@@ -703,7 +702,7 @@ class Scheduler:
         # doesn't allow chunked prefills.
         assert len(running_scheduled.prefill_seq_groups) == 0
         assert len(swapped_in.prefill_seq_groups) == 0
-        return SchedulerOutputs(
+        return SchedulerOutput(
             scheduled_seq_groups=(prefills.seq_groups +
                                   running_scheduled.decode_seq_groups +
                                   swapped_in.decode_seq_groups),
@@ -774,7 +773,7 @@ class Scheduler:
         self.running.extend([s.seq_group for s in prefills.seq_groups])
         # Update swapped requests.
         self.swapped.extend(running_scheduled.swapped_out)
-        return SchedulerOutputs(
+        return SchedulerOutput(
             scheduled_seq_groups=(prefills.seq_groups +
                                   running_scheduled.prefill_seq_groups +
                                   swapped_in.prefill_seq_groups +
@@ -796,7 +795,7 @@ class Scheduler:
                        len(running_scheduled.swapped_out)),
         )
 
-    def _schedule(self) -> SchedulerOutputs:
+    def _schedule(self) -> SchedulerOutput:
         """Schedule queued requests."""
         if self.scheduler_config.chunked_prefill_enabled:
             return self._schedule_chunked_prefill()
@@ -822,7 +821,7 @@ class Scheduler:
             num_lookahead_slots=self._get_num_lookahead_slots(is_prefill),
         )
 
-    def schedule(self) -> SchedulerOutputs:
+    def schedule(self) -> SchedulerOutput:
         # Schedule sequence groups.
         # This function call changes the internal states of the scheduler
         # such as self.running, self.swapped, and self.waiting.
@@ -906,6 +905,9 @@ class Scheduler:
             if not seq_group.is_finished():
                 remaining.append(seq_group)
         self.running = remaining
+
+    def remove_abort_request(self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
+        return request_outputs
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         self.block_manager.allocate(seq_group)

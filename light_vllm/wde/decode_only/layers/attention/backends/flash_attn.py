@@ -6,19 +6,16 @@ import torch
 from vllm_flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 
 from light_vllm.layers import _custom_ops as ops
-from light_vllm.layers.attention.backends.abstract import (AttentionBackend, AttentionImpl,
-                                                           AttentionMetadata,
-                                                           AttentionMetadataBuilder,
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
+                                                           DecodeOnlyAttentionMetadata,
+                                                           DecodeOnlyAttentionMetadataBuilder,
                                                            AttentionType)
-from light_vllm.layers.attention.backends.utils import (compute_slot_mapping,
+from light_vllm.wde.decode_only.layers.attention.backends.utils import (compute_slot_mapping,
                                                         compute_slot_mapping_start_idx,
                                                         is_block_tables_empty)
 
-if TYPE_CHECKING:
-    from light_vllm.worker.model_runner import ModelInputForGPUBuilder
 
-
-class FlashAttentionBackend(AttentionBackend):
+class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_supported_head_sizes() -> List[int]:
@@ -29,16 +26,16 @@ class FlashAttentionBackend(AttentionBackend):
         return "flash-attn"
 
     @staticmethod
-    def get_impl_cls() -> Type["FlashAttentionImpl"]:
-        return FlashAttentionImpl
+    def get_impl_cls() -> Type["DecodeOnlyFlashAttentionImpl"]:
+        return DecodeOnlyFlashAttentionImpl
 
     @staticmethod
-    def get_metadata_cls() -> Type["AttentionMetadata"]:
-        return FlashAttentionMetadata
+    def get_metadata_cls() -> Type["DecodeOnlyDecodeOnlyAttentionMetadata"]:
+        return DecodeOnlyFlashAttentionMetadata
 
     @staticmethod
-    def get_builder_cls() -> Type["FlashAttentionMetadataBuilder"]:
-        return FlashAttentionMetadataBuilder
+    def get_builder_cls() -> Type["DecodeOnlyFlashAttentionMetadataBuilder"]:
+        return DecodeOnlyFlashAttentionMetadataBuilder
 
     @staticmethod
     def get_kv_cache_shape(
@@ -76,7 +73,7 @@ class FlashAttentionBackend(AttentionBackend):
 
 
 @dataclass
-class FlashAttentionMetadata(AttentionMetadata):
+class DecodeOnlyFlashAttentionMetadata(DecodeOnlyAttentionMetadata):
     """Metadata for FlashAttentionBackend.
 
     NOTE: Any python object stored here is not updated when it is
@@ -131,11 +128,11 @@ class FlashAttentionMetadata(AttentionMetadata):
     # TODO(woosuk): Move `use_cuda_graph` out since it's unrelated to attention.
     use_cuda_graph: bool
 
-    _cached_prefill_metadata: Optional["FlashAttentionMetadata"] = None
-    _cached_decode_metadata: Optional["FlashAttentionMetadata"] = None
+    _cached_prefill_metadata: Optional["DecodeOnlyFlashAttentionMetadata"] = None
+    _cached_decode_metadata: Optional["DecodeOnlyFlashAttentionMetadata"] = None
 
     @property
-    def prefill_metadata(self) -> Optional["FlashAttentionMetadata"]:
+    def prefill_metadata(self) -> Optional["DecodeOnlyFlashAttentionMetadata"]:
         if self.num_prefills == 0:
             return None
 
@@ -149,7 +146,7 @@ class FlashAttentionMetadata(AttentionMetadata):
         assert self.block_tables is not None
         assert self.seq_start_loc is not None
 
-        self._cached_prefill_metadata = FlashAttentionMetadata(
+        self._cached_prefill_metadata = DecodeOnlyFlashAttentionMetadata(
             num_prefills=self.num_prefills,
             num_prefill_tokens=self.num_prefill_tokens,
             num_decode_tokens=0,
@@ -168,7 +165,7 @@ class FlashAttentionMetadata(AttentionMetadata):
         return self._cached_prefill_metadata
 
     @property
-    def decode_metadata(self) -> Optional["FlashAttentionMetadata"]:
+    def decode_metadata(self) -> Optional["DecodeOnlyFlashAttentionMetadata"]:
         if self.num_decode_tokens == 0:
             return None
 
@@ -177,7 +174,7 @@ class FlashAttentionMetadata(AttentionMetadata):
         assert self.block_tables is not None
         assert self.seq_lens_tensor is not None
 
-        self._cached_decode_metadata = FlashAttentionMetadata(
+        self._cached_decode_metadata = DecodeOnlyFlashAttentionMetadata(
             num_prefills=0,
             num_prefill_tokens=0,
             num_decode_tokens=self.num_decode_tokens,
@@ -196,8 +193,8 @@ class FlashAttentionMetadata(AttentionMetadata):
         return self._cached_decode_metadata
 
 
-class FlashAttentionMetadataBuilder(
-    AttentionMetadataBuilder[FlashAttentionMetadata]):
+class DecodeOnlyFlashAttentionMetadataBuilder(
+    DecodeOnlyAttentionMetadataBuilder[DecodeOnlyFlashAttentionMetadata]):
 
     def __init__(self, input_builder: "ModelInputForGPUBuilder"):
         self.slot_mapping: List[int] = []
@@ -330,7 +327,7 @@ class FlashAttentionMetadataBuilder(
                                            dtype=torch.long,
                                            device=device)
 
-        return FlashAttentionMetadata(
+        return DecodeOnlyFlashAttentionMetadata(
             num_prefills=self.num_prefills,
             slot_mapping=slot_mapping_tensor,
             num_prefill_tokens=self.num_prefill_tokens,
@@ -347,8 +344,11 @@ class FlashAttentionMetadataBuilder(
             use_cuda_graph=use_captured_graph,
         )
 
+    def __call__(self, *args, **kwargs):
+        pass
 
-class FlashAttentionImpl(AttentionImpl):
+
+class DecodeOnlyFlashAttentionImpl(DecodeOnlyAttentionImpl):
     """
     If the input tensors contain prompt tokens, the layout is as follows:
     |<--------------- num_prefill_tokens ----------------->|	
@@ -413,7 +413,7 @@ class FlashAttentionImpl(AttentionImpl):
             raise ValueError(
                 "Sliding window is not supported in FlashAttention.")
 
-        support_head_sizes = FlashAttentionBackend.get_supported_head_sizes()
+        support_head_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes()
         if head_size not in support_head_sizes:
             raise ValueError(
                 f"Head size {head_size} is not supported by FlashAttention. "
@@ -425,7 +425,7 @@ class FlashAttentionImpl(AttentionImpl):
             key: torch.Tensor,
             value: torch.Tensor,
             kv_cache: torch.Tensor,
-            attn_metadata: FlashAttentionMetadata,
+            attn_metadata: DecodeOnlyFlashAttentionMetadata,
             k_scale: float = 1.0,
             v_scale: float = 1.0,
             attn_type: AttentionType = AttentionType.DECODER,

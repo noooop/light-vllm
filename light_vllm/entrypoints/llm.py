@@ -9,7 +9,7 @@ from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
 from light_vllm.logger import init_logger
 
 from light_vllm.wde.core.schema.engine_io import RequestOutput
-from light_vllm.wde.chat.schema.outputs import ChatModelRequestOutput
+from light_vllm.wde.chat.schema.engine_io import ChatModelRequestOutput
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.inputs.tokenizer import get_cached_tokenizer

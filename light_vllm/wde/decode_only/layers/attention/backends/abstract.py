@@ -5,18 +5,10 @@ from typing import (TYPE_CHECKING, Any, Dict, Generic, List, Optional, Set,
                     Tuple, Type, TypeVar)
 
 import torch
-
-if TYPE_CHECKING:
-    from light_vllm.worker.model_runner_base import ModelRunnerInputBuilderBase
+from light_vllm.wde.core.layers.attention.abstract import AttentionType, AttentionBackend, AttentionMetadata, AttentionMetadataBuilder, AttentionImpl
 
 
-class AttentionType(Enum):
-    DECODER = auto()  # Decoder attention between previous layer Q/K/V
-    ENCODER = auto()  # Encoder attention between previous layer Q/K/V
-    ENCODER_DECODER = auto()  # Attention between dec. Q and enc. K/V
-
-
-class AttentionBackend(ABC):
+class DecodeOnlyAttentionBackend(AttentionBackend, ABC):
     """Abstract class for attention backends."""
 
     @staticmethod
@@ -26,26 +18,26 @@ class AttentionBackend(ABC):
 
     @staticmethod
     @abstractmethod
-    def get_impl_cls() -> Type["AttentionImpl"]:
+    def get_impl_cls() -> Type["DncodeOnlyAttentionImpl"]:
         raise NotImplementedError
 
     @staticmethod
     @abstractmethod
-    def get_metadata_cls() -> Type["AttentionMetadata"]:
+    def get_metadata_cls() -> Type["DncodeOnlyAttentionMetadata"]:
         raise NotImplementedError
 
     @classmethod
-    def make_metadata(cls, *args, **kwargs) -> "AttentionMetadata":
+    def make_metadata(cls, *args, **kwargs) -> "DncodeOnlyAttentionMetadata":
         return cls.get_metadata_cls()(*args, **kwargs)
 
     @staticmethod
     @abstractmethod
-    def get_builder_cls() -> Type["AttentionMetadataBuilder"]:
+    def get_builder_cls() -> Type["DncodeOnlyAttentionMetadataBuilder"]:
         raise NotImplementedError
 
     @classmethod
     def make_metadata_builder(cls, *args,
-                              **kwargs) -> "AttentionMetadataBuilder":
+                              **kwargs) -> "DncodeOnlyAttentionMetadataBuilder":
         return cls.get_builder_cls()(*args, **kwargs)
 
     @staticmethod
@@ -77,7 +69,7 @@ class AttentionBackend(ABC):
 
 
 @dataclass
-class AttentionMetadata:
+class DecodeOnlyAttentionMetadata(AttentionMetadata):
     """Attention metadata for prefill and decode batched together."""
     # Total number of prefill requests.
     num_prefills: int
@@ -94,14 +86,14 @@ class AttentionMetadata:
 
     @property
     @abstractmethod
-    def prefill_metadata(self) -> Optional["AttentionMetadata"]:
+    def prefill_metadata(self) -> Optional["DecodeOnlyAttentionMetadata"]:
         """Return the attention metadata that's required to run prefill
         attention."""
         pass
 
     @property
     @abstractmethod
-    def decode_metadata(self) -> Optional["AttentionMetadata"]:
+    def decode_metadata(self) -> Optional["DecodeOnlyAttentionMetadata"]:
         """Return the attention metadata that's required to run decode
         attention."""
         pass
@@ -120,10 +112,10 @@ class AttentionMetadata:
         }
 
 
-T = TypeVar("T", bound=AttentionMetadata)
+T = TypeVar("T", bound=DecodeOnlyAttentionMetadata)
 
 
-class AttentionMetadataBuilder(ABC, Generic[T]):
+class DecodeOnlyAttentionMetadataBuilder(AttentionMetadataBuilder, ABC, Generic[T]):
     """Abstract class for attention metadata builders."""
 
     @abstractmethod
@@ -137,7 +129,7 @@ class AttentionMetadataBuilder(ABC, Generic[T]):
         raise NotImplementedError
 
 
-class AttentionImpl(ABC, Generic[T]):
+class DecodeOnlyAttentionImpl(AttentionImpl, ABC, Generic[T]):
 
     @abstractmethod
     def __init__(

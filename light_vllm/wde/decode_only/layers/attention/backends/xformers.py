@@ -9,17 +9,17 @@ from xformers.ops.fmha.attn_bias import (AttentionBias,
                                          BlockDiagonalMask,
                                          LowerTriangularMaskWithTensorBias)
 
-from light_vllm.layers.attention.backends.abstract import (AttentionBackend, AttentionImpl,
-                                                           AttentionMetadata, AttentionType)
-from light_vllm.layers.attention.backends.utils import CommonMetadataBuilder
-from light_vllm.layers.attention.ops.paged_attn import (PagedAttention,
-                                                        PagedAttentionMetadata)
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
+                                                                           DecodeOnlyAttentionMetadata, AttentionType)
+from light_vllm.wde.decode_only.layers.attention.backends.utils import DecodeOnlyCommonMetadataBuilder
+from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (PagedAttention,
+                                                                        PagedAttentionMetadata)
 from light_vllm.logger import init_logger
 
 logger = init_logger(__name__)
 
 
-class XFormersBackend(AttentionBackend):
+class DecodeOnlyXFormersBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_name() -> str:
@@ -367,11 +367,11 @@ def _get_seq_len_block_table_args(
         raise AttributeError(f"Invalid attention type {str(attn_type)}")
 
 
-class XFormersMetadataBuilder(CommonMetadataBuilder[XFormersMetadata]):
+class DecodeOnlyXFormersMetadataBuilder(DecodeOnlyCommonMetadataBuilder[XFormersMetadata]):
     _metadata_cls = XFormersMetadata
 
 
-class XFormersImpl(AttentionImpl[XFormersMetadata]):
+class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
     """
     If the input tensors contain prompt tokens, the layout is as follows:
     |<--------------- num_prefill_tokens ----------------->|	

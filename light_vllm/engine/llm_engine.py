@@ -73,7 +73,7 @@ class LLMEngine:
 
     def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
         self.engine_config = engine_config
-        engine_config.log_config()
+        self.engine_config.log_config()
 
         self.workflow = workflow
         self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
@@ -81,39 +81,13 @@ class LLMEngine:
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
         self.model_inputs_builder = lazy_import(self.workflow.ModelInputBuilder).from_engine(self)
 
-        if hasattr(self.engine_config, "cache_config") and self.engine_config.cache_config is not None:
-            self._initialize_kv_caches()
+        if hasattr(self.executor, "initialize_kv_caches"):
+            self.executor.initialize_kv_caches(self)
 
         self.input_processor = lazy_import(self.workflow.InputProcessor).from_engine(self)
         self.request_processor = lazy_import(self.workflow.RequestProcessor).from_engine(self)
         self.scheduler = lazy_import(self.workflow.Scheduler).from_engine(self)
         self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
-
-    def _initialize_kv_caches(self) -> None:
-        """Initialize the KV cache in the worker(s).
-
-        The workers will determine the number of blocks in both the GPU cache
-        and the swap CPU cache.
-        """
-        self.executor.driver_worker.model_runner.prepare_model_input = self.model_pre_processor.prepare_model_input
-
-        num_gpu_blocks, num_cpu_blocks = (
-            self.executor.determine_num_available_blocks())
-
-        if self.engine_config.cache_config.num_gpu_blocks_override is not None:
-            num_gpu_blocks_override = self.engine_config.cache_config.num_gpu_blocks_override
-            logger.info(
-                "Overriding num_gpu_blocks=%d with "
-                "num_gpu_blocks_override=%d", num_gpu_blocks,
-                num_gpu_blocks_override)
-            num_gpu_blocks = num_gpu_blocks_override
-
-        self.engine_config.cache_config.num_gpu_blocks = num_gpu_blocks
-        self.engine_config.cache_config.num_cpu_blocks = num_cpu_blocks
-
-        self.executor.initialize_cache(num_gpu_blocks, num_cpu_blocks)
-
-        del self.executor.driver_worker.model_runner.prepare_model_input
 
     @classmethod
     def from_engine_args(

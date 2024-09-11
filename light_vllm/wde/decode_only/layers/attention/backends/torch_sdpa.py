@@ -6,33 +6,33 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import torch
 from torch.nn.functional import scaled_dot_product_attention
 
-from light_vllm.layers.attention.backends.abstract import (AttentionBackend, AttentionImpl,
-                                                           AttentionMetadata, AttentionType)
-from light_vllm.layers.attention.ops.paged_attn import PagedAttentionMetadata
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
+                                                           DecodeOnlyAttentionMetadata, AttentionType)
+from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttentionMetadata
 from light_vllm.utils import is_cpu
 
 if is_cpu():
     try:
         from light_vllm.attention.ops.ipex_attn import PagedAttention
     except ImportError:
-        from light_vllm.layers.attention.ops.paged_attn import PagedAttention
+        from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttention
 else:
-    from light_vllm.layers.attention.ops.paged_attn import PagedAttention
+    from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttention
 
 
-class TorchSDPABackend(AttentionBackend):
+class TorchSDPABackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_name() -> str:
         return "torch-sdpa"
 
     @staticmethod
-    def get_impl_cls() -> Type["TorchSDPABackendImpl"]:
-        return TorchSDPABackendImpl
+    def get_impl_cls() -> Type["DecodeOnlyTorchSDPABackendImpl"]:
+        return DecodeOnlyTorchSDPABackendImpl
 
     @staticmethod
-    def get_metadata_cls() -> Type["AttentionMetadata"]:
-        return TorchSDPAMetadata
+    def get_metadata_cls() -> Type["DecodeOnlyAttentionMetadata"]:
+        return DecodeOnlyTorchSDPAMetadata
 
     @staticmethod
     def get_kv_cache_shape(
@@ -61,7 +61,7 @@ class TorchSDPABackend(AttentionBackend):
 
 
 @dataclass
-class TorchSDPAMetadata(AttentionMetadata, PagedAttentionMetadata):
+class DecodeOnlyTorchSDPAMetadata(DecodeOnlyAttentionMetadata, PagedAttentionMetadata):
     """Metadata for TorchSDPABackend.
     """
     # Currently, input sequences can only contain all prompts
@@ -79,7 +79,7 @@ class TorchSDPAMetadata(AttentionMetadata, PagedAttentionMetadata):
         self.attn_bias: Optional[List[torch.Tensor]] = None
 
     @property
-    def prefill_metadata(self) -> Optional["TorchSDPAMetadata"]:
+    def prefill_metadata(self) -> Optional["DecodeOnlyTorchSDPAMetadata"]:
         # Currently chunked prefill is not supported
         if self.num_decode_tokens == 0:
             assert self.num_prefills > 0
@@ -88,7 +88,7 @@ class TorchSDPAMetadata(AttentionMetadata, PagedAttentionMetadata):
         return None
 
     @property
-    def decode_metadata(self) -> Optional["TorchSDPAMetadata"]:
+    def decode_metadata(self) -> Optional["DecodeOnlyTorchSDPAMetadata"]:
         # Currently chunked prefill is not supported
         if self.num_prefills > 0:
             assert self.num_decode_tokens == 0
@@ -97,7 +97,7 @@ class TorchSDPAMetadata(AttentionMetadata, PagedAttentionMetadata):
         return self
 
 
-class TorchSDPABackendImpl(AttentionImpl[TorchSDPAMetadata]):
+class DecodeOnlyTorchSDPABackendImpl(DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPAMetadata]):
 
     def __init__(
             self,

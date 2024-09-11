@@ -9,7 +9,6 @@ import torch
 import torch.distributed
 import torch.nn as nn
 import light_vllm.envs as envs
-from light_vllm.layers.attention import AttentionMetadata, get_attn_backend
 from light_vllm.layers.sampling_params import SamplingParams
 
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
@@ -17,7 +16,6 @@ from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 
 from light_vllm.wde.core.runner.model_runner_base import ModelRunnerBase
 from light_vllm.wde.core.runner.cuda_graph_util import CUDAGraph
-from light_vllm.wde.chat.loader import get_model
 
 from light_vllm.inputs import INPUT_REGISTRY
 from light_vllm.logger import init_logger
@@ -25,6 +23,8 @@ from light_vllm.models.utils import set_cpu_offload_max_bytes
 
 from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
 from light_vllm.wde.core.schema.execute_io import ModelInput, ExecuteOutput
+from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
+
 from light_vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
                               is_hip,
                               is_pin_memory_available)
@@ -32,14 +32,8 @@ from light_vllm.wde.chat.schema.execute_io import ModelInputForGPUWithSamplingMe
 
 logger = init_logger(__name__)
 
-TModelInputForGPU = TypeVar('TModelInputForGPU', bound="ModelInputForGPU")
 
-
-class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
-    """
-    Helper class for shared methods between GPU model runners.
-    """
-    _model_input_cls: Type[TModelInputForGPU]
+class GPUModelRunner:
 
     def __init__(
         self,
@@ -48,17 +42,15 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         device_config: DeviceConfig,
         cache_config: CacheConfig,
         load_config: LoadConfig,
+        attn_backend: DecodeOnlyAttentionBackend,
         kv_cache_dtype: Optional[str] = "auto",
-        is_driver_worker: bool = False,
-        return_hidden_states: bool = False,
     ):
         self.model_config = model_config
         self.scheduler_config = scheduler_config
         self.device_config = device_config
         self.cache_config = cache_config
         self.load_config = load_config
-        self.is_driver_worker = is_driver_worker
-        self.return_hidden_states = return_hidden_states
+        self.attn_backend = attn_backend
 
         self.device = self.device_config.device
         self.pin_memory = is_pin_memory_available()
@@ -66,18 +58,6 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
         self.kv_cache_dtype = kv_cache_dtype
         self.sliding_window = model_config.get_sliding_window()
         self.block_size = cache_config.block_size
-
-        num_attn_heads = self.model_config.get_num_attention_heads()
-        self.attn_backend = get_attn_backend(
-            num_attn_heads,
-            self.model_config.get_head_size(),
-            self.model_config.get_num_kv_heads(),
-            self.model_config.get_sliding_window(),
-            self.model_config.dtype,
-            kv_cache_dtype,
-            self.block_size,
-        ) if num_attn_heads else None
-
         self.cuda_graph = CUDAGraph(model_config, cache_config, scheduler_config)
 
         # Lazy initialization
@@ -87,13 +67,22 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
             int(self.cache_config.cpu_offload_gb * 1024**3))
 
     def load_model(self) -> None:
+        from light_vllm.wde.core.loader.loader import get_model_loader, initialize_model
+
         logger.info("Starting to load model %s...", self.model_config.model)
         with CudaMemoryProfiler() as m:
-            self.model = get_model(model_config=self.model_config,
-                                   device_config=self.device_config,
-                                   load_config=self.load_config,
-                                   scheduler_config=self.scheduler_config,
-                                   cache_config=self.cache_config)
+            loader = get_model_loader(self.load_config)
+            self.model = initialize_model(
+                model_config=self.model_config,
+                load_config=self.load_config,
+                device_config=self.device_config,
+                cache_config=self.cache_config,
+                attn_backend=self.attn_backend)
+
+            loader.load_model(
+                self.model,
+                model_config=self.model_config,
+                device_config=self.device_config)
 
         self.model_memory_usage = m.consumed_memory
         logger.info("Loading model weights took %.4f GB",
@@ -188,14 +177,6 @@ class GPUModelRunnerBase(ModelRunnerBase[TModelInputForGPU]):
     def vocab_size(self) -> int:
         return self.model_config.get_vocab_size()
 
-
-class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
-    """
-    GPU model runner with sampling step.
-    """
-    _model_input_cls: Type[ModelInputForGPUWithSamplingMetadata] = (
-        ModelInputForGPUWithSamplingMetadata)
-
     @torch.inference_mode()
     def execute_model(
         self,
@@ -221,28 +202,11 @@ class ModelRunner(GPUModelRunnerBase[ModelInputForGPUWithSamplingMetadata]):
         logits = self.model.compute_logits(hidden_states,
                                            model_input.sampling_metadata)
 
-        if not self.is_driver_worker:
-            return []
-
         # Sample the next token.
         output: ExecuteOutput = self.model.sample(
             logits=logits,
             sampling_metadata=model_input.sampling_metadata,
         )
-
-        if self.return_hidden_states:
-            # we only need to pass hidden states of most recent token
-            assert model_input.sampling_metadata is not None
-            indices = model_input.sampling_metadata.selected_token_indices
-            if model_input.is_prompt:
-                hidden_states = hidden_states.index_select(
-                    0, indices)
-            elif model_input.attn_metadata.decode_metadata.use_cuda_graph:
-                hidden_states = hidden_states[:len(indices)]
-            else:
-                hidden_states = hidden_states
-
-            output.hidden_states = hidden_states
 
         return [output]
 

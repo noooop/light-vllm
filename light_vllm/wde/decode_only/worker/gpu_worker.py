@@ -6,15 +6,17 @@ from typing import List, Optional, Set, Tuple, Type
 import torch
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.platforms import current_platform
-from light_vllm.wde.chat.runner.model_runner import GPUModelRunnerBase, ModelRunner
 
-from light_vllm.wde.core.worker.cache_engine import CacheEngine
-from light_vllm.wde.core.worker.worker_base import LocalOrDistributedWorkerBase, WorkerInput
+
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
 from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig, ChatEngineConfig
+from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
+from light_vllm.wde.decode_only.worker.cache_engine import CacheEngine
+from light_vllm.wde.decode_only.runner.model_runner import GPUModelRunner
+from light_vllm.wde.decode_only.schema.execute_io import DecodeOnlyWorkerInput, DecodeOnlyExecuteInput, DecodeOnlyExecuteOutput
 
 
-class Worker(LocalOrDistributedWorkerBase):
+class Worker:
     """A worker class that executes (a partition of) the model on a GPU.
 
     Each worker is associated with a single GPU. The worker is responsible for
@@ -25,32 +27,28 @@ class Worker(LocalOrDistributedWorkerBase):
     def __init__(
         self,
         engine_config: ChatEngineConfig,
-        is_driver_worker: bool = False,
-        model_runner_cls: Optional[Type[GPUModelRunnerBase]] = None,
+        attn_backend: DecodeOnlyAttentionBackend,
     ) -> None:
         self.model_config: ModelConfig = engine_config.model_config
         self.scheduler_config: SchedulerConfig = engine_config.scheduler_config
         self.device_config: DeviceConfig = engine_config.device_config
         self.cache_config: CacheConfig = engine_config.cache_config
         self.load_config: LoadConfig = engine_config.load_config
+        self.attn_backend = attn_backend
 
-        self.is_driver_worker = is_driver_worker
         if self.model_config.trust_remote_code:
             # note: lazy import to avoid importing torch before initializing
             from light_vllm.utils import init_cached_hf_modules
             init_cached_hf_modules()
 
-        ModelRunnerClass: Type[GPUModelRunnerBase] = ModelRunner
-        if model_runner_cls is not None:
-            ModelRunnerClass = model_runner_cls
-        self.model_runner: GPUModelRunnerBase = ModelRunnerClass(
+        self.model_runner = GPUModelRunner(
             self.model_config,
             self.scheduler_config,
             self.device_config,
             self.cache_config,
             load_config=self.load_config,
+            attn_backend=attn_backend,
             kv_cache_dtype=self.cache_config.cache_dtype,
-            is_driver_worker=is_driver_worker,
         )
         # Uninitialized cache engine. Will be initialized by
         # initialize_cache.
@@ -150,7 +148,7 @@ class Worker(LocalOrDistributedWorkerBase):
 
     def _init_cache_engine(self):
         assert self.cache_config.num_gpu_blocks is not None
-        self.cache_engine = CacheEngine(self.cache_config, self.model_config, self.device_config)
+        self.cache_engine = CacheEngine(self.cache_config, self.model_config, self.device_config, self.attn_backend)
         self.gpu_cache = self.cache_engine.gpu_cache
 
     def _warm_up_model(self) -> None:
@@ -165,7 +163,7 @@ class Worker(LocalOrDistributedWorkerBase):
         return self.gpu_cache
 
     @torch.inference_mode()
-    def execute_worker(self, worker_input: WorkerInput) -> None:
+    def execute_worker(self, worker_input: DecodeOnlyWorkerInput) -> None:
         if (worker_input.blocks_to_swap_in is not None
                 and worker_input.blocks_to_swap_in.numel() > 0):
             self.cache_engine.swap_in(
@@ -191,6 +189,26 @@ class Worker(LocalOrDistributedWorkerBase):
         """
         return CacheEngine.get_cache_block_size(self.cache_config,
                                                 self.model_config)
+
+    @torch.inference_mode
+    def __call__(
+        self,
+        execute_input: Optional[DecodeOnlyExecuteInput] = None
+    ) -> Optional[List[DecodeOnlyExecuteOutput]]:
+        """Executes at least one model step on the given sequences, unless no
+        sequences are provided."""
+
+        self.execute_worker(execute_input.worker_input)
+
+        # If there is no input, we don't need to execute the model.
+        if execute_input.worker_input.num_seq_groups == 0:
+            return []
+
+        output = self.model_runner.execute_model(
+            execute_input.model_input,
+            self.kv_cache if self.kv_cache is not None else None)
+
+        return output
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):

@@ -3,15 +3,14 @@ from typing import Any, Dict, List, Optional
 import torch
 import torch.nn as nn
 
-from light_vllm.layers.attention.backends.abstract import AttentionMetadata, AttentionType
-from light_vllm.layers.attention.selector import get_attn_backend
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import DecodeOnlyAttentionMetadata, AttentionType, DecodeOnlyAttentionBackend
 from light_vllm.wde.core.config import CacheConfig
 from light_vllm.layers.quantization.base_config import (
     QuantizationConfig)
 from light_vllm.layers.quantization.kv_cache import BaseKVCacheMethod
 
 
-class Attention(nn.Module):
+class DecodeOnlyAttention(nn.Module):
     """Attention layer.
 
     This class takes query, key, and value tensors as input. The input tensors
@@ -35,6 +34,7 @@ class Attention(nn.Module):
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
         prefix: str = "",
+        attn_backend: Optional[DecodeOnlyAttentionBackend] = None,
     ) -> None:
         super().__init__()
         if cache_config is not None:
@@ -72,13 +72,6 @@ class Attention(nn.Module):
             self.quant_method = quant_method
             self.quant_method.create_weights(self)
 
-        # During model initialization, the default dtype is set as the model
-        # weight and activation dtype.
-        dtype = torch.get_default_dtype()
-        attn_backend = get_attn_backend(num_heads, head_size, num_kv_heads,
-                                        sliding_window, dtype, kv_cache_dtype,
-                                        block_size, blocksparse_params
-                                        is not None)
         impl_cls = attn_backend.get_impl_cls()
         self.impl = impl_cls(num_heads, head_size, scale, num_kv_heads,
                              alibi_slopes, sliding_window, kv_cache_dtype,
@@ -90,7 +83,7 @@ class Attention(nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
         kv_cache: Optional[torch.Tensor],
-        attn_metadata: AttentionMetadata,
+        attn_metadata: DecodeOnlyAttentionMetadata,
         attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
 
