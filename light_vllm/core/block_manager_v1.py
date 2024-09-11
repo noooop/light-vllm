@@ -12,7 +12,7 @@ from light_vllm.core.block.utils import check_no_caching_or_swa_for_blockmgr_enc
 from light_vllm.core.evictor_v1 import EvictionPolicy, Evictor, make_evictor
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
 from light_vllm.logger import init_logger
-from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup, SequenceStatus
+from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup, SequenceStatus
 from light_vllm.utils import Device
 
 logger = init_logger(__name__)

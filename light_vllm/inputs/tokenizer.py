@@ -4,7 +4,7 @@ from light_vllm.envs import VLLM_USE_MODELSCOPE
 from light_vllm.logger import init_logger
 from transformers import (AutoTokenizer, PreTrainedTokenizer,
                           PreTrainedTokenizerFast)
-from light_vllm.task.base.schema.sequence import Logprob, SamplingParams, Sequence, SequenceGroup
+from light_vllm.wde.core.schema.sequence import Logprob, SamplingParams, Sequence, SequenceGroup
 
 logger = init_logger(__name__)
 

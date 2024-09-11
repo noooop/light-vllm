@@ -4,7 +4,7 @@ from typing import List
 from typing import Sequence as GenericSequence
 from typing import Tuple
 
-from light_vllm.task.base.schema.sequence import Sequence, SequenceGroup
+from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup
 
 
 class AllocStatus(enum.Enum):

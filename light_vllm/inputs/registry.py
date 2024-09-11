@@ -12,7 +12,7 @@ from .data import LLMInputs
 
 if TYPE_CHECKING:
     from light_vllm.config import ModelConfig
-    from light_vllm.task.base.schema.sequence import SequenceData
+    from light_vllm.wde.core.schema.sequence import SequenceData
 
 logger = init_logger(__name__)
 
@@ -89,7 +89,7 @@ class InputRegistry:
             :data:`InputProcessor` is not applied to the dummy data.
         """
         # Avoid circular import
-        from light_vllm.task.base.schema.sequence import SequenceData
+        from light_vllm.wde.core.schema.sequence import SequenceData
 
         dummy_seq_data = SequenceData([0] * seq_len)
         dummy_multi_modal_data = None
@@ -129,7 +129,7 @@ class InputRegistry:
             :ref:`enabling_multimodal_inputs`
         """
         # Avoid circular import
-        from light_vllm.task.base.loader.utils import get_model_architecture
+        from light_vllm.wde.core.loader.utils import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
         dummy_factory = self._dummy_factories_by_model_type \
@@ -177,7 +177,7 @@ class InputRegistry:
             :ref:`input_processing_pipeline`
         """
         # Avoid circular import
-        from light_vllm.task.base.loader.utils import get_model_architecture
+        from light_vllm.wde.core.loader.utils import get_model_architecture
 
         model_cls, _ = get_model_architecture(model_config)
 

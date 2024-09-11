@@ -14,7 +14,7 @@ def benchmark(args):
     try:
         import light_vllm
         from light_vllm import LLMEngine, SamplingParams, TextPrompt
-        from light_vllm.task.chat.arg_utils import ChatEngineArgs as EngineArgs
+        from light_vllm.wde.chat.arg_utils import ChatEngineArgs as EngineArgs
     except Exception:
         import vllm
         from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt

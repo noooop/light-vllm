@@ -4,10 +4,10 @@ from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, 
 from typing import Sequence as GenericSequence
 from light_vllm.logger import init_logger
 
-from light_vllm.task.base.schema.engine_io import Params, Inputs, RequestOutput
-from light_vllm.task.base.workflow import Workflow
-from light_vllm.task.base.arg_utils import EngineArgs
-from light_vllm.task.base.config import EngineConfig
+from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput
+from light_vllm.wde.core.workflow import Workflow
+from light_vllm.wde.core.arg_utils import EngineArgs
+from light_vllm.wde.core.config import EngineConfig
 
 
 logger = init_logger(__name__)
@@ -123,7 +123,7 @@ class LLMEngine:
         """Creates an LLM engine from the engine arguments."""
 
         from light_vllm.models.transformers_utils.config import get_config
-        from light_vllm.task.base.loader.utils import get_model_workflow
+        from light_vllm.wde.core.loader.utils import get_model_workflow
 
         if isinstance(engine_args, EngineArgs):
             engine_args = engine_args.to_dict()
