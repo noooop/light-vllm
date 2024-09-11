@@ -1,6 +1,6 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Optional, Tuple
 
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.config import EngineConfig
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.schema.execute_io import ExecuteInput, ExecuteOutput

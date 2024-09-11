@@ -3,7 +3,7 @@ from typing import ClassVar, List, Optional, Sequence, Union, cast, overload
 
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.inputs import (PromptInputs, TextPrompt, TokensPrompt,
                                parse_and_batch_prompt)
 from light_vllm.logger import init_logger

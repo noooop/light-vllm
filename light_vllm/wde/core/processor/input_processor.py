@@ -1,7 +1,7 @@
 
 from abc import ABC, abstractmethod
 from typing import Optional, Union
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.engine_io import Params, Inputs, Request, SchedulableRequest
 
 

@@ -34,20 +34,10 @@ class TokensPrompt(Inputs):
 
 
 PromptInput = Union[str, TextPrompt, TokensPrompt]
-"""
-The inputs to the LLM, which can take one of the following forms:
-
-- A text prompt (:class:`str` or :class:`TextPrompt`)
-- A tokenized prompt (:class:`TokensPrompt`)
-"""
 
 
 @dataclass
 class TextOnlyInputs(Inputs):
-    """
-    The inputs in :class:`~vllm.LLMEngine` before they are
-    passed to the model executor.
-    """
     prompt_token_ids: List[int]
     """The token IDs of the prompt."""
 

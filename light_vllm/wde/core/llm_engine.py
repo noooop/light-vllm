@@ -3,12 +3,11 @@ from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, Optional)
 from typing import Sequence as GenericSequence
 from light_vllm.logger import init_logger
-
+from queue import Queue
 from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.arg_utils import EngineArgs
 from light_vllm.wde.core.config import EngineConfig
-
 
 logger = init_logger(__name__)
 _O = RequestOutput
@@ -75,6 +74,17 @@ class LLMEngine:
         self.engine_config = engine_config
         self.engine_config.log_config()
 
+        self.async_scheduling = True
+
+        if self.async_scheduling:
+            self.executor_in = Queue()
+            self.executor_out = Queue()
+            self.max_num_on_the_fly = self.engine_config.scheduler_config.max_num_on_the_fly
+            self.num_on_the_fly = 0
+            self.step = self.async_step
+        else:
+            self.step = self.sync_step
+
         self.workflow = workflow
         self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
@@ -127,7 +137,7 @@ class LLMEngine:
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
         self.scheduler.abort_request(request_id)
 
-    def step(self) -> List[RequestOutput]:
+    def sync_step(self) -> List[RequestOutput]:
         scheduler_output = self.scheduler.schedule()
         if scheduler_output.is_empty():
             return []
@@ -135,7 +145,35 @@ class LLMEngine:
         executor_input = self.model_inputs_builder(scheduler_output)
         executor_output = self.executor.execute_model(executor_input)
         request_outputs = self.output_processor(scheduler_output, executor_output)
-        self.scheduler.free_finished_request()
+        self.scheduler.free_finished_request(scheduler_output)
+
+        request_outputs = self.scheduler.remove_abort_request(request_outputs)
+        return request_outputs
+
+    def async_step(self) -> List[RequestOutput]:
+        while self.num_on_the_fly < self.max_num_on_the_fly:
+            scheduler_output = self.scheduler.schedule()
+            if scheduler_output.is_empty():
+                break
+            executor_input = self.model_inputs_builder(scheduler_output)
+
+            self.executor_in.put((scheduler_output, executor_input))
+            self.num_on_the_fly += 1
+
+        if self.num_on_the_fly == 0:
+            self.executor.shutdown_execute_loop()
+            return []
+
+        self.executor.start_execute_loop()
+
+        scheduler_output, executor_output = self.executor_out.get()
+        self.num_on_the_fly -= 1
+
+        if self.num_on_the_fly == 0:
+            self.executor.shutdown_execute_loop()
+
+        request_outputs = self.output_processor(scheduler_output, executor_output)
+        self.scheduler.free_finished_request(scheduler_output)
 
         request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs
@@ -156,5 +194,5 @@ class LLMEngine:
     def __del__(self):
         # Shutdown model executor when engine is garbage collected
         # Use getattr since __init__ can fail before the field is set
-        if Executor := getattr(self, "Executor", None):
-            Executor.shutdown()
+        if executor := getattr(self, "executor", None):
+            executor.shutdown_execute_loop()

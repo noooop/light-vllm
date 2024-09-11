@@ -3,9 +3,9 @@
 from abc import ABC, abstractmethod
 from typing import Deque, Union, Iterable, List
 from collections import deque
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.config import SchedulerConfig
-from light_vllm.wde.core.schema.engine_io import Request, SchedulableRequest, SchedulerOutput, RequestOutput
+from light_vllm.wde.core.schema.engine_io import Request, SchedulerOutput, RequestOutput
 from light_vllm.wde.core.processor.input_processor import RequestProcessor
 
 from light_vllm.logger import init_logger
@@ -21,7 +21,7 @@ class Scheduler(ABC):
         self.scheduler_config = scheduler_config
         self.request_processor = request_processor
 
-        self.waiting: Deque[Union[Request, SchedulableRequest]] = deque()
+        self.waiting: Deque[Request] = deque()
 
         self.requests = set()
         self.aborted_requests = set()
@@ -30,8 +30,8 @@ class Scheduler(ABC):
     def from_engine(cls, engine: LLMEngine) -> "Scheduler":
         raise NotImplementedError
 
-    def add_request(self, request: Union[Request, SchedulableRequest]) -> None:
-        if request.request_id in self.requests or  request.request_id in self.aborted_requests:
+    def add_request(self, request: Request) -> None:
+        if request.request_id in self.requests or request.request_id in self.aborted_requests:
             logger.warning("[%s] request_id conflict")
             return
 
@@ -47,13 +47,19 @@ class Scheduler(ABC):
         self.aborted_requests += request_ids
 
     def remove_abort_request(self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
-        out = []
-        for request in request_outputs:
-            if request.request_id in self.aborted_requests:
-                self.aborted_requests.remove(request.request_id)
-            else:
-                out.append(request)
-        return out
+        if len(self.aborted_requests) == 0:
+            return request_outputs
+
+        current_ids = set(request.request_id for request in self.aborted_requests)
+        need_abort = self.aborted_requests & current_ids
+
+        if len(need_abort) == 0:
+            return request_outputs
+
+        request_outputs = [request for request in self.aborted_requests if request.request_id not in need_abort]
+        self.aborted_requests -= need_abort
+
+        return request_outputs
 
     def has_unfinished_requests(self) -> bool:
         return len(self.requests) != 0
@@ -66,5 +72,5 @@ class Scheduler(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def free_finished_request(self):
+    def free_finished_request(self, scheduler_output: SchedulerOutput):
         raise NotImplementedError

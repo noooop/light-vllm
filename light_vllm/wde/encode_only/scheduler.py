@@ -1,8 +1,7 @@
 
 from dataclasses import dataclass, field
-from typing import Set
-
-from light_vllm.wde.core.schema.engine_io import SchedulableRequest
+from typing import Set, List
+from light_vllm.wde.core.schema.engine_io import Request, SchedulableRequest
 from light_vllm.wde.core.scheduler import Scheduler
 from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlySchedulerOutput
 from light_vllm.wde.encode_only.processor.input_processor import EncodeOnlyModelRequestProcessor
@@ -25,19 +24,12 @@ class SchedulingBudget:
         return (self.num_batched_tokens + num_new_tokens <= self.token_budget
                 and self.num_curr_request + num_new_request <= self.max_num_requests)
 
-    def remaining_token_budget(self):
-        return self.token_budget - self.num_batched_tokens
-
     def add_num_batched_tokens(self, req_id: str, num_batched_tokens: int):
         if req_id in self._curr_requests:
             return
 
         self._curr_requests.add(req_id)
         self._num_batched_tokens += num_batched_tokens
-
-    def subtract_num_batched_tokens(self, req_id: str):
-        if req_id in self._curr_requests:
-            self._curr_requests.remove(req_id)
 
     @property
     def num_batched_tokens(self):
@@ -56,8 +48,6 @@ class EncodeOnlyScheduler(Scheduler):
             request_processor: EncodeOnlyModelRequestProcessor,
     ) -> None:
         super().__init__(scheduler_config, request_processor)
-        self.scheduler_config = scheduler_config
-        self.request_processor = request_processor
 
     @classmethod
     def from_engine(cls, engine):
@@ -82,6 +72,7 @@ class EncodeOnlyScheduler(Scheduler):
 
             if not isinstance(request, SchedulableRequest):
                 request = self.request_processor(request)
+                waiting_queue[0] = request
 
             num_new_tokens = request.num_new_tokens
 
@@ -92,9 +83,10 @@ class EncodeOnlyScheduler(Scheduler):
 
             waiting_queue.popleft()
             scheduler_outputs.append(request)
-            self.requests.remove(request.request_id)
 
         return EncodeOnlySchedulerOutput(scheduled_requests=scheduler_outputs)
 
-    def free_finished_request(self):
-        return
+    def free_finished_request(self, scheduler_output: EncodeOnlySchedulerOutput):
+        for request in scheduler_output.scheduled_requests:
+            self.requests.remove(request.request_id)
+

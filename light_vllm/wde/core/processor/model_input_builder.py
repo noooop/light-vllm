@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.engine_io import SchedulerOutput
 from light_vllm.wde.core.schema.execute_io import ExecuteInput
 

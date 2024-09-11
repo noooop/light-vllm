@@ -1,7 +1,7 @@
 
 from typing import List
 import torch
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.processor.output_processor import OutputProcessor
 from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlyRequestOutput, EncodeOnlySchedulerOutput
 

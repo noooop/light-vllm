@@ -99,7 +99,7 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_hf, args)
             f.result()
 
-    run_hf(args)
+    #run_hf(args)
 
     def run_vllm(args):
         with ProcessPoolExecutor(1) as executor:

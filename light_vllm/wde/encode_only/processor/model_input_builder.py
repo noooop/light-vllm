@@ -1,7 +1,7 @@
 
 import torch
 
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.processor.model_input_builder import ModelInputBuilder
 from light_vllm.wde.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionMetadataBuilder
 from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlySchedulerOutput

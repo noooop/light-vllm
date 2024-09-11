@@ -1,8 +1,8 @@
-from typing import Optional, Union
+from typing import Optional
 
 import time
 from light_vllm.inputs.tokenizer import Tokenizer
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.engine_io import Params, PromptInput
 from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlyInput, EncodeOnlyRequest, EncodeOnlySchedulableRequest
 from light_vllm.wde.core.processor.input_processor import InputProcessor, RequestProcessor

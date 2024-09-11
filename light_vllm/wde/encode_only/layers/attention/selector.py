@@ -4,9 +4,8 @@ from typing import Optional, Type
 
 import torch
 
-import light_vllm.envs as envs
 from light_vllm.wde.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
-from light_vllm.engine.llm_engine import LLMEngine
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.logger import init_logger
 
 

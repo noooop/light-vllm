@@ -3,8 +3,9 @@ from typing import Optional
 from light_vllm.wde.core.config import EngineConfig
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.logger import init_logger
-
-from light_vllm.engine.llm_engine import LLMEngine
+from queue import Queue
+from threading import Thread
+from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.wde.core.worker.worker_base import WorkerWrapperBase
 from light_vllm.wde.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
@@ -60,3 +61,49 @@ class GPUExecutor:
     ) -> Optional[ExecuteOutput]:
         output = self.driver_worker(execute_input)
         return output
+
+
+class GPUAsyncExecutor(GPUExecutor):
+    def __init__(
+        self,
+        engine_config: EngineConfig,
+        workflow: Workflow,
+        attn_backend: EncodeOnlyAttentionBackend,
+        executor_in: Queue,
+        executor_out: Queue
+    ) -> None:
+        super().__init__(engine_config, workflow, attn_backend)
+        self.executor_in = executor_in
+        self.executor_out = executor_out
+
+        self.executor_thread = None
+
+    @classmethod
+    def from_engine(cls, engine: LLMEngine):
+        return cls(
+            engine_config=engine.engine_config,
+            workflow=engine.workflow,
+            attn_backend=engine.attn_backend,
+            executor_in=engine.executor_in,
+            executor_out=engine.executor_out
+        )
+
+    def execute_loop(self):
+        while True:
+            o = self.executor_in.get()
+            if o is None:
+                break
+
+            scheduler_output, executor_input = o
+            executor_output = self.execute_model(executor_input)
+            self.executor_out.put((scheduler_output, executor_output))
+
+    def start_execute_loop(self):
+        if self.executor_thread is None or not self.executor_thread.is_alive():
+            self.executor_thread = Thread(target=self.execute_loop)
+            self.executor_thread.start()
+
+    def shutdown_execute_loop(self):
+        if self.executor_thread.is_alive():
+            self.executor_in.put(None)
+            self.executor_thread.join()
