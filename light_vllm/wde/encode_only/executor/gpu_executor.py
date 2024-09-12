@@ -1,10 +1,11 @@
+import queue
 from typing import Optional
-
+import torch
+from queue import Queue
+from threading import Thread
 from light_vllm.wde.core.config import EngineConfig
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.logger import init_logger
-from queue import Queue
-from threading import Thread
 from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.wde.core.worker.worker_base import WorkerWrapperBase
@@ -92,7 +93,7 @@ class GPUAsyncExecutor(GPUExecutor):
             executor_out=engine.executor_out
         )
 
-    def execute_loop(self):
+    def simple_execute_loop(self):
         while True:
             o = self.executor_in.get()
             if o is None:
@@ -102,12 +103,96 @@ class GPUAsyncExecutor(GPUExecutor):
             executor_output = self.execute_model(executor_input)
             self.executor_out.put((scheduler_output, executor_output))
 
+    def double_buffer_execute_loop(self):
+        stream_pool = CudaStreamPool()
+        from dataclasses import dataclass
+        from light_vllm.wde.core.schema.engine_io import SchedulerOutput
+
+        @dataclass
+        class Task:
+            stream: torch.cuda.stream
+            scheduler_output: SchedulerOutput
+            executor_input: ExecuteInput
+            executor_output: Optional[ExecuteOutput]
+
+            @classmethod
+            def get(cls, block):
+                o = self.executor_in.get(block)
+                if o is None:
+                    return None
+
+                scheduler_output, executor_input = o
+                s = stream_pool.get()
+                task = cls(stream=s,
+                           scheduler_output=scheduler_output,
+                           executor_input=executor_input,
+                           executor_output=None)
+                return task
+
+            def free(self):
+                stream_pool.put(self.stream)
+
+        current_task: Optional[Task] = None
+        next_task: Optional[Task] = None
+
+        goon = True
+        while goon:
+            if current_task is None:
+                current_task = Task.get(block=True)
+                if current_task is None:
+                    break
+
+                with torch.cuda.stream(current_task.stream):
+                    current_task.executor_input.model_input.to(self.driver_worker.device)
+                    current_task.executor_output = self.execute_model(current_task.executor_input)
+
+            try:
+                next_task = Task.get(block=False)
+                if next_task is None:
+                    goon = False
+                else:
+                    with torch.cuda.stream(next_task.stream):
+                        next_task.executor_input.model_input.to(self.driver_worker.device)
+            except queue.Empty:
+                pass
+
+            current_task.stream.synchronize()
+            if next_task is not None:
+                with torch.cuda.stream(next_task.stream):
+                    executor_output = self.execute_model(next_task.executor_input)
+                    next_task.executor_output = executor_output
+
+            with torch.cuda.stream(current_task.stream):
+                #current_task.executor_output.to("cpu")
+                #current_task.stream.synchronize()
+                self.executor_out.put((current_task.scheduler_output, current_task.executor_output))
+
+            current_task.free()
+            current_task, next_task = next_task, None
+
     def start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.execute_loop)
+            self.executor_thread = Thread(target=self.double_buffer_execute_loop)
             self.executor_thread.start()
 
     def shutdown_execute_loop(self):
         if self.executor_thread.is_alive():
             self.executor_in.put(None)
             self.executor_thread.join()
+
+
+class CudaStreamPool:
+    def __init__(self):
+        from torch.cuda import Stream
+        from queue import Queue
+        self.pool = Queue()
+        self.Stream = Stream
+
+    def get(self):
+        if self.pool.empty():
+            return self.Stream()
+        else:
+            return self.pool.get()
+
+    def put(self, stream):
+        self.pool.put(stream)

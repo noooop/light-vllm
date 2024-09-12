@@ -21,7 +21,7 @@ class Worker:
         self.scheduler_config: EncodeOnlySchedulerConfig = engine_config.scheduler_config
         self.device_config: DeviceConfig = engine_config.device_config
         self.load_config: LoadConfig = engine_config.load_config
-
+        self.device = self.device_config.device
         if self.model_config.trust_remote_code:
             # note: lazy import to avoid importing torch before initializing
             from light_vllm.utils import init_cached_hf_modules

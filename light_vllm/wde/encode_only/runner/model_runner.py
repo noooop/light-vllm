@@ -59,6 +59,5 @@ class ModelRunner:
         self,
         model_input: ModelInputForGPU,
     ):
-        model_input.to(self.device)
         return self.model(**model_input.to_dict())
 
