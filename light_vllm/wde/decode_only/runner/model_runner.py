@@ -1,10 +1,5 @@
-import dataclasses
-
 import warnings
-import weakref
-from dataclasses import dataclass
-from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
-                    TypeVar, Union)
+from typing import (List, Optional)
 import torch
 import torch.distributed
 import torch.nn as nn
@@ -14,19 +9,17 @@ from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
 from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 
-from light_vllm.wde.core.runner.model_runner_base import ModelRunnerBase
 from light_vllm.wde.core.runner.cuda_graph_util import CUDAGraph
 
-from light_vllm.inputs import INPUT_REGISTRY
+from light_vllm.wde.core.inputs import INPUT_REGISTRY
 from light_vllm.logger import init_logger
 from light_vllm.models.utils import set_cpu_offload_max_bytes
 
 from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
-from light_vllm.wde.core.schema.execute_io import ModelInput, ExecuteOutput
+from light_vllm.wde.core.schema.execute_io import ExecuteOutput
 from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
 
-from light_vllm.utils import (CudaMemoryProfiler, flatten_2d_lists,
-                              is_hip,
+from light_vllm.utils import (CudaMemoryProfiler, is_hip,
                               is_pin_memory_available)
 from light_vllm.wde.chat.schema.execute_io import ModelInputForGPUWithSamplingMetadata
 

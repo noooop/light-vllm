@@ -7,7 +7,7 @@ from light_vllm.logger import init_logger
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.wde.core.schema.sequence import (Sequence, SequenceGroup, SequenceStatus)
 from light_vllm.wde.chat.schema.execute_io import SequenceGroupOutput, SequenceOutput
-from light_vllm.inputs.tokenizer import Tokenizer
+from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.utils import Counter
 
 logger = init_logger(__name__)

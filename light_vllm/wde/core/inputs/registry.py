@@ -7,12 +7,8 @@ from torch import nn
 from transformers import PretrainedConfig
 
 from light_vllm.logger import init_logger
+from light_vllm.wde.core.schema.engine_io import TextOnlyInputs
 
-from .data import LLMInputs
-
-if TYPE_CHECKING:
-    from light_vllm.config import ModelConfig
-    from light_vllm.wde.core.schema.sequence import SequenceData
 
 logger = init_logger(__name__)
 
@@ -60,7 +56,7 @@ Note:
     :data:`InputProcessor` is not applied to the dummy data.
 """
 
-InputProcessor = Callable[[InputContext, LLMInputs], LLMInputs]
+InputProcessor = Callable[[InputContext, TextOnlyInputs], TextOnlyInputs]
 """Preprocess the inputs to the model."""
 
 
@@ -138,7 +134,7 @@ class InputRegistry:
         return dummy_factory(InputContext(model_config), seq_len)
 
     def _default_input_processor(self, ctx: InputContext,
-                                 inputs: LLMInputs) -> LLMInputs:
+                                 inputs: TextOnlyInputs) -> TextOnlyInputs:
         """The default input processor is a no-op."""
         return inputs
 
@@ -167,7 +163,7 @@ class InputRegistry:
         return wrapper
 
     def process_input(self, model_config: "ModelConfig",
-                      inputs: LLMInputs) -> LLMInputs:
+                      inputs: TextOnlyInputs) -> TextOnlyInputs:
         """
         Apply an input processor to an instance of model inputs.
 

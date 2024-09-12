@@ -2,7 +2,7 @@ from typing import Any, Dict, Optional
 
 import time
 from light_vllm.utils import Counter
-from light_vllm.inputs.tokenizer import Tokenizer
+from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.chat.config import CacheConfig, ModelConfig
 from light_vllm.layers.sampling_params import SamplingParams

@@ -2,7 +2,6 @@
 
 from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.entrypoints.llm import LLM
-from light_vllm.inputs import PromptInputs, TextPrompt, TokensPrompt
 from light_vllm.wde.core.modelzoo import ModelRegistry
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams
@@ -14,9 +13,6 @@ __all__ = [
     "__version__",
     "LLM",
     "ModelRegistry",
-    "PromptInputs",
-    "TextPrompt",
-    "TokensPrompt",
     "SamplingParams",
     "LLMEngine",
     "PoolingParams",
