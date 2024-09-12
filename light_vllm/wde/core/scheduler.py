@@ -1,5 +1,4 @@
 
-
 from abc import ABC, abstractmethod
 from typing import Deque, Union, Iterable, List
 from collections import deque
@@ -13,6 +12,8 @@ logger = init_logger(__name__)
 
 
 class Scheduler(ABC):
+    support_scheduling = []
+
     def __init__(
             self,
             scheduler_config: SchedulerConfig,
@@ -50,13 +51,13 @@ class Scheduler(ABC):
         if len(self.aborted_requests) == 0:
             return request_outputs
 
-        current_ids = set(request.request_id for request in self.aborted_requests)
+        current_ids = set(request.request_id for request in request_outputs)
         need_abort = self.aborted_requests & current_ids
 
         if len(need_abort) == 0:
             return request_outputs
 
-        request_outputs = [request for request in self.aborted_requests if request.request_id not in need_abort]
+        request_outputs = [request for request in request_outputs if request.request_id not in need_abort]
         self.aborted_requests -= need_abort
 
         return request_outputs
@@ -71,6 +72,6 @@ class Scheduler(ABC):
     def schedule(self) -> SchedulerOutput:
         raise NotImplementedError
 
-    @abstractmethod
-    def free_finished_request(self, scheduler_output: SchedulerOutput):
-        raise NotImplementedError
+    def free_finished_request(self, request_outputs: List[RequestOutput]):
+        finished_request_ids = set(request.request_id for request in request_outputs if request.finished)
+        self.requests -= finished_request_ids

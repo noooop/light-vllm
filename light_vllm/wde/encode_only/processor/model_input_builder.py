@@ -24,7 +24,7 @@ class EncodeOnlyModelInputBuilder(ModelInputBuilder):
         input_tokens = []
         input_positions = []
         seq_lens = []
-        for request in scheduler_output.scheduled_requests:
+        for request in scheduler_output.requests:
             prompt_token_ids = request.inputs.prompt_token_ids
             n_tokens = len(prompt_token_ids)
             input_tokens.extend(prompt_token_ids)

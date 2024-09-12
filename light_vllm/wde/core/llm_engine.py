@@ -73,10 +73,9 @@ class LLMEngine:
     def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
         self.engine_config = engine_config
         self.engine_config.log_config()
+        self.workflow = workflow
 
-        self.async_scheduling = True
-
-        if self.async_scheduling:
+        if self.use_async_scheduling():
             self.executor_in = Queue()
             self.executor_out = Queue()
             self.max_num_on_the_fly = self.engine_config.scheduler_config.max_num_on_the_fly
@@ -85,7 +84,6 @@ class LLMEngine:
         else:
             self.step = self.sync_step
 
-        self.workflow = workflow
         self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
@@ -98,6 +96,22 @@ class LLMEngine:
         self.request_processor = lazy_import(self.workflow.RequestProcessor).from_engine(self)
         self.scheduler = lazy_import(self.workflow.Scheduler).from_engine(self)
         self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
+
+    def use_async_scheduling(self):
+        executor_cls = lazy_import(self.workflow.Executor)
+        scheduler_cls = lazy_import(self.workflow.Scheduler)
+
+        if "async_scheduling" in executor_cls.support_scheduling and "async_scheduling" in scheduler_cls.support_scheduling:
+            logger.info("Use async scheduling")
+            return True
+
+        if "sync_scheduling" in executor_cls.support_scheduling and "sync_scheduling" in scheduler_cls.support_scheduling:
+            logger.info("Use sync scheduling")
+            return False
+
+        raise RuntimeError(f"Executor support scheduling: {executor_cls.support_scheduling}."
+                           f"Scheduler support scheduling: {executor_cls.support_scheduling}."
+                           f"Not compatible")
 
     @classmethod
     def from_engine_args(
@@ -145,8 +159,7 @@ class LLMEngine:
         executor_input = self.model_inputs_builder(scheduler_output)
         executor_output = self.executor.execute_model(executor_input)
         request_outputs = self.output_processor(scheduler_output, executor_output)
-        self.scheduler.free_finished_request(scheduler_output)
-
+        self.scheduler.free_finished_request(request_outputs)
         request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs
 
@@ -173,8 +186,7 @@ class LLMEngine:
             self.executor.shutdown_execute_loop()
 
         request_outputs = self.output_processor(scheduler_output, executor_output)
-        self.scheduler.free_finished_request(scheduler_output)
-
+        self.scheduler.free_finished_request(request_outputs)
         request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs
 

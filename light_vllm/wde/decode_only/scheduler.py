@@ -906,9 +906,6 @@ class Scheduler:
                 remaining.append(seq_group)
         self.running = remaining
 
-    def remove_abort_request(self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
-        return request_outputs
-
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         self.block_manager.allocate(seq_group)
         for seq in seq_group.get_seqs(status=SequenceStatus.WAITING):

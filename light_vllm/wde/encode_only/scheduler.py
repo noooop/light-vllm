@@ -1,7 +1,7 @@
 
 from dataclasses import dataclass, field
-from typing import Set, List
-from light_vllm.wde.core.schema.engine_io import Request, SchedulableRequest
+from typing import Set
+from light_vllm.wde.core.schema.engine_io import SchedulableRequest
 from light_vllm.wde.core.scheduler import Scheduler
 from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlySchedulerOutput
 from light_vllm.wde.encode_only.processor.input_processor import EncodeOnlyModelRequestProcessor
@@ -41,6 +41,7 @@ class SchedulingBudget:
 
 
 class EncodeOnlyScheduler(Scheduler):
+    support_scheduling = ["sync_scheduling", "async_scheduling"]
 
     def __init__(
             self,
@@ -80,13 +81,8 @@ class EncodeOnlyScheduler(Scheduler):
                 break
 
             budget.add_num_batched_tokens(request.request_id, num_new_tokens)
-
             waiting_queue.popleft()
             scheduler_outputs.append(request)
 
-        return EncodeOnlySchedulerOutput(scheduled_requests=scheduler_outputs)
-
-    def free_finished_request(self, scheduler_output: EncodeOnlySchedulerOutput):
-        for request in scheduler_output.scheduled_requests:
-            self.requests.remove(request.request_id)
+        return EncodeOnlySchedulerOutput(requests=scheduler_outputs)
 

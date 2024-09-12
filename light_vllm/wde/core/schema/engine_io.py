@@ -57,4 +57,4 @@ class SchedulerOutput:
 
 
 class RequestOutput(Request):
-    pass
+    finished: bool

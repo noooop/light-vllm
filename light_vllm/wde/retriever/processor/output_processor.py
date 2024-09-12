@@ -11,7 +11,7 @@ class RetrieverModelOutputProcessor(EncodeOnlyModelOutputProcessor):
                  scheduler_output: EncodeOnlySchedulerOutput,
                  execute_output: torch.Tensor) -> List[EmbeddingRequestOutput]:
         request_outputs = []
-        for request, outputs in zip(scheduler_output.scheduled_requests, execute_output):
+        for request, outputs in zip(scheduler_output.requests, execute_output):
             prompt_token_ids = request.inputs.prompt_token_ids
             request_outputs.append(EmbeddingRequestOutput(
                 request_id=request.request_id,
