@@ -149,7 +149,7 @@ class GPUAsyncExecutor(GPUExecutor):
                     break
 
                 with torch.cuda.stream(compute_stream):
-                    current_task.executor_input.model_input.to(self.driver_worker.device)
+                    current_task.executor_input.model_input.to(self.driver_worker.device, non_blocking=True)
                     current_task.executor_output = self.execute_model(current_task.executor_input)
                     end_compute = torch.cuda.Event()
             else:
@@ -162,7 +162,7 @@ class GPUAsyncExecutor(GPUExecutor):
                     goon = False
                 else:
                     with torch.cuda.stream(io_stream):
-                        next_task.executor_input.model_input.to(self.driver_worker.device)
+                        next_task.executor_input.model_input.to(self.driver_worker.device, non_blocking=True)
 
                     compute_stream.wait_stream(io_stream)
 
@@ -178,7 +178,7 @@ class GPUAsyncExecutor(GPUExecutor):
             end_compute.wait()
             if self.output_to_cpu:
                 with torch.cuda.stream(io_stream):
-                    current_task.executor_output.to("cpu")
+                    current_task.executor_output.to("cpu", non_blocking=True)
                     io_stream.synchronize()
             self.executor_out.put((current_task.scheduler_output, current_task.executor_output))
 
@@ -187,7 +187,7 @@ class GPUAsyncExecutor(GPUExecutor):
 
     def start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.simple_execute_loop)
+            self.executor_thread = Thread(target=self.double_buffer_execute_loop)
             self.executor_thread.start()
 
     def shutdown_execute_loop(self):

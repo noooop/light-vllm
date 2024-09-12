@@ -22,10 +22,10 @@ class EncodeOnlyAttentionMetadata(AttentionMetadata):
     # [4, 6], it is [0, 4, 10].
     seq_start_loc: Optional[torch.Tensor]
 
-    def to(self, device):
+    def to(self, device, non_blocking=False):
         for k, v in self.__dict__.items():
             if isinstance(v, torch.Tensor):
-                self.__dict__[k] = v.to(device)
+                self.__dict__[k] = v.to(device, non_blocking=non_blocking)
 
         return self
 

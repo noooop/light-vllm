@@ -12,9 +12,9 @@ class ModelInputForGPU(ModelInput):
     positions: torch.Tensor
     attn_metadata: EncodeOnlyAttentionMetadata
 
-    def to(self, device):
+    def to(self, target_device, non_blocking=False):
         for k in self.__dict__.keys():
-            self.__dict__[k] = self.__dict__[k].to(device)
+            self.__dict__[k] = self.__dict__[k].to(device=target_device, non_blocking=non_blocking)
 
     def to_dict(self):
         return self.__dict__
