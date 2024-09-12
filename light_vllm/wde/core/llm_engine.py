@@ -70,10 +70,10 @@ class LLMEngine:
 
         return outputs_
 
-    def __init__(self, engine_config: EngineConfig, workflow: Workflow) -> None:
+    def __init__(self, engine_config: EngineConfig, workflow_cls: Type[Workflow]) -> None:
         self.engine_config = engine_config
         self.engine_config.log_config()
-        self.workflow = workflow
+        self.workflow = workflow_cls.from_engine(self)
 
         if self.use_async_scheduling():
             self.executor_in = Queue()

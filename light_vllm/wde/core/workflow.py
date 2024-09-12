@@ -1,4 +1,5 @@
 
+
 class Workflow:
     EngineArgs: str
     Scheduler: str
@@ -10,3 +11,7 @@ class Workflow:
     ModelInputBuilder: str
     Executor: str
     Worker: str
+
+    @classmethod
+    def from_engine(cls, engine: "LLMEngine"):
+        return cls()

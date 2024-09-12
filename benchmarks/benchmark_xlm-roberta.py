@@ -55,6 +55,7 @@ def benchmark_vllm(args):
         quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
+        scheduling=args.scheduling
     )
 
     engine = LLMEngine.from_engine_args(engine_args)
@@ -97,7 +98,7 @@ if __name__ == '__main__':
 
     args.dtype = "half"
     args.device = "cuda"
-    args.batchsize = [1, 2, 4, 8, 16, 32, 64]
+    args.batchsize = [1, 2, 4, 8, 16, 32]
     from concurrent.futures import ProcessPoolExecutor
 
     def run_hf(args):
@@ -112,4 +113,8 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    run_vllm(args)
+
+    for scheduling in ["sync", "async", "double_buffer"]:
+        print(scheduling)
+        args.scheduling = scheduling
+        run_vllm(args)

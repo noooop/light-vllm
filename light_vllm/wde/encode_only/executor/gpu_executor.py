@@ -87,6 +87,11 @@ class GPUAsyncExecutor(GPUExecutor):
 
         self.executor_thread = None
 
+        if self.engine_config.scheduler_config.scheduling == "double_buffer":
+            self.execute_loop = self.double_buffer_execute_loop
+        else:
+            self.execute_loop = self.simple_execute_loop
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         return cls(
@@ -138,11 +143,9 @@ class GPUAsyncExecutor(GPUExecutor):
         next_task: Optional[Task] = None
         compute_stream = torch.cuda.Stream()
         io_stream = torch.cuda.Stream()
-        i = 0
 
-        goon = True
-        while goon:
-            i += 1
+        go_on = True
+        while go_on:
             if current_task is None:
                 current_task = Task.get(block=True)
                 if current_task is None:
@@ -159,7 +162,7 @@ class GPUAsyncExecutor(GPUExecutor):
             try:
                 next_task = Task.get(block=False)
                 if next_task is None:
-                    goon = False
+                    go_on = False
                 else:
                     with torch.cuda.stream(io_stream):
                         next_task.executor_input.model_input.to(self.driver_worker.device, non_blocking=True)
@@ -187,7 +190,7 @@ class GPUAsyncExecutor(GPUExecutor):
 
     def start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.double_buffer_execute_loop)
+            self.executor_thread = Thread(target=self.execute_loop)
             self.executor_thread.start()
 
     def shutdown_execute_loop(self):
