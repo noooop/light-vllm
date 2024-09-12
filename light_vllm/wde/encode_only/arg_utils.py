@@ -40,6 +40,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
     max_model_len: Optional[int] = None
     max_num_batched_tokens: Optional[int] = None
     max_num_seqs: int = 256
+    max_num_on_the_fly: int = 3
     disable_log_stats: bool = False
     revision: Optional[str] = None
     code_revision: Optional[str] = None
@@ -630,6 +631,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
             max_num_batched_tokens=self.max_num_batched_tokens,
             max_num_seqs=self.max_num_seqs,
             max_model_len=model_config.max_model_len,
+            max_num_on_the_fly=self.max_num_on_the_fly
         )
 
         load_config = LoadConfig(

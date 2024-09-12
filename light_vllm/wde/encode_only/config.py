@@ -30,7 +30,7 @@ class EncodeOnlySchedulerConfig(SchedulerConfig):
                  max_num_batched_tokens: Optional[int] = None,
                  max_num_requests: Optional[int] = None,
                  max_num_seqs: Optional[int] = None,
-                 max_num_on_the_fly: Optional[int] = 2,
+                 max_num_on_the_fly: Optional[int] = 3,
                  ) -> None:
         self.max_model_len = max_model_len
         self.max_num_requests: int = 0

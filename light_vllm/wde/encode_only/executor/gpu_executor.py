@@ -36,6 +36,7 @@ class GPUExecutor:
         self.engine_config = engine_config
         self.workflow = workflow
         self.attn_backend = attn_backend
+        self.output_to_cpu = False
         self._init_executor()
 
     @classmethod
@@ -60,9 +61,12 @@ class GPUExecutor:
         self.driver_worker.init_device()
         self.driver_worker.load_model()
 
-    def execute_model(self, execute_input: ExecuteInput
+    def execute_model(self, executor_input: ExecuteInput
     ) -> Optional[ExecuteOutput]:
-        output = self.driver_worker(execute_input)
+        executor_input.model_input.to(self.driver_worker.device)
+        output = self.driver_worker(executor_input)
+        if self.output_to_cpu:
+            output.to("cpu")
         return output
 
 
@@ -101,16 +105,18 @@ class GPUAsyncExecutor(GPUExecutor):
 
             scheduler_output, executor_input = o
             executor_output = self.execute_model(executor_input)
+            if self.output_to_cpu:
+                executor_output.to("cpu")
             self.executor_out.put((scheduler_output, executor_output))
 
     def double_buffer_execute_loop(self):
-        stream_pool = CudaStreamPool()
+        # Looks cool
+        # But offers little performance improvement and takes up twice the GPU memory
         from dataclasses import dataclass
         from light_vllm.wde.core.schema.engine_io import SchedulerOutput
 
         @dataclass
         class Task:
-            stream: torch.cuda.stream
             scheduler_output: SchedulerOutput
             executor_input: ExecuteInput
             executor_output: Optional[ExecuteOutput]
@@ -122,77 +128,69 @@ class GPUAsyncExecutor(GPUExecutor):
                     return None
 
                 scheduler_output, executor_input = o
-                s = stream_pool.get()
-                task = cls(stream=s,
-                           scheduler_output=scheduler_output,
+
+                task = cls(scheduler_output=scheduler_output,
                            executor_input=executor_input,
                            executor_output=None)
                 return task
 
-            def free(self):
-                stream_pool.put(self.stream)
-
         current_task: Optional[Task] = None
         next_task: Optional[Task] = None
+        compute_stream = torch.cuda.Stream()
+        io_stream = torch.cuda.Stream()
+        i = 0
 
         goon = True
         while goon:
+            i += 1
             if current_task is None:
                 current_task = Task.get(block=True)
                 if current_task is None:
                     break
 
-                with torch.cuda.stream(current_task.stream):
+                with torch.cuda.stream(compute_stream):
                     current_task.executor_input.model_input.to(self.driver_worker.device)
                     current_task.executor_output = self.execute_model(current_task.executor_input)
+                    end_compute = torch.cuda.Event()
+            else:
+                with torch.cuda.stream(compute_stream):
+                    end_compute = torch.cuda.Event()
 
             try:
                 next_task = Task.get(block=False)
                 if next_task is None:
                     goon = False
                 else:
-                    with torch.cuda.stream(next_task.stream):
+                    with torch.cuda.stream(io_stream):
                         next_task.executor_input.model_input.to(self.driver_worker.device)
+
+                    compute_stream.wait_stream(io_stream)
+
+                    with torch.cuda.stream(compute_stream):
+                        executor_output = self.execute_model(next_task.executor_input)
+                        next_task.executor_output = executor_output
             except queue.Empty:
                 pass
+                #logger.info("Executor_in Queue Empty. "
+                #            "If this occurs frequently, "
+                #            "setting max_num_on_the_fly higher help.")
 
-            current_task.stream.synchronize()
-            if next_task is not None:
-                with torch.cuda.stream(next_task.stream):
-                    executor_output = self.execute_model(next_task.executor_input)
-                    next_task.executor_output = executor_output
+            end_compute.wait()
+            if self.output_to_cpu:
+                with torch.cuda.stream(io_stream):
+                    current_task.executor_output.to("cpu")
+                    io_stream.synchronize()
+            self.executor_out.put((current_task.scheduler_output, current_task.executor_output))
 
-            with torch.cuda.stream(current_task.stream):
-                #current_task.executor_output.to("cpu")
-                #current_task.stream.synchronize()
-                self.executor_out.put((current_task.scheduler_output, current_task.executor_output))
-
-            current_task.free()
-            current_task, next_task = next_task, None
+            current_task = next_task
+            next_task = None
 
     def start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.double_buffer_execute_loop)
+            self.executor_thread = Thread(target=self.simple_execute_loop)
             self.executor_thread.start()
 
     def shutdown_execute_loop(self):
         if self.executor_thread.is_alive():
             self.executor_in.put(None)
             self.executor_thread.join()
-
-
-class CudaStreamPool:
-    def __init__(self):
-        from torch.cuda import Stream
-        from queue import Queue
-        self.pool = Queue()
-        self.Stream = Stream
-
-    def get(self):
-        if self.pool.empty():
-            return self.Stream()
-        else:
-            return self.pool.get()
-
-    def put(self, stream):
-        self.pool.put(stream)

@@ -164,31 +164,47 @@ class LLMEngine:
         return request_outputs
 
     def async_step(self) -> List[RequestOutput]:
-        while self.num_on_the_fly < self.max_num_on_the_fly:
-            scheduler_output = self.scheduler.schedule()
-            if scheduler_output.is_empty():
-                break
-            executor_input = self.model_inputs_builder(scheduler_output)
+        import queue
 
-            self.executor_in.put((scheduler_output, executor_input))
-            self.num_on_the_fly += 1
+        def get(block):
+            try:
+                scheduler_output, executor_output = self.executor_out.get(block)
+            except queue.Empty:
+                return
+
+            self.num_on_the_fly -= 1
+
+            request_outputs = self.output_processor(scheduler_output, executor_output)
+            self.scheduler.free_finished_request(request_outputs)
+            request_outputs = self.scheduler.remove_abort_request(request_outputs)
+
+            if self.num_on_the_fly == 0:
+                self.executor.shutdown_execute_loop()
+
+            return request_outputs
+
+        def put_as_many_as_possible():
+            while self.num_on_the_fly < self.max_num_on_the_fly:
+                scheduler_output = self.scheduler.schedule()
+                if scheduler_output.is_empty():
+                    break
+                executor_input = self.model_inputs_builder(scheduler_output)
+
+                self.executor_in.put((scheduler_output, executor_input))
+                self.num_on_the_fly += 1
+
+        self.executor.start_execute_loop()
+        put_as_many_as_possible()
 
         if self.num_on_the_fly == 0:
             self.executor.shutdown_execute_loop()
             return []
 
-        self.executor.start_execute_loop()
+        o = get(block=True)
 
-        scheduler_output, executor_output = self.executor_out.get()
-        self.num_on_the_fly -= 1
+        put_as_many_as_possible()
 
-        if self.num_on_the_fly == 0:
-            self.executor.shutdown_execute_loop()
-
-        request_outputs = self.output_processor(scheduler_output, executor_output)
-        self.scheduler.free_finished_request(request_outputs)
-        request_outputs = self.scheduler.remove_abort_request(request_outputs)
-        return request_outputs
+        return o
 
     def get_num_unfinished_requests(self) -> int:
         """Gets the number of unfinished requests."""
