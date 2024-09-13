@@ -1,24 +1,40 @@
 import time
 import random
 
+
 def patch():
     from light_vllm.wde.encode_only.executor.gpu_executor import GPUAsyncExecutor
 
-    execute_loop = GPUAsyncExecutor.double_buffer_execute_loop
+    simple_execute_loop = GPUAsyncExecutor.simple_execute_loop
 
     def p_execute_loop(self, *args, **kwargs):
-        print("p_execute_loop")
         import torch
         with torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
                 ]) as prof:
-            execute_loop(self, *args, **kwargs)
+            simple_execute_loop(self, *args, **kwargs)
 
+        prof.export_chrome_trace(f"simple_execute_loop.json")
+
+    GPUAsyncExecutor.simple_execute_loop = p_execute_loop
+
+    double_buffer_execute_loop = GPUAsyncExecutor.double_buffer_execute_loop
+    def p_execute_loop(self, *args, **kwargs):
+        import torch
+        with torch.profiler.profile(
+                activities=[
+                    torch.profiler.ProfilerActivity.CPU,
+                    torch.profiler.ProfilerActivity.CUDA,
+                ]) as prof:
+            double_buffer_execute_loop(self, *args, **kwargs)
         prof.export_chrome_trace(f"double_buffer_execute_loop.json")
 
     GPUAsyncExecutor.double_buffer_execute_loop = p_execute_loop
+
+
+
 
 
 def benchmark_vllm(args):
@@ -42,6 +58,7 @@ def benchmark_vllm(args):
         quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
+        scheduling=args.scheduling
     )
 
     engine = LLMEngine.from_engine_args(engine_args)
@@ -65,16 +82,18 @@ def benchmark_vllm(args):
         print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
               f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
 
+        engine.executor.shutdown_execute_loop()
+
 
 if __name__ == '__main__':
     from easydict import EasyDict as edict
     args = edict()
 
     args.input_len = 256
-    args.num_prompts = 1000
+    args.num_prompts = 100
 
-    args.model = 'FacebookAI/xlm-roberta-base'
-    #args.model = 'FacebookAI/xlm-roberta-large'
+    args.model = 'BAAI/bge-m3'
+
     args.trust_remote_code = False
     args.tokenizer = args.model
     args.seed = 0
@@ -84,7 +103,8 @@ if __name__ == '__main__':
 
     args.dtype = "half"
     args.device = "cuda"
-    args.batchsize = [32]
+    args.batchsize = [4]
+
     from concurrent.futures import ProcessPoolExecutor
 
     def run_vllm(args):
@@ -92,5 +112,7 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    #run_vllm(args)
-    benchmark_vllm(args)
+    for scheduling in ["async", "double_buffer"]:
+        print(scheduling)
+        args.scheduling = scheduling
+        run_vllm(args)
