@@ -35,6 +35,8 @@ def benchmark_hf(args):
 def benchmark_vllm(args):
     random.seed(args.seed)
 
+    import gc
+    import torch
     from light_vllm import LLMEngine
     from light_vllm.wde.encode_only.arg_utils import EncodeOnlyEngineArgs as EngineArgs
 
@@ -73,6 +75,10 @@ def benchmark_vllm(args):
 
         print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
               f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
+
+        engine.executor.shutdown_execute_loop()
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 if __name__ == '__main__':
