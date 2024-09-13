@@ -126,6 +126,7 @@ def compare_embeddings_np(embeddings1, embeddings2):
 @pytest.mark.parametrize("model", MODELS)
 @pytest.mark.parametrize("dtype", ["half"])
 @pytest.mark.parametrize("max_num_seqs", [2, 3, 5, 7])
+@pytest.mark.parametrize("scheduling", ["sync", "async", "double_buffer"])
 @torch.inference_mode
 def test_models(
     hf_runner,
@@ -133,7 +134,8 @@ def test_models(
     example_prompts,
     model: str,
     dtype: str,
-    max_num_seqs: int
+    max_num_seqs: int,
+    scheduling: str
 ) -> None:
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.encode(example_prompts)
