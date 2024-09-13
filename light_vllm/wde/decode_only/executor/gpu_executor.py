@@ -22,6 +22,8 @@ def create_worker(module, **kwargs):
 
 
 class GPUExecutor:
+    support_scheduling = ["sync_scheduling"]
+
     def __init__(
         self,
         engine_config: EngineConfig,

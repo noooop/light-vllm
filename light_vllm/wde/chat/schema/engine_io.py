@@ -4,7 +4,7 @@ from typing import List, Iterable
 import torch
 from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.wde.core.schema.engine_io import Request, PromptInput, TextOnlyInputs, SchedulableRequest, RequestOutput, SchedulerOutput
-
+from light_vllm.wde.core.schema.sequence import SequenceGroup
 
 @dataclass
 class ChatInput(TextOnlyInputs):
@@ -19,11 +19,7 @@ class ChatRequest(Request):
 
 @dataclass
 class ChatSchedulableRequest(SchedulableRequest):
-    inputs: TextOnlyInputs
-
-    @property
-    def num_new_tokens(self):
-        return len(self.inputs.prompt_token_ids)
+    seq_group: SequenceGroup
 
 
 @dataclass
@@ -69,6 +65,8 @@ class ChatRequestOutput(RequestOutput):
                 f"outputs={repr(self.outputs)}, "
                 f"prompt_token_ids={self.prompt_token_ids}, "
                 f"finished={self.finished})")
+
+
 
 
 

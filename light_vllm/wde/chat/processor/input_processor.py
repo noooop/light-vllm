@@ -6,7 +6,8 @@ from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.chat.config import CacheConfig, ModelConfig
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.wde.chat.schema.engine_io import PromptInput, ChatInput, ChatRequest
+from light_vllm.wde.core.schema.engine_io import PromptInput, TextPrompt, TokensPrompt
+from light_vllm.wde.chat.schema.engine_io import ChatInput, ChatRequest, ChatSchedulableRequest
 from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup
 from light_vllm.wde.core.processor.input_processor import InputProcessor, RequestProcessor
 
@@ -38,19 +39,23 @@ class ChatModelPromptProcessor(object):
     def __init__(self, tokenizer: Tokenizer):
         self.tokenizer = tokenizer
 
-    def __call__(self, input: PromptInput) -> ChatInput:
-        if isinstance(input, str):
-            input = {"prompt": input}
+    def __call__(self, inputs: PromptInput) -> ChatInput:
+        if isinstance(inputs, str):
+            inputs = {"prompt": inputs}
+        elif isinstance(input, TextPrompt):
+            inputs = {"prompt": inputs.prompt}
+        elif isinstance(input, TokensPrompt):
+            inputs = {"prompt_token_ids", inputs.prompt_token_ids}
 
-        if "prompt_token_ids" not in input:
+        if "prompt_token_ids" not in inputs:
             tokenizer = self.tokenizer
 
-            prompt_token_ids = tokenizer.encode(input["prompt"])
+            prompt_token_ids = tokenizer.encode(inputs["prompt"])
         else:
-            prompt_token_ids = input["prompt_token_ids"]
+            prompt_token_ids = inputs["prompt_token_ids"]
 
         chat_input = ChatInput(prompt_token_ids=prompt_token_ids,
-                               prompt=input.get("prompt"))
+                               prompt=inputs.get("prompt"))
         return chat_input
 
 
@@ -126,7 +131,7 @@ class ChatModelSequenceProcessor(object):
 
 class ChatModelRequestProcessor(RequestProcessor):
     """
-    ChatRequest -> ChatModelRequestProcessor -> SequenceGroup
+    ChatRequest -> ChatModelRequestProcessor -> ChatSchedulableRequest
 
     PromptInput -> ChatModelPromptProcessor -> ChatInput
     ChatRequest -> ChatModelSequenceProcessor -> SequenceGroup
@@ -149,8 +154,9 @@ class ChatModelRequestProcessor(RequestProcessor):
                    engine.tokenizer,
                    engine.seq_counter)
 
-    def __call__(self, request: ChatRequest) -> SequenceGroup:
-        if not isinstance(request.inputs, ChatInput):
-            request.inputs = self.prompt_processor(request.inputs)
+    def __call__(self, request: ChatRequest) -> ChatSchedulableRequest:
+        request.inputs = self.prompt_processor(request.inputs)
         seq_group = self.sequence_processor(request, request.arrival_time)
-        return seq_group
+        return ChatSchedulableRequest(request_id=request.request_id,
+                                      seq_group=seq_group,
+                                      arrival_time=request.arrival_time)

@@ -230,6 +230,7 @@ class SchedulerPrefillOutputs:
 
 
 class Scheduler:
+    support_scheduling = ["sync_scheduling"]
 
     def __init__(
             self,
@@ -573,8 +574,11 @@ class Scheduler:
         leftover_waiting_sequences: Deque[SequenceGroup] = deque()
         while self._passed_delay(time.time()) and waiting_queue:
             request = waiting_queue[0]
-            if isinstance(request, Request):
-                seq_group = self.request_processor(request)
+
+            if not isinstance(request, SequenceGroup):
+                request = self.request_processor(request)
+                seq_group = request.seq_group
+                waiting_queue[0] = seq_group
             else:
                 seq_group = request
 
@@ -899,12 +903,15 @@ class Scheduler:
         """Free a sequence from a block table."""
         self.block_manager.free(seq)
 
-    def free_finished_request(self) -> None:
+    def free_finished_request(self, request_outputs: List[RequestOutput]) -> None:
         remaining: Deque[SequenceGroup] = deque()
         for seq_group in self.running:
             if not seq_group.is_finished():
                 remaining.append(seq_group)
         self.running = remaining
+
+    def remove_abort_request(self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
+        return request_outputs
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
         self.block_manager.allocate(seq_group)
