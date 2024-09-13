@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, Optional)
 from typing import Sequence as GenericSequence
 from light_vllm.logger import init_logger
-from queue import Queue
+from queue import Queue, Empty
 from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.arg_utils import EngineArgs
@@ -164,47 +164,40 @@ class LLMEngine:
         return request_outputs
 
     def async_step(self) -> List[RequestOutput]:
-        import queue
-
-        def get(block):
-            try:
-                scheduler_output, executor_output = self.executor_out.get(block)
-            except queue.Empty:
-                return
-
-            self.num_on_the_fly -= 1
-
-            request_outputs = self.output_processor(scheduler_output, executor_output)
-            self.scheduler.free_finished_request(request_outputs)
-            request_outputs = self.scheduler.remove_abort_request(request_outputs)
-
-            if self.num_on_the_fly == 0:
-                self.executor.shutdown_execute_loop()
-
-            return request_outputs
-
-        def put_as_many_as_possible():
-            while self.num_on_the_fly < self.max_num_on_the_fly:
-                scheduler_output = self.scheduler.schedule()
-                if scheduler_output.is_empty():
-                    break
-                executor_input = self.model_inputs_builder(scheduler_output)
-
-                self.executor_in.put((scheduler_output, executor_input))
-                self.num_on_the_fly += 1
-
-        self.executor.start_execute_loop()
-        put_as_many_as_possible()
+        self.executor.ensure_start_execute_loop()
+        self._put_as_many_as_possible()
 
         if self.num_on_the_fly == 0:
-            self.executor.shutdown_execute_loop()
             return []
 
-        o = get(block=True)
+        return self._get(block=True)
 
-        put_as_many_as_possible()
+    def _put_as_many_as_possible(self):
+        while self.num_on_the_fly < self.max_num_on_the_fly:
+            scheduler_output = self.scheduler.schedule()
+            if scheduler_output.is_empty():
+                break
+            executor_input = self.model_inputs_builder(scheduler_output)
 
-        return o
+            self.executor_in.put((scheduler_output, executor_input))
+            self.num_on_the_fly += 1
+
+    def _get(self, block):
+        try:
+            scheduler_output, executor_output = self.executor_out.get(block)
+        except Empty:
+            return
+
+        self.num_on_the_fly -= 1
+
+        # Theoretically, this put is not needed
+        # practically, task can be inqueue before doing post-processing
+        self._put_as_many_as_possible()
+
+        request_outputs = self.output_processor(scheduler_output, executor_output)
+        self.scheduler.free_finished_request(request_outputs)
+        request_outputs = self.scheduler.remove_abort_request(request_outputs)
+        return request_outputs
 
     def get_num_unfinished_requests(self) -> int:
         """Gets the number of unfinished requests."""

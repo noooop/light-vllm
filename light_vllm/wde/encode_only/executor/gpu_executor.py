@@ -69,6 +69,9 @@ class GPUExecutor:
             output.to("cpu")
         return output
 
+    def shutdown_execute_loop(self):
+        pass
+
 
 class GPUAsyncExecutor(GPUExecutor):
     support_scheduling = ["async_scheduling"]
@@ -85,7 +88,7 @@ class GPUAsyncExecutor(GPUExecutor):
         self.executor_in = executor_in
         self.executor_out = executor_out
 
-        self.executor_thread = None
+        self.executor_thread: Optional[Thread] = None
 
         if self.engine_config.scheduler_config.scheduling == "double_buffer":
             self.execute_loop = self.double_buffer_execute_loop
@@ -170,8 +173,7 @@ class GPUAsyncExecutor(GPUExecutor):
                     compute_stream.wait_stream(io_stream)
 
                     with torch.cuda.stream(compute_stream):
-                        executor_output = self.execute_model(next_task.executor_input)
-                        next_task.executor_output = executor_output
+                        next_task.executor_output = self.execute_model(next_task.executor_input)
             except queue.Empty:
                 pass
                 #logger.info("Executor_in Queue Empty. "
@@ -188,9 +190,9 @@ class GPUAsyncExecutor(GPUExecutor):
             current_task = next_task
             next_task = None
 
-    def start_execute_loop(self):
+    def ensure_start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.execute_loop)
+            self.executor_thread = Thread(target=self.execute_loop, daemon=True)
             self.executor_thread.start()
 
     def shutdown_execute_loop(self):
