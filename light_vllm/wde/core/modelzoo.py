@@ -7,12 +7,13 @@ import importlib
 from light_vllm.wde.chat.modelzoo import CHAT_MODELS
 from light_vllm.wde.encode_only.modelzoo import ENCODE_ONLY_MODELS
 from light_vllm.wde.retriever.modelzoo import RETRIEVER_MODELS
+from light_vllm.wde.reranker.modelzoo import RERANKER_MODELS
 
 from light_vllm.logger import init_logger
 logger = init_logger(__name__)
 
 
-_MODELS_LIST = [CHAT_MODELS, ENCODE_ONLY_MODELS, RETRIEVER_MODELS]
+_MODELS_LIST = [CHAT_MODELS, ENCODE_ONLY_MODELS, RETRIEVER_MODELS, RERANKER_MODELS]
 
 _MODELS = dict()
 for m in _MODELS_LIST:

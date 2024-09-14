@@ -4,7 +4,7 @@ from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, 
 from typing import Sequence as GenericSequence
 from light_vllm.logger import init_logger
 from queue import Queue, Empty
-from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput
+from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput, ValidationError
 from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.arg_utils import EngineArgs
 from light_vllm.wde.core.config import EngineConfig
@@ -145,7 +145,10 @@ class LLMEngine:
                     inputs: Optional[Union[str, Inputs]] = None,
                     params: Optional[Params] = None,
                     arrival_time: Optional[float] = None) -> None:
-        request = self.input_processor(request_id, inputs, params, arrival_time)
+        try:
+            request = self.input_processor(request_id, inputs, params, arrival_time)
+        except ValidationError:
+            logger.error(f"{request_id} validation error")
         self.scheduler.add_request(request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
