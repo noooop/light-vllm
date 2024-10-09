@@ -1,7 +1,7 @@
 import torch
 
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig, QuantizeMethodBase)
+from light_vllm.layers.quantization.base_config import (QuantizationConfig,
+                                                        QuantizeMethodBase)
 from light_vllm.utils import print_warning_once
 
 

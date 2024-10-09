@@ -1,6 +1,4 @@
 # ruff: noqa: SIM117
-import collections
-import copy
 import fnmatch
 import glob
 import json
@@ -8,31 +6,30 @@ import math
 import os
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import Any, Dict, Generator, List, Optional, Tuple, Type
+from typing import Any, Dict, Generator, List, Optional, Tuple
 
 import huggingface_hub
 import numpy as np
 import torch
 from huggingface_hub import HfApi, hf_hub_download
 from torch import nn
+
 from light_vllm.envs import VLLM_USE_MODELSCOPE
+from light_vllm.layers.quantization.base_config import QuantizationConfig
+from light_vllm.layers.utils import set_weight_attrs
 from light_vllm.logger import init_logger
-
+from light_vllm.utils import is_pin_memory_available
+from light_vllm.wde.chat.config import (CacheConfig, ModelConfig,
+                                        SchedulerConfig)
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig, LoadFormat
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
-
 from light_vllm.wde.core.layers.attention.abstract import AttentionBackend
 from light_vllm.wde.core.loader.utils import (get_model_architecture,
                                               set_default_torch_dtype)
 from light_vllm.wde.core.loader.weight_utils import (
     download_safetensors_index_file_from_hf, download_weights_from_hf,
     filter_duplicate_safetensors_files, filter_files_not_needed_for_inference,
-    get_quant_config, initialize_dummy_weights, np_cache_weights_iterator,
-    pt_weights_iterator, safetensors_weights_iterator)
-from light_vllm.layers.utils import set_weight_attrs
-from light_vllm.utils import is_pin_memory_available
+    get_quant_config, np_cache_weights_iterator, pt_weights_iterator,
+    safetensors_weights_iterator)
 
 
 @contextmanager
@@ -103,12 +100,13 @@ def _get_quantization_config(
     return None
 
 
-def initialize_model(model_config: ModelConfig,
-                     load_config: LoadConfig,
-                     device_config: DeviceConfig,
-                     attn_backend: AttentionBackend,
-                     cache_config: Optional[CacheConfig] = None,
-                     ) -> nn.Module:
+def initialize_model(
+    model_config: ModelConfig,
+    load_config: LoadConfig,
+    device_config: DeviceConfig,
+    attn_backend: AttentionBackend,
+    cache_config: Optional[CacheConfig] = None,
+) -> nn.Module:
     """Initialize a model with the given configurations."""
 
     target_device = torch.device(device_config.device)
@@ -130,7 +128,9 @@ class BaseModelLoader(ABC):
         self.load_config = load_config
 
     @abstractmethod
-    def load_model(self, model: nn.Module, *,
+    def load_model(self,
+                   model: nn.Module,
+                   *,
                    model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
@@ -262,7 +262,9 @@ class DefaultModelLoader(BaseModelLoader):
 
         return weights_iterator
 
-    def load_model(self, model: nn.Module, *,
+    def load_model(self,
+                   model: nn.Module,
+                   *,
                    model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
@@ -299,7 +301,9 @@ class DummyModelLoader(BaseModelLoader):
             raise ValueError(f"Model loader extra config is not supported for "
                              f"load format {load_config.load_format}")
 
-    def load_model(self, model: nn.Module, *,
+    def load_model(self,
+                   model: nn.Module,
+                   *,
                    model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,
@@ -592,7 +596,9 @@ class BitsAndBytesModelLoader(BaseModelLoader):
                 offsets = np.concatenate(([0], np.cumsum(num_elements)))
                 set_weight_attrs(param, {"bnb_shard_offsets": offsets})
 
-    def load_model(self, model: nn.Module, *,
+    def load_model(self,
+                   model: nn.Module,
+                   *,
                    model_config: ModelConfig,
                    device_config: DeviceConfig,
                    scheduler_config: Optional[SchedulerConfig] = None,

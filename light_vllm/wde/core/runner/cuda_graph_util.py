@@ -1,16 +1,17 @@
-import time
-import numpy as np
-from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
-                    TypeVar, Union)
-from dataclasses import dataclass
 import gc
+import time
+from contextlib import contextmanager
+from dataclasses import dataclass
+from typing import Dict, List, Optional, Tuple
+
+import numpy as np
 import torch
 import torch.nn as nn
-from contextlib import contextmanager
-from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionMetadata
-from light_vllm.utils import make_tensor_with_pad
 
 from light_vllm.logger import init_logger
+from light_vllm.utils import make_tensor_with_pad
+from light_vllm.wde.decode_only.layers.attention import (
+    DecodeOnlyAttentionMetadata)
 
 logger = init_logger(__name__)
 
@@ -25,6 +26,7 @@ _NUM_WARMUP_ITERS = 2
 
 
 class CUDAGraph:
+
     def __init__(self, model_config, cache_config, scheduler_config):
         self.model_config = model_config
         self.scheduler_config = scheduler_config
@@ -50,7 +52,8 @@ class CUDAGraph:
         block_size = self.block_size
         return (self.max_seq_len_to_capture + block_size - 1) // block_size
 
-    def capture_model(self, model, attn_backend, kv_caches: List[torch.Tensor]):
+    def capture_model(self, model, attn_backend,
+                      kv_caches: List[torch.Tensor]):
         graph_runners, graph_memory_pool = capture_model(
             model=model,
             model_config=self.model_config,
@@ -62,15 +65,16 @@ class CUDAGraph:
         self.graph_runners = graph_runners
         self.graph_memory_pool = graph_memory_pool
 
-    def model_input_for_gpu_builder_maybe_pad(self, builder, input_tokens, input_positions, seq_lens, max_decode_seq_len):
+    def model_input_for_gpu_builder_maybe_pad(self, builder, input_tokens,
+                                              input_positions, seq_lens,
+                                              max_decode_seq_len):
         batch_size = len(input_tokens)
         use_captured_graph = determine_use_captured_graph(
             decode_only=builder.decode_only,
             enforce_eager=self.model_config.enforce_eager,
             batch_size=batch_size,
             max_decode_seq_len=max_decode_seq_len,
-            max_seq_len_to_capture=self.max_seq_len_to_capture
-        )
+            max_seq_len_to_capture=self.max_seq_len_to_capture)
 
         # If cuda graph can be used, pad tensors accordingly.
         # See `capture_model` API for more details.
@@ -97,7 +101,10 @@ class CUDAGraph:
 
         return input_tokens, input_positions, input_tokens_tensor, input_positions_tensor, seq_lens, cuda_graph_pad_size, batch_size
 
-    def attention_metadata_builder_maybe_pad(self, builder, cuda_graph_pad_size, num_decode_tokens, batch_size, device):
+    def attention_metadata_builder_maybe_pad(self, builder,
+                                             cuda_graph_pad_size,
+                                             num_decode_tokens, batch_size,
+                                             device):
         use_captured_graph = cuda_graph_pad_size != -1
 
         if use_captured_graph:
@@ -145,14 +152,14 @@ class CUDAGraphRunner:
         return self._graph
 
     def capture(
-            self,
-            input_ids: torch.Tensor,
-            positions: torch.Tensor,
-            kv_caches: List[torch.Tensor],
-            attn_metadata: DecodeOnlyAttentionMetadata,
-            memory_pool: Optional[Tuple[int, int]],
-            stream: torch.cuda.Stream,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: DecodeOnlyAttentionMetadata,
+        memory_pool: Optional[Tuple[int, int]],
+        stream: torch.cuda.Stream,
+        **kwargs,
     ) -> torch.Tensor:
         assert self._graph is None
         # Run the model a few times without capturing the graph.
@@ -180,8 +187,7 @@ class CUDAGraphRunner:
                 **kwargs,
             )
 
-            hidden_states = (
-                output_hidden_states)
+            hidden_states = (output_hidden_states)
 
             del output_hidden_states
             # make sure `output_hidden_states` is deleted
@@ -200,19 +206,17 @@ class CUDAGraphRunner:
             **kwargs,
         }
 
-        self.output_buffers = {
-            "hidden_states": hidden_states
-        }
+        self.output_buffers = {"hidden_states": hidden_states}
 
         return hidden_states
 
     def forward(
-            self,
-            input_ids: torch.Tensor,
-            positions: torch.Tensor,
-            kv_caches: List[torch.Tensor],
-            attn_metadata: DecodeOnlyAttentionMetadata,
-            **kwargs,
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: DecodeOnlyAttentionMetadata,
+        **kwargs,
     ) -> torch.Tensor:
         # KV caches are fixed tensors, so we don't need to copy them.
         del kv_caches
@@ -224,8 +228,7 @@ class CUDAGraphRunner:
                                                  non_blocking=True)
 
         self.input_buffers["seq_lens_tensor"].copy_(
-            attn_metadata.decode_metadata.seq_lens_tensor,
-            non_blocking=True)
+            attn_metadata.decode_metadata.seq_lens_tensor, non_blocking=True)
         self.input_buffers["block_tables"].copy_(
             attn_metadata.decode_metadata.block_tables, non_blocking=True)
 
@@ -236,10 +239,8 @@ class CUDAGraphRunner:
         return self.forward(*args, **kwargs)
 
 
-def determine_use_captured_graph(decode_only: bool,
-                                 enforce_eager: bool,
-                                 batch_size: int,
-                                 max_decode_seq_len: int,
+def determine_use_captured_graph(decode_only: bool, enforce_eager: bool,
+                                 batch_size: int, max_decode_seq_len: int,
                                  max_seq_len_to_capture: int) -> bool:
     return (decode_only and not enforce_eager
             and batch_size <= _BATCH_SIZES_TO_CAPTURE[-1]
@@ -280,12 +281,8 @@ def get_graph_batch_size(batch_size: int) -> int:
 
 
 @torch.inference_mode()
-def capture_model(model,
-                  model_config,
-                  kv_caches: List[torch.Tensor],
-                  graph_block_tables,
-                  max_num_seqs,
-                  max_seq_len_to_capture,
+def capture_model(model, model_config, kv_caches: List[torch.Tensor],
+                  graph_block_tables, max_num_seqs, max_seq_len_to_capture,
                   attn_backend):
     """Cuda graph capture a model.
 
@@ -326,7 +323,8 @@ def capture_model(model,
     ]
 
     graph_runners: Dict[int, CUDAGraphRunner] = {}
-    graph_memory_pool: Optional[Tuple[int, int]] = None  # Set during graph capture.
+    graph_memory_pool: Optional[Tuple[int,
+                                      int]] = None  # Set during graph capture.
 
     with graph_capture() as graph_capture_context:
         # NOTE: Capturing the largest batch size first may help reduce the
@@ -349,8 +347,7 @@ def capture_model(model,
                 use_cuda_graph=True,
             )
 
-            graph_runner = CUDAGraphRunner(
-                model, attn_backend.get_name())
+            graph_runner = CUDAGraphRunner(model, attn_backend.get_name())
 
             capture_inputs = {
                 "input_ids": input_tokens[:batch_size],

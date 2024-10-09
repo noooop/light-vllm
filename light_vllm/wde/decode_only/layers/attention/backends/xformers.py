@@ -9,12 +9,13 @@ from xformers.ops.fmha.attn_bias import (AttentionBias,
                                          BlockDiagonalMask,
                                          LowerTriangularMaskWithTensorBias)
 
-from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
-                                                                           DecodeOnlyAttentionMetadata, AttentionType)
-from light_vllm.wde.decode_only.layers.attention.backends.utils import DecodeOnlyCommonMetadataBuilder
-from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (PagedAttention,
-                                                                        PagedAttentionMetadata)
 from light_vllm.logger import init_logger
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    AttentionType, DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl)
+from light_vllm.wde.decode_only.layers.attention.backends.utils import (
+    DecodeOnlyCommonMetadataBuilder)
+from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (
+    PagedAttention, PagedAttentionMetadata)
 
 logger = init_logger(__name__)
 
@@ -39,26 +40,26 @@ class DecodeOnlyXFormersBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_kv_cache_shape(
-            num_blocks: int,
-            block_size: int,
-            num_kv_heads: int,
-            head_size: int,
+        num_blocks: int,
+        block_size: int,
+        num_kv_heads: int,
+        head_size: int,
     ) -> Tuple[int, ...]:
         return PagedAttention.get_kv_cache_shape(num_blocks, block_size,
                                                  num_kv_heads, head_size)
 
     @staticmethod
     def swap_blocks(
-            src_kv_cache: torch.Tensor,
-            dst_kv_cache: torch.Tensor,
-            src_to_dst: Dict[int, int],
+        src_kv_cache: torch.Tensor,
+        dst_kv_cache: torch.Tensor,
+        src_to_dst: Dict[int, int],
     ) -> None:
         PagedAttention.swap_blocks(src_kv_cache, dst_kv_cache, src_to_dst)
 
     @staticmethod
     def copy_blocks(
-            kv_caches: List[torch.Tensor],
-            src_to_dists: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        src_to_dists: torch.Tensor,
     ) -> None:
         PagedAttention.copy_blocks(kv_caches, src_to_dists)
 
@@ -262,8 +263,8 @@ class XFormersMetadata(AttentionMetadata, PagedAttentionMetadata):
 
 
 def _get_attn_bias(
-        attn_metadata: XFormersMetadata,
-        attn_type: AttentionType,
+    attn_metadata: XFormersMetadata,
+    attn_type: AttentionType,
 ) -> Optional[AttentionBias]:
     '''
     Extract appropriate attention bias from attention metadata
@@ -289,9 +290,9 @@ def _get_attn_bias(
 
 
 def _set_attn_bias(
-        attn_metadata: XFormersMetadata,
-        attn_bias: List[Optional[AttentionBias]],
-        attn_type: AttentionType,
+    attn_metadata: XFormersMetadata,
+    attn_bias: List[Optional[AttentionBias]],
+    attn_type: AttentionType,
 ) -> None:
     '''
     Update appropriate attention bias field of attention metadata,
@@ -316,9 +317,9 @@ def _set_attn_bias(
 
 
 def _get_seq_len_block_table_args(
-        attn_metadata: XFormersMetadata,
-        is_prompt: bool,
-        attn_type: AttentionType,
+    attn_metadata: XFormersMetadata,
+    is_prompt: bool,
+    attn_type: AttentionType,
 ) -> tuple:
     '''
     The particular choice of sequence-length- and block-table-related
@@ -367,7 +368,8 @@ def _get_seq_len_block_table_args(
         raise AttributeError(f"Invalid attention type {str(attn_type)}")
 
 
-class DecodeOnlyXFormersMetadataBuilder(DecodeOnlyCommonMetadataBuilder[XFormersMetadata]):
+class DecodeOnlyXFormersMetadataBuilder(
+        DecodeOnlyCommonMetadataBuilder[XFormersMetadata]):
     _metadata_cls = XFormersMetadata
 
 
@@ -398,16 +400,16 @@ class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
     """
 
     def __init__(
-            self,
-            num_heads: int,
-            head_size: int,
-            scale: float,
-            num_kv_heads: int,
-            alibi_slopes: Optional[List[float]],
-            sliding_window: Optional[int],
-            kv_cache_dtype: str,
-            blocksparse_params: Optional[Dict[str, Any]] = None,
-            logits_soft_cap: Optional[float] = None,
+        self,
+        num_heads: int,
+        head_size: int,
+        scale: float,
+        num_kv_heads: int,
+        alibi_slopes: Optional[List[float]],
+        sliding_window: Optional[int],
+        kv_cache_dtype: str,
+        blocksparse_params: Optional[Dict[str, Any]] = None,
+        logits_soft_cap: Optional[float] = None,
     ) -> None:
         if blocksparse_params is not None:
             raise ValueError(
@@ -435,15 +437,15 @@ class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
                 f"Supported head sizes are: {suppored_head_sizes}.")
 
     def forward(
-            self,
-            query: torch.Tensor,
-            key: Optional[torch.Tensor],
-            value: Optional[torch.Tensor],
-            kv_cache: Optional[torch.Tensor],
-            attn_metadata: "XFormersMetadata",
-            k_scale: float = 1.0,
-            v_scale: float = 1.0,
-            attn_type: AttentionType = AttentionType.DECODER,
+        self,
+        query: torch.Tensor,
+        key: Optional[torch.Tensor],
+        value: Optional[torch.Tensor],
+        kv_cache: Optional[torch.Tensor],
+        attn_metadata: "XFormersMetadata",
+        k_scale: float = 1.0,
+        v_scale: float = 1.0,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
         """Forward pass with xFormers and PagedAttention.
 
@@ -642,12 +644,12 @@ class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
         return output.view(-1, self.num_heads * self.head_size)
 
     def _run_memory_efficient_xformers_forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor,
-            attn_metadata: XFormersMetadata,
-            attn_type: AttentionType = AttentionType.DECODER,
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attn_metadata: XFormersMetadata,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
         """Attention for 1D query of multiple prompts. Multiple prompt
         tokens are flattened in to `query` input.
@@ -675,12 +677,12 @@ class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
             query = query.view(query.shape[0], self.num_kv_heads,
                                self.num_queries_per_kv, query.shape[-1])
             key = key[:, :,
-                  None, :].expand(key.shape[0], self.num_kv_heads,
-                                  self.num_queries_per_kv, key.shape[-1])
+                      None, :].expand(key.shape[0], self.num_kv_heads,
+                                      self.num_queries_per_kv, key.shape[-1])
             value = value[:, :,
-                    None, :].expand(value.shape[0], self.num_kv_heads,
-                                    self.num_queries_per_kv,
-                                    value.shape[-1])
+                          None, :].expand(value.shape[0], self.num_kv_heads,
+                                          self.num_queries_per_kv,
+                                          value.shape[-1])
         # Set attention bias if not provided. This typically happens at
         # the very attention layer of every iteration.
         # FIXME(woosuk): This is a hack.
@@ -758,10 +760,10 @@ class DecodeOnlyXFormersImpl(DecodeOnlyAttentionImpl[XFormersMetadata]):
 
 
 def _make_alibi_bias(
-        alibi_slopes: torch.Tensor,
-        num_kv_heads: int,
-        dtype: torch.dtype,
-        seq_lens: List[int],
+    alibi_slopes: torch.Tensor,
+    num_kv_heads: int,
+    dtype: torch.dtype,
+    seq_lens: List[int],
 ) -> List[AttentionBias]:
     attn_biases: List[AttentionBias] = []
     for seq_len in seq_lens:

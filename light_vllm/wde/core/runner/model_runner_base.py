@@ -1,6 +1,5 @@
-import dataclasses
-from abc import ABC, abstractmethod
-from typing import (Dict, Generic, List, Optional, TypeVar)
+from abc import ABC
+from typing import Generic, List, Optional, TypeVar
 
 import torch
 

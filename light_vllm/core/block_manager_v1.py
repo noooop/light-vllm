@@ -8,12 +8,14 @@ from typing import Sequence as GenericSequence
 from typing import Set, Tuple
 
 from light_vllm.block import BlockTable, PhysicalTokenBlock
-from light_vllm.core.block.utils import check_no_caching_or_swa_for_blockmgr_encdec
+from light_vllm.core.block.utils import (
+    check_no_caching_or_swa_for_blockmgr_encdec)
 from light_vllm.core.evictor_v1 import EvictionPolicy, Evictor, make_evictor
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
 from light_vllm.logger import init_logger
-from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup, SequenceStatus
 from light_vllm.utils import Device
+from light_vllm.wde.core.schema.sequence import (Sequence, SequenceGroup,
+                                                 SequenceStatus)
 
 logger = init_logger(__name__)
 
@@ -284,8 +286,8 @@ class BlockSpaceManagerV1(BlockSpaceManager):
         num_free_gpu_blocks = self.gpu_allocator.get_num_free_blocks()
 
         # Use watermark to avoid frequent cache eviction.
-        if (self.num_total_gpu_blocks - num_required_blocks <
-                self.watermark_blocks):
+        if (self.num_total_gpu_blocks - num_required_blocks
+                < self.watermark_blocks):
             return AllocStatus.NEVER
         if num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks:
             return AllocStatus.OK

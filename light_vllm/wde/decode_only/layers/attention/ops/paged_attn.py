@@ -7,7 +7,8 @@ from light_vllm.layers import _custom_ops as ops
 from light_vllm.layers.triton_utils import HAS_TRITON
 
 if HAS_TRITON:
-    from light_vllm.wde.decode_only.layers.attention.ops.prefix_prefill import context_attention_fwd
+    from light_vllm.wde.decode_only.layers.attention.ops.prefix_prefill import (
+        context_attention_fwd)
 
 # Should be the same as PARTITION_SIZE in `paged_attention_v2_launcher`.
 _PARTITION_SIZE = 512

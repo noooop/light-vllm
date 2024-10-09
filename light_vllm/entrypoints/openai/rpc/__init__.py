@@ -3,9 +3,9 @@ from enum import Enum
 from typing import Mapping, Optional, Union
 
 from light_vllm.inputs import PromptInputs
+from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.lora.request import LoRARequest
 from light_vllm.prompt_adapter.request import PromptAdapterRequest
-from light_vllm.layers.sampling_params import SamplingParams
 
 VLLM_RPC_SUCCESS_STR = "SUCCESS"
 VLLM_RPC_HEALTHY_STR = "HEALTHY"

@@ -3,8 +3,8 @@
 # https://github.com/FlagOpen/FlagEmbedding/blob/master/FlagEmbedding/flag_reranker.py
 # FlagEmbedding is licensed under the MIT License.
 
-
-from light_vllm.wde.encode_only.modelzoo.xlm_roberta import XLMRobertaForSequenceClassification
+from light_vllm.wde.encode_only.modelzoo.xlm_roberta import (
+    XLMRobertaForSequenceClassification)
 
 
 class BGERerankerV2M3(XLMRobertaForSequenceClassification):

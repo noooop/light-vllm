@@ -1,8 +1,13 @@
-
 from dataclasses import dataclass
-from typing import List, Iterable, Set
+from typing import Iterable, List
+
 import torch
-from light_vllm.wde.core.schema.engine_io import Request, PromptInput, TextOnlyInputs, SchedulableRequest, RequestOutput, SchedulerOutput
+
+from light_vllm.wde.core.schema.engine_io import (PromptInput, Request,
+                                                  RequestOutput,
+                                                  SchedulableRequest,
+                                                  SchedulerOutput,
+                                                  TextOnlyInputs)
 
 
 @dataclass
@@ -34,11 +39,8 @@ class EncodeOnlySchedulerOutput(SchedulerOutput):
 
 class EncodeOnlyRequestOutput(RequestOutput):
 
-    def __init__(self,
-                 request_id: str,
-                 outputs: torch.Tensor,
-                 prompt_token_ids: List[int],
-                 finished: bool):
+    def __init__(self, request_id: str, outputs: torch.Tensor,
+                 prompt_token_ids: List[int], finished: bool):
         self.request_id = request_id
         self.prompt_token_ids = prompt_token_ids
         self.finished = finished

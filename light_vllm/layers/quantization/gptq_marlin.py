@@ -4,18 +4,17 @@ import torch
 from torch.nn.parameter import Parameter
 
 from light_vllm.layers import _custom_ops as ops
-from light_vllm.logger import init_logger
 from light_vllm.layers.linear import (LinearBase, LinearMethodBase,
                                       set_weight_attrs)
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.quantization.utils.marlin_utils import (
     apply_gptq_marlin_linear, check_marlin_supported, marlin_is_k_full,
     marlin_make_empty_g_idx, marlin_make_workspace, marlin_permute_scales,
     marlin_repeat_scales_on_all_ranks, marlin_sort_g_idx, replace_tensor,
     verify_marlin_supported, verify_marlin_supports_shape)
-from light_vllm.layers.vocab_embedding import ParallelLMHead
 from light_vllm.layers.scalar_type import scalar_types
+from light_vllm.layers.vocab_embedding import ParallelLMHead
+from light_vllm.logger import init_logger
 
 logger = init_logger(__name__)
 
@@ -119,10 +118,10 @@ class GPTQMarlinConfig(QuantizationConfig):
     def is_gptq_marlin_compatible(cls, quant_config: Dict[str, Any]):
         # Extract data from quant config.
         quant_method = quant_config.get("quant_method", "").lower()
-        num_bits = quant_config.get("bits", None)
-        group_size = quant_config.get("group_size", None)
-        sym = quant_config.get("sym", None)
-        desc_act = quant_config.get("desc_act", None)
+        num_bits = quant_config.get("bits")
+        group_size = quant_config.get("group_size")
+        sym = quant_config.get("sym")
+        desc_act = quant_config.get("desc_act")
 
         if quant_method != "gptq":
             return False

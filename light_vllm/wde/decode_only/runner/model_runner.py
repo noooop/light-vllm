@@ -1,27 +1,27 @@
 import warnings
-from typing import (List, Optional)
+from typing import List, Optional
+
 import torch
 import torch.distributed
 import torch.nn as nn
+
 import light_vllm.envs as envs
 from light_vllm.layers.sampling_params import SamplingParams
-
-from light_vllm.wde.core.config import DeviceConfig, LoadConfig
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
-
-from light_vllm.wde.core.runner.cuda_graph_util import CUDAGraph
-
-from light_vllm.wde.core.inputs import INPUT_REGISTRY
 from light_vllm.logger import init_logger
 from light_vllm.models.utils import set_cpu_offload_max_bytes
-
-from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
-from light_vllm.wde.core.schema.execute_io import ExecuteOutput
-from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
-
 from light_vllm.utils import (CudaMemoryProfiler, is_hip,
                               is_pin_memory_available)
-from light_vllm.wde.chat.schema.execute_io import ModelInputForGPUWithSamplingMetadata
+from light_vllm.wde.chat.config import (CacheConfig, ModelConfig,
+                                        SchedulerConfig)
+from light_vllm.wde.chat.schema.execute_io import (
+    ModelInputForGPUWithSamplingMetadata)
+from light_vllm.wde.core.config import DeviceConfig, LoadConfig
+from light_vllm.wde.core.inputs import INPUT_REGISTRY
+from light_vllm.wde.core.runner.cuda_graph_util import CUDAGraph
+from light_vllm.wde.core.schema.execute_io import ExecuteOutput
+from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
+from light_vllm.wde.decode_only.layers.attention import (
+    DecodeOnlyAttentionBackend)
 
 logger = init_logger(__name__)
 
@@ -51,7 +51,8 @@ class GPUModelRunner:
         self.kv_cache_dtype = kv_cache_dtype
         self.sliding_window = model_config.get_sliding_window()
         self.block_size = cache_config.block_size
-        self.cuda_graph = CUDAGraph(model_config, cache_config, scheduler_config)
+        self.cuda_graph = CUDAGraph(model_config, cache_config,
+                                    scheduler_config)
 
         # Lazy initialization
         self.model: nn.Module  # Set after load_model
@@ -60,22 +61,21 @@ class GPUModelRunner:
             int(self.cache_config.cpu_offload_gb * 1024**3))
 
     def load_model(self) -> None:
-        from light_vllm.wde.core.loader.loader import get_model_loader, initialize_model
+        from light_vllm.wde.core.loader.loader import (get_model_loader,
+                                                       initialize_model)
 
         logger.info("Starting to load model %s...", self.model_config.model)
         with CudaMemoryProfiler() as m:
             loader = get_model_loader(self.load_config)
-            self.model = initialize_model(
-                model_config=self.model_config,
-                load_config=self.load_config,
-                device_config=self.device_config,
-                cache_config=self.cache_config,
-                attn_backend=self.attn_backend)
+            self.model = initialize_model(model_config=self.model_config,
+                                          load_config=self.load_config,
+                                          device_config=self.device_config,
+                                          cache_config=self.cache_config,
+                                          attn_backend=self.attn_backend)
 
-            loader.load_model(
-                self.model,
-                model_config=self.model_config,
-                device_config=self.device_config)
+            loader.load_model(self.model,
+                              model_config=self.model_config,
+                              device_config=self.device_config)
 
         self.model_memory_usage = m.consumed_memory
         logger.info("Loading model weights took %.4f GB",
@@ -146,13 +146,11 @@ class GPUModelRunner:
                 f"Expected at least {seq_len} dummy tokens for profiling, "
                 f"but got: {len(seq_data.prompt_token_ids)}")
 
-            seq = SequenceGroupMetadata(
-                request_id=str(group_id),
-                is_prompt=True,
-                seq_data={group_id: seq_data},
-                sampling_params=sampling_params,
-                block_tables=None
-            )
+            seq = SequenceGroupMetadata(request_id=str(group_id),
+                                        is_prompt=True,
+                                        seq_data={group_id: seq_data},
+                                        sampling_params=sampling_params,
+                                        block_tables=None)
             seqs.append(seq)
 
         # Run the model with the dummy inputs.
@@ -202,5 +200,3 @@ class GPUModelRunner:
         )
 
         return [output]
-
-

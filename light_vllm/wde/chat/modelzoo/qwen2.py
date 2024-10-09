@@ -28,37 +28,35 @@ import torch
 from torch import nn
 from transformers import Qwen2Config
 
-from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttention, DecodeOnlyAttentionMetadata, \
-    DecodeOnlyAttentionBackend
-from light_vllm.wde.core.config import CacheConfig
 from light_vllm.layers.activation import SiluAndMul
 from light_vllm.layers.layernorm import RMSNorm
 from light_vllm.layers.linear import (MergedColumnParallelLinear,
-                                      QKVParallelLinear,
-                                      RowParallelLinear)
+                                      QKVParallelLinear, RowParallelLinear)
 from light_vllm.layers.logits_processor import LogitsProcessor
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.rotary_embedding import get_rope
 from light_vllm.layers.sampler import Sampler
-from light_vllm.layers.vocab_embedding import (
-    ParallelLMHead, VocabParallelEmbedding)
-from light_vllm.wde.core.loader.weight_utils import (
-    default_weight_loader, maybe_remap_kv_scale_name)
 from light_vllm.layers.sampling_metadata import SamplingMetadata
+from light_vllm.layers.vocab_embedding import (ParallelLMHead,
+                                               VocabParallelEmbedding)
 from light_vllm.models.utils import is_pp_missing_parameter, make_layers
-
 from light_vllm.wde.chat.schema.execute_io import SamplerOutput
+from light_vllm.wde.core.config import CacheConfig
+from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
+                                                     maybe_remap_kv_scale_name)
+from light_vllm.wde.decode_only.layers.attention import (
+    DecodeOnlyAttention, DecodeOnlyAttentionBackend,
+    DecodeOnlyAttentionMetadata)
 
 
 class Qwen2MLP(nn.Module):
 
     def __init__(
-            self,
-            hidden_size: int,
-            intermediate_size: int,
-            hidden_act: str,
-            quant_config: Optional[QuantizationConfig] = None,
+        self,
+        hidden_size: int,
+        intermediate_size: int,
+        hidden_act: str,
+        quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
         super().__init__()
         self.gate_up_proj = MergedColumnParallelLinear(
@@ -112,7 +110,7 @@ class Qwen2Attention(nn.Module):
         self.head_dim = hidden_size // self.total_num_heads
         self.q_size = self.num_heads * self.head_dim
         self.kv_size = self.num_kv_heads * self.head_dim
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.rope_theta = rope_theta
 
         self.qkv_proj = QKVParallelLinear(
@@ -146,11 +144,11 @@ class Qwen2Attention(nn.Module):
                                         quant_config=quant_config)
 
     def forward(
-            self,
-            positions: torch.Tensor,
-            hidden_states: torch.Tensor,
-            kv_cache: torch.Tensor,
-            attn_metadata: DecodeOnlyAttentionMetadata,
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        kv_cache: torch.Tensor,
+        attn_metadata: DecodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
@@ -163,11 +161,11 @@ class Qwen2Attention(nn.Module):
 class Qwen2DecoderLayer(nn.Module):
 
     def __init__(
-            self,
-            config: Qwen2Config,
-            attn_backend: DecodeOnlyAttentionBackend,
-            cache_config: Optional[CacheConfig] = None,
-            quant_config: Optional[QuantizationConfig] = None,
+        self,
+        config: Qwen2Config,
+        attn_backend: DecodeOnlyAttentionBackend,
+        cache_config: Optional[CacheConfig] = None,
+        quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
         super().__init__()
         self.hidden_size = config.hidden_size
@@ -183,8 +181,7 @@ class Qwen2DecoderLayer(nn.Module):
             cache_config=cache_config,
             quant_config=quant_config,
             rope_scaling=rope_scaling,
-            attn_backend=attn_backend
-        )
+            attn_backend=attn_backend)
         self.mlp = Qwen2MLP(
             hidden_size=self.hidden_size,
             intermediate_size=config.intermediate_size,
@@ -197,12 +194,12 @@ class Qwen2DecoderLayer(nn.Module):
                                                 eps=config.rms_norm_eps)
 
     def forward(
-            self,
-            positions: torch.Tensor,
-            hidden_states: torch.Tensor,
-            kv_cache: torch.Tensor,
-            attn_metadata: DecodeOnlyAttentionMetadata,
-            residual: Optional[torch.Tensor],
+        self,
+        positions: torch.Tensor,
+        hidden_states: torch.Tensor,
+        kv_cache: torch.Tensor,
+        attn_metadata: DecodeOnlyAttentionMetadata,
+        residual: Optional[torch.Tensor],
     ) -> Tuple[torch.Tensor, torch.Tensor]:
         # Self Attention
         if residual is None:
@@ -228,12 +225,12 @@ class Qwen2DecoderLayer(nn.Module):
 class Qwen2Model(nn.Module):
 
     def __init__(
-            self,
-            config: Qwen2Config,
-            attn_backend: DecodeOnlyAttentionBackend,
-            cache_config: Optional[CacheConfig] = None,
-            quant_config: Optional[QuantizationConfig] = None,
-            prefix: str = "",
+        self,
+        config: Qwen2Config,
+        attn_backend: DecodeOnlyAttentionBackend,
+        cache_config: Optional[CacheConfig] = None,
+        quant_config: Optional[QuantizationConfig] = None,
+        prefix: str = "",
     ) -> None:
         super().__init__()
         self.config = config
@@ -259,12 +256,12 @@ class Qwen2Model(nn.Module):
         return self.embed_tokens(input_ids)
 
     def forward(
-            self,
-            input_ids: torch.Tensor,
-            positions: torch.Tensor,
-            kv_caches: List[torch.Tensor],
-            attn_metadata: DecodeOnlyAttentionMetadata,
-            inputs_embeds: Optional[torch.Tensor] = None,
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: DecodeOnlyAttentionMetadata,
+        inputs_embeds: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
@@ -310,11 +307,11 @@ class Qwen2ForCausalLM(nn.Module):
     embedding_padding_modules = []
 
     def __init__(
-            self,
-            config: Qwen2Config,
-            attn_backend: DecodeOnlyAttentionBackend,
-            cache_config: Optional[CacheConfig] = None,
-            quant_config: Optional[QuantizationConfig] = None,
+        self,
+        config: Qwen2Config,
+        attn_backend: DecodeOnlyAttentionBackend,
+        cache_config: Optional[CacheConfig] = None,
+        quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
         # TODO (@robertgshaw2): see if this can be moved out
         if (cache_config.sliding_window is not None
@@ -333,7 +330,8 @@ class Qwen2ForCausalLM(nn.Module):
         self.config = config
 
         self.quant_config = quant_config
-        self.model = Qwen2Model(config, attn_backend, cache_config, quant_config)
+        self.model = Qwen2Model(config, attn_backend, cache_config,
+                                quant_config)
 
         if config.tie_word_embeddings:
             self.lm_head = self.model.embed_tokens
@@ -346,13 +344,14 @@ class Qwen2ForCausalLM(nn.Module):
         self.sampler = Sampler()
 
     def forward(
-            self,
-            input_ids: torch.Tensor,
-            positions: torch.Tensor,
-            kv_caches: List[torch.Tensor],
-            attn_metadata: DecodeOnlyAttentionMetadata,
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        attn_metadata: DecodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
-        hidden_states = self.model(input_ids, positions, kv_caches, attn_metadata)
+        hidden_states = self.model(input_ids, positions, kv_caches,
+                                   attn_metadata)
         return hidden_states
 
     def compute_logits(self, hidden_states: torch.Tensor,
@@ -362,9 +361,9 @@ class Qwen2ForCausalLM(nn.Module):
         return logits
 
     def sample(
-            self,
-            logits: torch.Tensor,
-            sampling_metadata: SamplingMetadata,
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
     ) -> Optional[SamplerOutput]:
         next_tokens = self.sampler(logits, sampling_metadata)
         return next_tokens

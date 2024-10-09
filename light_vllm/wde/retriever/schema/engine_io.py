@@ -1,13 +1,12 @@
+from typing import List
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
-                    Union)
 import torch
+
 from light_vllm.wde.core.schema.engine_io import RequestOutput
 
 
 class EmbeddingRequestOutput(RequestOutput):
+
     def __init__(self, request_id: str, outputs: torch.Tensor,
                  prompt_token_ids: List[int], finished: bool):
         self.request_id = request_id

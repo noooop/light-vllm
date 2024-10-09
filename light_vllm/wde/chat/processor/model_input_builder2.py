@@ -1,11 +1,12 @@
-
 import weakref
-from typing import (TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type,
-                    TypeVar, Union)
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
-from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
-from light_vllm.wde.chat.schema.execute_io import ModelInputForGPU, ModelInputForGPUWithSamplingMetadata
+from typing import Dict, List, Optional
+
 from light_vllm.utils import flatten_2d_lists
+from light_vllm.wde.chat.config import (CacheConfig, ModelConfig,
+                                        SchedulerConfig)
+from light_vllm.wde.chat.schema.execute_io import (
+    ModelInputForGPU, ModelInputForGPUWithSamplingMetadata)
+from light_vllm.wde.core.schema.sequence import SequenceGroupMetadata
 
 
 class ModelInputForGPUBuilder:
@@ -19,34 +20,34 @@ class ModelInputForGPUBuilder:
         """Intermediate data for the current sequence group."""
 
         def __init__(
-                self,
-                *,
-                # From sequence group metadata.
-                request_id: str,
-                seq_ids: List[int],
-                is_prompt: bool,
-                block_tables: Optional[Dict[int, List[int]]],
-                computed_block_nums: List[int],
-                n_seqs: int = 0,
+            self,
+            *,
+            # From sequence group metadata.
+            request_id: str,
+            seq_ids: List[int],
+            is_prompt: bool,
+            block_tables: Optional[Dict[int, List[int]]],
+            computed_block_nums: List[int],
+            n_seqs: int = 0,
 
-                # Input tokens and positions.
-                input_tokens: Optional[List[List[int]]] = None,
-                input_positions: Optional[List[List[int]]] = None,
+            # Input tokens and positions.
+            input_tokens: Optional[List[List[int]]] = None,
+            input_positions: Optional[List[List[int]]] = None,
 
-                # The sequence length (may be capped to the sliding window).
-                seq_lens: Optional[List[int]] = None,
-                # The original sequence length (before applying sliding window).
-                # This is used to compute slot mapping.
-                orig_seq_lens: Optional[List[int]] = None,
-                # The query length.
-                query_lens: Optional[List[int]] = None,
-                # The number of tokens that are already computed.
-                context_lens: Optional[List[int]] = None,
-                # The current sliding window block.
-                curr_sliding_window_blocks: Optional[List[int]] = None,
+            # The sequence length (may be capped to the sliding window).
+            seq_lens: Optional[List[int]] = None,
+            # The original sequence length (before applying sliding window).
+            # This is used to compute slot mapping.
+            orig_seq_lens: Optional[List[int]] = None,
+            # The query length.
+            query_lens: Optional[List[int]] = None,
+            # The number of tokens that are already computed.
+            context_lens: Optional[List[int]] = None,
+            # The current sliding window block.
+            curr_sliding_window_blocks: Optional[List[int]] = None,
 
-                # Whether the prefix cache is hit (prefill only).
-                prefix_cache_hit: bool = False,
+            # Whether the prefix cache is hit (prefill only).
+            prefix_cache_hit: bool = False,
         ):
             self.request_id = request_id
             self.seq_ids = seq_ids
@@ -77,13 +78,9 @@ class ModelInputForGPUBuilder:
             self.context_lens = [0] * self.n_seqs
             self.curr_sliding_window_blocks = [0] * self.n_seqs
 
-    def __init__(self,
-                 model_config: ModelConfig,
-                 scheduler_config: SchedulerConfig,
-                 cache_config: CacheConfig,
-                 attn_backend,
-                 cuda_graph,
-                 device):
+    def __init__(self, model_config: ModelConfig,
+                 scheduler_config: SchedulerConfig, cache_config: CacheConfig,
+                 attn_backend, cuda_graph, device):
         # Compute functions for each sequence in a sequence group.
         # WARNING: The order of the functions matters!
         self.per_seq_compute_fns = [
@@ -111,11 +108,11 @@ class ModelInputForGPUBuilder:
 
         # Engine/Model configurations.
         self.chunked_prefill_enabled = (
-                self.scheduler_config is not None
-                and self.scheduler_config.chunked_prefill_enabled)
+            self.scheduler_config is not None
+            and self.scheduler_config.chunked_prefill_enabled)
         if self.sliding_window is not None:
             self.sliding_window_blocks = (
-                                                 self.sliding_window + self.block_size - 1) // self.block_size
+                self.sliding_window + self.block_size - 1) // self.block_size
             self.block_aligned_sliding_window = \
                 self.sliding_window_blocks * self.block_size
 
@@ -181,9 +178,9 @@ class ModelInputForGPUBuilder:
             assert computed_block_nums is not None
             context_len = len(computed_block_nums) * self.block_size
             inter_data.input_tokens[seq_idx] = inter_data.input_tokens[
-                                                   seq_idx][context_len:]
+                seq_idx][context_len:]
             inter_data.input_positions[seq_idx] = inter_data.input_positions[
-                                                      seq_idx][context_len:]
+                seq_idx][context_len:]
             inter_data.context_lens[seq_idx] = context_len
             inter_data.query_lens[
                 seq_idx] = inter_data.seq_lens[seq_idx] - context_len
@@ -267,16 +264,16 @@ class ModelInputForGPUBuilder:
             [inter_data.query_lens for inter_data in self.inter_data_list])
 
         input_tokens, input_positions, input_tokens_tensor, input_positions_tensor, seq_lens, cuda_graph_pad_size, batch_size = (
-            self.cuda_graph.model_input_for_gpu_builder_maybe_pad(self, input_tokens, input_positions, seq_lens,
-                                                                         max_decode_seq_len))
+            self.cuda_graph.model_input_for_gpu_builder_maybe_pad(
+                self, input_tokens, input_positions, seq_lens,
+                max_decode_seq_len))
 
         # Attention metadata.
         attn_metadata = self.attn_metadata_builder.build(
             seq_lens, query_lens, cuda_graph_pad_size, batch_size)
 
-        return self.model_input_cls(
-            input_tokens=input_tokens_tensor,
-            input_positions=input_positions_tensor,
-            attn_metadata=attn_metadata,
-            seq_lens=seq_lens,
-            query_lens=query_lens)
+        return self.model_input_cls(input_tokens=input_tokens_tensor,
+                                    input_positions=input_positions_tensor,
+                                    attn_metadata=attn_metadata,
+                                    seq_lens=seq_lens,
+                                    query_lens=query_lens)

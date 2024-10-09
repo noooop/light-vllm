@@ -10,7 +10,8 @@ from light_vllm.engine.protocol import AsyncEngineClient
 from light_vllm.entrypoints.logger import RequestLogger
 from light_vllm.entrypoints.openai.protocol import (EmbeddingRequest,
                                                     EmbeddingResponse,
-                                                    EmbeddingResponseData, UsageInfo)
+                                                    EmbeddingResponseData,
+                                                    UsageInfo)
 from light_vllm.entrypoints.openai.serving_engine import OpenAIServing
 from light_vllm.logger import init_logger
 from light_vllm.outputs import EmbeddingRequestOutput

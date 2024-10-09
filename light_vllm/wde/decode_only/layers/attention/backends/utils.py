@@ -1,10 +1,11 @@
 """Attention backend utils"""
-from typing import TYPE_CHECKING, Dict, List, Type, TypeVar, Union
+from typing import Dict, List, Type, TypeVar, Union
 
 import torch
 
-from light_vllm.wde.decode_only.layers.attention.backends.abstract import DecodeOnlyAttentionMetadata, DecodeOnlyAttentionMetadataBuilder
 from light_vllm.utils import make_tensor_with_pad
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    DecodeOnlyAttentionMetadataBuilder)
 
 # Error string(s) for encoder/decoder
 # unsupported attention scenarios
@@ -76,7 +77,8 @@ def compute_slot_mapping(is_profile_run: bool, slot_mapping: List[int],
 TAttentionMetadata = TypeVar("TAttentionMetadata", bound='AttentionMetadata')
 
 
-class DecodeOnlyCommonMetadataBuilder(DecodeOnlyAttentionMetadataBuilder[TAttentionMetadata]):
+class DecodeOnlyCommonMetadataBuilder(
+        DecodeOnlyAttentionMetadataBuilder[TAttentionMetadata]):
 
     _metadata_cls: Type[TAttentionMetadata]
 

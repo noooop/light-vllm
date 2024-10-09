@@ -1,17 +1,16 @@
+import gc
+import random
+from typing import Any, Dict, List, Optional, TypeVar
 
 import pytest
-import random
-from typing import (Any, Callable, Dict, List, Optional, Tuple, TypedDict,
-                    TypeVar, Union)
-
-import gc
-from light_vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, is_cpu
-from transformers import (AutoModelForCausalLM, AutoTokenizer, BatchEncoding,
-                          BatchFeature)
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from transformers import (AutoModelForCausalLM, AutoTokenizer, BatchEncoding,
+                          BatchFeature)
+
 from light_vllm import LLM
+from light_vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, is_cpu
 
 _T = TypeVar("_T", nn.Module, torch.Tensor, BatchEncoding, BatchFeature)
 
@@ -23,6 +22,7 @@ def cleanup():
 
 
 class HfRunner:
+
     def wrap_device(self, input: _T) -> _T:
         if not is_cpu():
             # Check if the input is already on the GPU
@@ -35,14 +35,12 @@ class HfRunner:
                 return input  # Already on CPU, no need to move
             return input.to("cpu")
 
-    def __init__(
-        self,
-        model_name: str,
-        dtype: str = "half",
-        *,
-        model_kwargs: Optional[Dict[str, Any]] = None,
-        auto_cls=AutoModelForCausalLM
-    ) -> None:
+    def __init__(self,
+                 model_name: str,
+                 dtype: str = "half",
+                 *,
+                 model_kwargs: Optional[Dict[str, Any]] = None,
+                 auto_cls=AutoModelForCausalLM) -> None:
         torch_dtype = STR_DTYPE_TO_TORCH_DTYPE[dtype]
 
         self.model_name = model_name
@@ -87,6 +85,7 @@ class HfRunner:
 
 
 class VllmRunner:
+
     def __init__(
         self,
         model_name: str,
@@ -94,12 +93,11 @@ class VllmRunner:
         tokenizer_name: Optional[str] = None,
         dtype: str = "half",
     ) -> None:
-        self.model = LLM(
-            model=model_name,
-            tokenizer=tokenizer_name,
-            trust_remote_code=True,
-            max_num_seqs=max_num_seqs,
-            dtype=dtype)
+        self.model = LLM(model=model_name,
+                         tokenizer=tokenizer_name,
+                         trust_remote_code=True,
+                         max_num_seqs=max_num_seqs,
+                         dtype=dtype)
 
     def encode(self, prompts: List[str]) -> List[List[float]]:
         req_outputs = self.model.encode(prompts)
@@ -141,7 +139,7 @@ def example_prompts():
 
 MODELS = [
     'FacebookAI/xlm-roberta-base',
-#    'FacebookAI/xlm-roberta-large'
+    #    'FacebookAI/xlm-roberta-large'
 ]
 
 
@@ -158,19 +156,13 @@ def compare_embeddings(embeddings1, embeddings2):
 @pytest.mark.parametrize("max_num_seqs", [2, 3, 5, 7])
 @pytest.mark.parametrize("scheduling", ["sync", "async", "double_buffer"])
 @torch.inference_mode
-def test_models(
-    hf_runner,
-    vllm_runner,
-    example_prompts,
-    model: str,
-    dtype: str,
-    max_num_seqs: int,
-    scheduling: str
-) -> None:
+def test_models(hf_runner, vllm_runner, example_prompts, model: str,
+                dtype: str, max_num_seqs: int, scheduling: str) -> None:
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.encode(example_prompts)
 
-    with vllm_runner(model, dtype=dtype, max_num_seqs=max_num_seqs) as vllm_model:
+    with vllm_runner(model, dtype=dtype,
+                     max_num_seqs=max_num_seqs) as vllm_model:
         vllm_outputs = vllm_model.encode(example_prompts)
 
     similarities = compare_embeddings(hf_outputs, vllm_outputs)

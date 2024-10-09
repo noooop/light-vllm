@@ -9,8 +9,10 @@ from typing_extensions import Never
 
 from light_vllm import AsyncEngineArgs, AsyncLLMEngine
 from light_vllm.entrypoints.openai.rpc import (VLLM_RPC_HEALTHY_STR,
-                                               VLLM_RPC_SUCCESS_STR, RPCAbortRequest,
-                                               RPCGenerateRequest, RPCUtilityRequest)
+                                               VLLM_RPC_SUCCESS_STR,
+                                               RPCAbortRequest,
+                                               RPCGenerateRequest,
+                                               RPCUtilityRequest)
 from light_vllm.logger import init_logger
 from light_vllm.usage.usage_lib import UsageContext
 

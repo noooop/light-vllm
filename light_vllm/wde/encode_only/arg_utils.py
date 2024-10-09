@@ -2,14 +2,17 @@ import argparse
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Union
 
-from light_vllm.wde.core.arg_utils import EngineArgs
-from light_vllm.wde.core.config import DeviceConfig, LoadConfig, filter_unexpected_fields
-from light_vllm.wde.encode_only.config import EncodeOnlyModelConfig, EncodeOnlySchedulerConfig, EncodeOnlyEngineConfig
-from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
+from light_vllm.logger import init_logger
 from light_vllm.utils import FlexibleArgumentParser
+from light_vllm.wde.core.arg_utils import EngineArgs
+from light_vllm.wde.core.config import (DeviceConfig, LoadConfig,
+                                        filter_unexpected_fields)
+from light_vllm.wde.encode_only.config import (EncodeOnlyEngineConfig,
+                                               EncodeOnlyModelConfig,
+                                               EncodeOnlySchedulerConfig)
 
 logger = init_logger(__name__)
 
@@ -633,8 +636,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
             max_num_seqs=self.max_num_seqs,
             max_model_len=model_config.max_model_len,
             max_num_on_the_fly=self.max_num_on_the_fly,
-            scheduling=self.scheduling
-        )
+            scheduling=self.scheduling)
 
         load_config = LoadConfig(
             load_format=self.load_format,
@@ -643,9 +645,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
             ignore_patterns=self.ignore_patterns,
         )
 
-        return EncodeOnlyEngineConfig(
-            model_config=model_config,
-            scheduler_config=scheduler_config,
-            device_config=device_config,
-            load_config=load_config
-        )
+        return EncodeOnlyEngineConfig(model_config=model_config,
+                                      scheduler_config=scheduler_config,
+                                      device_config=device_config,
+                                      load_config=load_config)

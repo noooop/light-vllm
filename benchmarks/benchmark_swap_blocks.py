@@ -1,22 +1,23 @@
-import torch
 import time
 
+import torch
+
 try:
-    from vllm.utils import FlexibleArgumentParser
     from vllm import _custom_ops as ops
-
-    from vllm.utils import is_pin_memory_available
-except:
-    from light_vllm.utils import FlexibleArgumentParser
+    from vllm.utils import FlexibleArgumentParser, is_pin_memory_available
+except ImportError:
     from light_vllm.layers import _custom_ops as ops
-
-    from light_vllm.utils import is_pin_memory_available
+    from light_vllm.utils import (FlexibleArgumentParser,
+                                  is_pin_memory_available)
 
 pin_memory = is_pin_memory_available()
 
 
 def benchmark_swap_in_blocks(src_shape, num_blocks):
-    src = torch.randn(src_shape, dtype=torch.float16, pin_memory=pin_memory, device="cpu")
+    src = torch.randn(src_shape,
+                      dtype=torch.float16,
+                      pin_memory=pin_memory,
+                      device="cpu")
     dst = torch.zeros_like(src).cuda()
 
     block_mapping = [(i, i) for i in range(num_blocks)]
@@ -77,4 +78,3 @@ if __name__ == "__main__":
 
     benchmark_swap_in_blocks(src_shape, args.num_blocks)
     benchmark_swap_out_blocks(src_shape, args.num_blocks)
-

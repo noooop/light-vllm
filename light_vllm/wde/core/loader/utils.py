@@ -4,10 +4,10 @@ from typing import Tuple, Type
 
 import torch
 from torch import nn
+from transformers import PretrainedConfig
 
 from light_vllm.wde.core.config import ModelConfig
 from light_vllm.wde.core.modelzoo import ModelRegistry
-from transformers import PretrainedConfig
 
 
 @contextlib.contextmanager

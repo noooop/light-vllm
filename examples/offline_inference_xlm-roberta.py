@@ -1,9 +1,7 @@
-
 import light_vllm
-from light_vllm import LLM, SamplingParams
+from light_vllm import LLM
 
 print("light_vllm:", light_vllm.__version__)
-
 
 # Sample prompts.
 prompts = [

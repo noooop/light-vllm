@@ -2,18 +2,16 @@ import argparse
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Type, Union
 
-from light_vllm.wde.core.config import DeviceConfig, LoadConfig
-from light_vllm.wde.chat.config import (CacheConfig, EngineConfig,
-                                        ChatModelConfig, SchedulerConfig)
-from light_vllm.wde.chat.config import ChatEngineConfig
-from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
+from light_vllm.logger import init_logger
 from light_vllm.utils import FlexibleArgumentParser
-
+from light_vllm.wde.chat.config import (CacheConfig, ChatEngineConfig,
+                                        ChatModelConfig, EngineConfig,
+                                        SchedulerConfig)
 from light_vllm.wde.core.arg_utils import EngineArgs
-
+from light_vllm.wde.core.config import DeviceConfig, LoadConfig
 
 logger = init_logger(__name__)
 
@@ -774,13 +772,11 @@ class ChatEngineArgs(EngineArgs):
                 "Chunked prefill is not supported with sliding window. "
                 "Set --disable-sliding-window to disable sliding window.")
 
-        return ChatEngineConfig(
-            model_config=model_config,
-            cache_config=cache_config,
-            scheduler_config=scheduler_config,
-            device_config=device_config,
-            load_config=load_config
-        )
+        return ChatEngineConfig(model_config=model_config,
+                                cache_config=cache_config,
+                                scheduler_config=scheduler_config,
+                                device_config=device_config,
+                                load_config=load_config)
 
 
 @dataclass

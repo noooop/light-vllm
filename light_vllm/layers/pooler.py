@@ -3,8 +3,7 @@ from enum import IntEnum
 import torch
 import torch.nn as nn
 
-from light_vllm.layers.pooling_metadata import (PoolingMetadata,
-                                                PoolingTensors)
+from light_vllm.layers.pooling_metadata import PoolingMetadata, PoolingTensors
 from light_vllm.sequence import EmbeddingSequenceGroupOutput, PoolerOutput
 
 

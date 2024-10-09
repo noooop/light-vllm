@@ -6,18 +6,22 @@ from typing import Any, Dict, List, Optional, Tuple, Type
 import torch
 from torch.nn.functional import scaled_dot_product_attention
 
-from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
-                                                           DecodeOnlyAttentionMetadata, AttentionType)
-from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttentionMetadata
 from light_vllm.utils import is_cpu
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    AttentionType, DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
+    DecodeOnlyAttentionMetadata)
+from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (
+    PagedAttentionMetadata)
 
 if is_cpu():
     try:
         from light_vllm.attention.ops.ipex_attn import PagedAttention
     except ImportError:
-        from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttention
+        from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (
+            PagedAttention)
 else:
-    from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import PagedAttention
+    from light_vllm.wde.decode_only.layers.attention.ops.paged_attn import (
+        PagedAttention)
 
 
 class TorchSDPABackend(DecodeOnlyAttentionBackend):
@@ -36,32 +40,33 @@ class TorchSDPABackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_kv_cache_shape(
-            num_blocks: int,
-            block_size: int,
-            num_kv_heads: int,
-            head_size: int,
+        num_blocks: int,
+        block_size: int,
+        num_kv_heads: int,
+        head_size: int,
     ) -> Tuple[int, ...]:
         return PagedAttention.get_kv_cache_shape(num_blocks, block_size,
                                                  num_kv_heads, head_size)
 
     @staticmethod
     def swap_blocks(
-            src_kv_cache: torch.Tensor,
-            dst_kv_cache: torch.Tensor,
-            src_to_dst: torch.Tensor,
+        src_kv_cache: torch.Tensor,
+        dst_kv_cache: torch.Tensor,
+        src_to_dst: torch.Tensor,
     ) -> None:
         PagedAttention.swap_blocks(src_kv_cache, dst_kv_cache, src_to_dst)
 
     @staticmethod
     def copy_blocks(
-            kv_caches: List[torch.Tensor],
-            src_to_dists: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        src_to_dists: torch.Tensor,
     ) -> None:
         PagedAttention.copy_blocks(kv_caches, src_to_dists)
 
 
 @dataclass
-class DecodeOnlyTorchSDPAMetadata(DecodeOnlyAttentionMetadata, PagedAttentionMetadata):
+class DecodeOnlyTorchSDPAMetadata(DecodeOnlyAttentionMetadata,
+                                  PagedAttentionMetadata):
     """Metadata for TorchSDPABackend.
     """
     # Currently, input sequences can only contain all prompts
@@ -97,19 +102,20 @@ class DecodeOnlyTorchSDPAMetadata(DecodeOnlyAttentionMetadata, PagedAttentionMet
         return self
 
 
-class DecodeOnlyTorchSDPABackendImpl(DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPAMetadata]):
+class DecodeOnlyTorchSDPABackendImpl(
+        DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPAMetadata]):
 
     def __init__(
-            self,
-            num_heads: int,
-            head_size: int,
-            scale: float,
-            num_kv_heads: int,
-            alibi_slopes: Optional[List[float]],
-            sliding_window: Optional[int],
-            kv_cache_dtype: str,
-            blocksparse_params: Optional[Dict[str, Any]] = None,
-            logits_soft_cap: Optional[float] = None,
+        self,
+        num_heads: int,
+        head_size: int,
+        scale: float,
+        num_kv_heads: int,
+        alibi_slopes: Optional[List[float]],
+        sliding_window: Optional[int],
+        kv_cache_dtype: str,
+        blocksparse_params: Optional[Dict[str, Any]] = None,
+        logits_soft_cap: Optional[float] = None,
     ) -> None:
         if blocksparse_params is not None:
             raise ValueError(
@@ -142,15 +148,15 @@ class DecodeOnlyTorchSDPABackendImpl(DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPA
                 "Please use xFormers backend instead.")
 
     def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor,
-            kv_cache: Optional[torch.Tensor],
-            attn_metadata: TorchSDPAMetadata,  # type: ignore
-            k_scale: float = 1.0,
-            v_scale: float = 1.0,
-            attn_type: AttentionType = AttentionType.DECODER,
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        kv_cache: Optional[torch.Tensor],
+        attn_metadata: TorchSDPAMetadata,  # type: ignore
+        k_scale: float = 1.0,
+        v_scale: float = 1.0,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
         """Forward pass with torch SDPA and PagedAttention.
 
@@ -224,7 +230,7 @@ class DecodeOnlyTorchSDPABackendImpl(DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPA
                         dropout_p=0.0,
                         is_causal=not self.need_mask,
                         scale=self.scale).squeeze(0).movedim(
-                        query.dim() - 2, 0)
+                            query.dim() - 2, 0)
                     output[start:end, :, :] = sub_out
                     start = end
             else:
@@ -254,9 +260,9 @@ class DecodeOnlyTorchSDPABackendImpl(DecodeOnlyAttentionImpl[DecodeOnlyTorchSDPA
 
 
 def _make_alibi_bias(
-        alibi_slopes: torch.Tensor,
-        dtype: torch.dtype,
-        seq_lens: List[int],
+    alibi_slopes: torch.Tensor,
+    dtype: torch.dtype,
+    seq_lens: List[int],
 ) -> List[torch.Tensor]:
     attn_biases: List[torch.Tensor] = []
     for seq_len in seq_lens:
@@ -280,9 +286,9 @@ def _make_alibi_bias(
 
 
 def _make_sliding_window_bias(
-        seq_lens: List[int],
-        window_size: Optional[int],
-        dtype: torch.dtype,
+    seq_lens: List[int],
+    window_size: Optional[int],
+    dtype: torch.dtype,
 ) -> List[torch.Tensor]:
     attn_biases: List[torch.Tensor] = []
     for seq_len in seq_lens:

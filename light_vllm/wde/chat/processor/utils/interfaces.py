@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from typing import List
 
+from light_vllm.utils import Counter
 from light_vllm.wde.chat.config import SchedulerConfig
 from light_vllm.wde.chat.processor.utils.stop_checker import StopChecker
-from light_vllm.wde.core.schema.sequence import SequenceGroup
 from light_vllm.wde.chat.schema.execute_io import SequenceGroupOutput
 from light_vllm.wde.core.inputs.tokenizer import Tokenizer
-from light_vllm.utils import Counter
+from light_vllm.wde.core.schema.sequence import SequenceGroup
 
 
 class SequenceGroupOutputProcessor(ABC):

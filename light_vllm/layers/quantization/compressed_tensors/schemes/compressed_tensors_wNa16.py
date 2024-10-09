@@ -10,8 +10,8 @@ from light_vllm.layers.quantization.utils.marlin_utils import (
     apply_gptq_marlin_linear, marlin_make_empty_g_idx, marlin_make_workspace,
     marlin_permute_scales, replace_tensor, verify_marlin_supported,
     verify_marlin_supports_shape)
-from light_vllm.layers.utils import set_weight_attrs
 from light_vllm.layers.scalar_type import scalar_types
+from light_vllm.layers.utils import set_weight_attrs
 
 __all__ = ["CompressedTensorsWNA16"]
 WNA16_SUPPORTED_TYPES_MAP = {

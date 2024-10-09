@@ -4,18 +4,12 @@ import os
 
 os.environ["VLLM_USE_MODELSCOPE"] = "True"
 
-import argparse
 import json
 import random
 import time
 from typing import List, Optional, Tuple
 
-import torch
-from tqdm import tqdm
-from transformers import (AutoModelForCausalLM, AutoTokenizer,
-                          PreTrainedTokenizerBase)
-
-from vllm.layers.quantization import QUANTIZATION_METHODS
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 
 def sample_requests(
@@ -151,11 +145,11 @@ def main(args):
         requests, args.model, args.tokenizer, args.quantization,
         args.tensor_parallel_size, args.seed, args.n, args.use_beam_search,
         args.trust_remote_code, args.dtype, args.max_model_len,
-        args.enforce_eager, args.kv_cache_dtype,
-        args.quantization_param_path, args.device,
-        args.enable_prefix_caching, args.enable_chunked_prefill,
-        args.max_num_batched_tokens, args.max_num_seqs, args.distributed_executor_backend,
-        args.gpu_memory_utilization, args.download_dir)
+        args.enforce_eager, args.kv_cache_dtype, args.quantization_param_path,
+        args.device, args.enable_prefix_caching, args.enable_chunked_prefill,
+        args.max_num_batched_tokens, args.max_num_seqs,
+        args.distributed_executor_backend, args.gpu_memory_utilization,
+        args.download_dir)
 
     total_num_tokens = sum(prompt_len + output_len
                            for _, prompt_len, output_len in requests)

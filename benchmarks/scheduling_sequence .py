@@ -1,8 +1,5 @@
-
 import os
 import random
-import numpy as np
-import time
 
 
 def pitch():
@@ -14,7 +11,9 @@ def pitch():
 
     def p_prepare_model_input(self, *args, **kwargs):
         out = o_prepare_model_input(self, *args, **kwargs)
-        log.append((out.attn_metadata.num_prefills, out.attn_metadata.num_prefill_tokens, out.attn_metadata.num_decode_tokens))
+        log.append((out.attn_metadata.num_prefills,
+                    out.attn_metadata.num_prefill_tokens,
+                    out.attn_metadata.num_decode_tokens))
         return out
 
     ModelRunner.prepare_model_input = p_prepare_model_input
@@ -31,7 +30,7 @@ def benchmark(args):
     log = pitch()
 
     import vllm
-    from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+    from vllm import EngineArgs, LLMEngine, SamplingParams, TextPrompt
 
     print(vllm.__version__)
 
@@ -55,8 +54,7 @@ def benchmark(args):
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         distributed_executor_backend=args.distributed_executor_backend,
-        disable_log_stats=True
-    )
+        disable_log_stats=True)
     engine = LLMEngine.from_engine_args(engine_args)
 
     prompt = "hi" * (args.input_len - 1)
@@ -77,7 +75,7 @@ def benchmark(args):
 
     i = 0
     while engine.has_unfinished_requests():
-    #for i in range(10):
+        #for i in range(10):
         request_outputs = engine.step()
         print("=" * 80)
         print(i)
@@ -88,7 +86,8 @@ def benchmark(args):
 
         for seq_group in engine.scheduler[0].running:
             data = seq_group.get_seqs()[0].data
-            print(seq_group.request_id, data.get_num_computed_tokens(), data.get_num_uncomputed_tokens())
+            print(seq_group.request_id, data.get_num_computed_tokens(),
+                  data.get_num_uncomputed_tokens())
 
         i += 1
 
@@ -122,14 +121,12 @@ if __name__ == '__main__':
     args.distributed_executor_backend = None
     args.download_dir = None
 
-    import sys
     from concurrent.futures import ProcessPoolExecutor
 
     def run(args):
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark, args)
             f.result()
-
 
     max_num_seqs_list = [256]
 

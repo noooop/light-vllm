@@ -1,19 +1,21 @@
 """A GPU worker class."""
 import gc
 import os
-from typing import List, Optional, Set, Tuple, Type
+from typing import List, Optional, Tuple
 
 import torch
+
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.platforms import current_platform
-
-
+from light_vllm.wde.chat.config import (CacheConfig, ChatEngineConfig,
+                                        ModelConfig, SchedulerConfig)
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig, ChatEngineConfig
-from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
-from light_vllm.wde.decode_only.worker.cache_engine import CacheEngine
+from light_vllm.wde.decode_only.layers.attention import (
+    DecodeOnlyAttentionBackend)
 from light_vllm.wde.decode_only.runner.model_runner import GPUModelRunner
-from light_vllm.wde.decode_only.schema.execute_io import DecodeOnlyWorkerInput, DecodeOnlyExecuteInput, DecodeOnlyExecuteOutput
+from light_vllm.wde.decode_only.schema.execute_io import (
+    DecodeOnlyExecuteInput, DecodeOnlyExecuteOutput, DecodeOnlyWorkerInput)
+from light_vllm.wde.decode_only.worker.cache_engine import CacheEngine
 
 
 class Worker:
@@ -68,7 +70,7 @@ class Worker:
 
             # This env var set by Ray causes exceptions with graph building.
             os.environ.pop("NCCL_ASYNC_ERROR_HANDLING", None)
-            self.device = torch.device(f"cuda:0")
+            self.device = torch.device("cuda:0")
             torch.cuda.set_device(self.device)
 
             _check_if_gpu_supports_dtype(self.model_config.dtype)
@@ -148,7 +150,8 @@ class Worker:
 
     def _init_cache_engine(self):
         assert self.cache_config.num_gpu_blocks is not None
-        self.cache_engine = CacheEngine(self.cache_config, self.model_config, self.device_config, self.attn_backend)
+        self.cache_engine = CacheEngine(self.cache_config, self.model_config,
+                                        self.device_config, self.attn_backend)
         self.gpu_cache = self.cache_engine.gpu_cache
 
     def _warm_up_model(self) -> None:
@@ -166,12 +169,10 @@ class Worker:
     def execute_worker(self, worker_input: DecodeOnlyWorkerInput) -> None:
         if (worker_input.blocks_to_swap_in is not None
                 and worker_input.blocks_to_swap_in.numel() > 0):
-            self.cache_engine.swap_in(
-                worker_input.blocks_to_swap_in)
+            self.cache_engine.swap_in(worker_input.blocks_to_swap_in)
         if (worker_input.blocks_to_swap_out is not None
                 and worker_input.blocks_to_swap_out.numel() > 0):
-            self.cache_engine.swap_out(
-                worker_input.blocks_to_swap_out)
+            self.cache_engine.swap_out(worker_input.blocks_to_swap_out)
         if (worker_input.blocks_to_copy is not None
                 and worker_input.blocks_to_copy.numel() > 0):
             self.cache_engine.copy(worker_input.blocks_to_copy)

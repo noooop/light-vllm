@@ -1,8 +1,8 @@
-
 import os
 import random
-import numpy as np
 import time
+
+import numpy as np
 
 
 def profiler(cls, method):
@@ -42,7 +42,7 @@ def benchmark(args):
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
     import light_vllm
-    from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+    from light_vllm import EngineArgs, LLMEngine, SamplingParams, TextPrompt
     print("light_vllm:", light_vllm.__version__)
 
     engine_args = EngineArgs(
@@ -65,16 +65,19 @@ def benchmark(args):
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         distributed_executor_backend=args.distributed_executor_backend,
-        disable_log_stats=True
-    )
+        disable_log_stats=True)
     engine = LLMEngine.from_engine_args(engine_args)
 
     request_processor_profiler = profiler(engine.request_processor, "__call__")
-    model_pre_processor_profiler = profiler(engine.model_pre_processor, "__call__")
+    model_pre_processor_profiler = profiler(engine.model_pre_processor,
+                                            "__call__")
     executor_profiler = profiler(engine.executor, "execute_model")
-    execute_worker_profiler = profiler(engine.executor.driver_worker, "execute_worker")
-    execute_model_profiler = profiler(engine.executor.driver_worker.model_runner, "execute_model")
-    model_output_processor_profiler = profiler(engine.output_processor, "__call__")
+    execute_worker_profiler = profiler(engine.executor.driver_worker,
+                                       "execute_worker")
+    execute_model_profiler = profiler(
+        engine.executor.driver_worker.model_runner, "execute_model")
+    model_output_processor_profiler = profiler(engine.output_processor,
+                                               "__call__")
     scheduler_profiler = profiler(engine.scheduler, "schedule")
 
     prompt = "hi" * (args.input_len - 1)
@@ -112,7 +115,7 @@ def benchmark(args):
 
     tpot = []
     for v in timestamp.values():
-        dd = [v[i]-v[i-1] for i in range(1, len(v))]
+        dd = [v[i] - v[i - 1] for i in range(1, len(v))]
         tpot.extend(dd)
 
     tpot = np.mean(tpot)
@@ -123,20 +126,26 @@ def benchmark(args):
 
     print(f"Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
           f"{total_num_tokens / elapsed_time:.4f} tokens/s, "
-          f"Delay {tpot*1000:0.4f} ms, n_step {n_step}, elapsed_time: {elapsed_time}")
+          f"Delay {tpot*1000:0.4f} ms, n_step {n_step}, "
+          f"elapsed_time: {elapsed_time}")
     print("scheduler_profiler", scheduler_profiler["total_elapsed_time"],
           scheduler_profiler["count"])
-    print("request_processor_profiler", request_processor_profiler["total_elapsed_time"],
+    print("request_processor_profiler",
+          request_processor_profiler["total_elapsed_time"],
           request_processor_profiler["count"])
-    print("model_pre_processor_profiler", model_pre_processor_profiler["total_elapsed_time"],
+    print("model_pre_processor_profiler",
+          model_pre_processor_profiler["total_elapsed_time"],
           model_pre_processor_profiler["count"])
     print("executor_profiler", executor_profiler["total_elapsed_time"],
           executor_profiler["count"])
-    print("execute_worker_profiler", execute_worker_profiler["total_elapsed_time"],
+    print("execute_worker_profiler",
+          execute_worker_profiler["total_elapsed_time"],
           execute_worker_profiler["count"])
-    print("execute_model_profiler", execute_model_profiler["total_elapsed_time"],
+    print("execute_model_profiler",
+          execute_model_profiler["total_elapsed_time"],
           execute_model_profiler["count"])
-    print("model_output_processor_profiler", model_output_processor_profiler["total_elapsed_time"],
+    print("model_output_processor_profiler",
+          model_output_processor_profiler["total_elapsed_time"],
           model_output_processor_profiler["count"])
 
 

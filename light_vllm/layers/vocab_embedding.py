@@ -6,8 +6,8 @@ import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
 from light_vllm.layers.linear import UnquantizedLinearMethod
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig, QuantizeMethodBase)
+from light_vllm.layers.quantization.base_config import (QuantizationConfig,
+                                                        QuantizeMethodBase)
 from light_vllm.layers.utils import set_weight_attrs
 
 DEFAULT_VOCAB_PADDING_SIZE = 64
@@ -83,17 +83,17 @@ class VocabParallelEmbeddingShardIndices:
 
     def __post_init__(self):
         # sanity checks
-        assert (self.padded_org_vocab_start_index <=
-                self.padded_org_vocab_end_index)
-        assert (self.padded_added_vocab_start_index <=
-                self.padded_added_vocab_end_index)
+        assert (self.padded_org_vocab_start_index
+                <= self.padded_org_vocab_end_index)
+        assert (self.padded_added_vocab_start_index
+                <= self.padded_added_vocab_end_index)
 
         assert self.org_vocab_start_index <= self.org_vocab_end_index
         assert self.added_vocab_start_index <= self.added_vocab_end_index
 
         assert self.org_vocab_start_index <= self.padded_org_vocab_start_index
-        assert (self.added_vocab_start_index <=
-                self.padded_added_vocab_start_index)
+        assert (self.added_vocab_start_index
+                <= self.padded_added_vocab_start_index)
         assert self.org_vocab_end_index <= self.padded_org_vocab_end_index
         assert self.added_vocab_end_index <= self.padded_added_vocab_end_index
 
@@ -109,8 +109,8 @@ def get_masked_input_and_mask(
         added_vocab_end_index: int) -> Tuple[torch.Tensor, torch.Tensor]:
     # torch.jit.script will fuse all of the pointwise ops below
     # into a single kernel, making it very fast
-    org_vocab_mask = (input_ >= org_vocab_start_index) & (input_ <
-                                                          org_vocab_end_index)
+    org_vocab_mask = (input_ >= org_vocab_start_index) & (
+        input_ < org_vocab_end_index)
     added_vocab_mask = (input_ >= added_vocab_start_index) & (
         input_ < added_vocab_end_index)
     added_offset = added_vocab_start_index - (

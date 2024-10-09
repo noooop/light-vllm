@@ -1,10 +1,10 @@
 from typing import List, Optional, Union
 
+from light_vllm.layers.pooling_params import PoolingParams
+from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.logger import init_logger
 from light_vllm.lora.request import LoRARequest
-from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.prompt_adapter.request import PromptAdapterRequest
-from light_vllm.layers.sampling_params import SamplingParams
 
 logger = init_logger(__name__)
 

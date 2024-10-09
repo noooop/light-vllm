@@ -3,11 +3,12 @@ from typing import List
 
 import torch
 
-from light_vllm.wde.decode_only.layers.attention import DecodeOnlyAttentionBackend
-from light_vllm.wde.core.config import CacheConfig, DeviceConfig, ModelConfig
 from light_vllm.logger import init_logger
 from light_vllm.utils import (STR_DTYPE_TO_TORCH_DTYPE, get_dtype_size,
                               is_pin_memory_available)
+from light_vllm.wde.core.config import CacheConfig, DeviceConfig, ModelConfig
+from light_vllm.wde.decode_only.layers.attention import (
+    DecodeOnlyAttentionBackend)
 
 logger = init_logger(__name__)
 
@@ -20,13 +21,9 @@ class CacheEngine:
     as swapping and copying.
     """
 
-    def __init__(
-        self,
-        cache_config: CacheConfig,
-        model_config: ModelConfig,
-        device_config: DeviceConfig,
-        attn_backend: DecodeOnlyAttentionBackend
-    ) -> None:
+    def __init__(self, cache_config: CacheConfig, model_config: ModelConfig,
+                 device_config: DeviceConfig,
+                 attn_backend: DecodeOnlyAttentionBackend) -> None:
         self.cache_config = cache_config
         self.model_config = model_config
         self.device_config = device_config

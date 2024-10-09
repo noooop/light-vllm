@@ -6,10 +6,11 @@ from typing import Dict, List, Optional, Tuple
 import torch
 
 from light_vllm.layers.sampling_params import SamplingParams, SamplingType
-from light_vllm.wde.core.schema.sequence import SequenceData, SequenceGroupMetadata
 from light_vllm.layers.triton_utils.sample import get_num_triton_sampler_splits
 from light_vllm.utils import (async_tensor_h2d, is_pin_memory_available,
                               make_tensor_with_pad, maybe_expand_dim)
+from light_vllm.wde.core.schema.sequence import (SequenceData,
+                                                 SequenceGroupMetadata)
 
 _SAMPLING_EPS = 1e-5
 _SEED_0_REPLACEMENT = 3403598558
@@ -134,7 +135,8 @@ class SamplingMetadata:
                                                   target_device=device,
                                                   pin_memory=pin_memory)
         categorized_sample_indices = {
-            t: maybe_expand_dim(
+            t:
+            maybe_expand_dim(
                 async_tensor_h2d(seq_ids,
                                  dtype=torch.int,
                                  target_device=device,

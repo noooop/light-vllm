@@ -1,18 +1,22 @@
+import time
 from typing import Any, Dict, Optional
 
-import time
+from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.utils import Counter
+from light_vllm.wde.chat.config import CacheConfig, ModelConfig
+from light_vllm.wde.chat.schema.engine_io import (ChatInput, ChatRequest,
+                                                  ChatSchedulableRequest)
 from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.wde.core.llm_engine import LLMEngine
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig
-from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.wde.core.schema.engine_io import PromptInput, TextPrompt, TokensPrompt
-from light_vllm.wde.chat.schema.engine_io import ChatInput, ChatRequest, ChatSchedulableRequest
+from light_vllm.wde.core.processor.input_processor import (InputProcessor,
+                                                           RequestProcessor)
+from light_vllm.wde.core.schema.engine_io import (PromptInput, TextPrompt,
+                                                  TokensPrompt)
 from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup
-from light_vllm.wde.core.processor.input_processor import InputProcessor, RequestProcessor
 
 
 class ChatModelInputProcessor(InputProcessor):
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         return cls()
@@ -64,11 +68,8 @@ class ChatModelSequenceProcessor(object):
     ChatRequest -> ChatSequenceProcessor -> SequenceGroup
     """
 
-    def __init__(self,
-                 model_config: ModelConfig,
-                 cache_config: CacheConfig,
-                 tokenizer: Tokenizer,
-                 seq_counter: Counter):
+    def __init__(self, model_config: ModelConfig, cache_config: CacheConfig,
+                 tokenizer: Tokenizer, seq_counter: Counter):
         self.block_size = cache_config.block_size
         self.eos_token_id = tokenizer.eos_token_id
         self.max_logprobs = model_config.max_logprobs
@@ -77,8 +78,10 @@ class ChatModelSequenceProcessor(object):
         self.generation_config_fields = self._load_generation_config_dict(
             model_config)
 
-    def _load_generation_config_dict(self, model_config: ModelConfig) -> Dict[str, Any]:
-        from light_vllm.models.transformers_utils.config import try_get_generation_config
+    def _load_generation_config_dict(
+            self, model_config: ModelConfig) -> Dict[str, Any]:
+        from light_vllm.models.transformers_utils.config import (
+            try_get_generation_config)
         config = try_get_generation_config(
             model_config.model,
             trust_remote_code=model_config.trust_remote_code,
@@ -90,7 +93,9 @@ class ChatModelSequenceProcessor(object):
 
         return config.to_diff_dict()
 
-    def __call__(self, chat_request: ChatRequest, arrival_time: Optional[float] = None) -> SequenceGroup:
+    def __call__(self,
+                 chat_request: ChatRequest,
+                 arrival_time: Optional[float] = None) -> SequenceGroup:
         """Creates a SequenceGroup with SamplingParams."""
 
         sampling_params = chat_request.params
@@ -106,9 +111,9 @@ class ChatModelSequenceProcessor(object):
 
         max_logprobs = self.max_logprobs
         if (sampling_params.logprobs
-            and sampling_params.logprobs > max_logprobs) or (
-                sampling_params.prompt_logprobs
-                and sampling_params.prompt_logprobs > max_logprobs):
+                and sampling_params.logprobs > max_logprobs) or (
+                    sampling_params.prompt_logprobs
+                    and sampling_params.prompt_logprobs > max_logprobs):
             raise ValueError(f"Cannot request more than "
                              f"{max_logprobs} logprobs.")
 
@@ -120,11 +125,10 @@ class ChatModelSequenceProcessor(object):
             self.generation_config_fields, seq.eos_token_id)
 
         # Create the sequence group.
-        seq_group = SequenceGroup(
-            request_id=chat_request.request_id,
-            seqs=[seq],
-            arrival_time=arrival_time,
-            sampling_params=sampling_params)
+        seq_group = SequenceGroup(request_id=chat_request.request_id,
+                                  seqs=[seq],
+                                  arrival_time=arrival_time,
+                                  sampling_params=sampling_params)
 
         return seq_group
 
@@ -137,21 +141,18 @@ class ChatModelRequestProcessor(RequestProcessor):
     ChatRequest -> ChatModelSequenceProcessor -> SequenceGroup
     """
 
-    def __init__(self,
-                 model_config: ModelConfig,
-                 cache_config: CacheConfig,
-                 tokenizer: Tokenizer,
-                 seq_counter: Counter):
+    def __init__(self, model_config: ModelConfig, cache_config: CacheConfig,
+                 tokenizer: Tokenizer, seq_counter: Counter):
         self.prompt_processor = ChatModelPromptProcessor(tokenizer)
-        self.sequence_processor = ChatModelSequenceProcessor(model_config, cache_config, tokenizer, seq_counter)
+        self.sequence_processor = ChatModelSequenceProcessor(
+            model_config, cache_config, tokenizer, seq_counter)
 
     @classmethod
     def from_engine(cls, engine):
         engine.seq_counter = Counter()
 
         return cls(engine.engine_config.model_config,
-                   engine.engine_config.cache_config,
-                   engine.tokenizer,
+                   engine.engine_config.cache_config, engine.tokenizer,
                    engine.seq_counter)
 
     def __call__(self, request: ChatRequest) -> ChatSchedulableRequest:

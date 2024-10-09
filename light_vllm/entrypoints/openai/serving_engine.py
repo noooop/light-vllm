@@ -14,18 +14,17 @@ from light_vllm.entrypoints.logger import RequestLogger
 from light_vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
                                                     CompletionRequest,
                                                     DetokenizeRequest,
-                                                    EmbeddingRequest, ErrorResponse,
-                                                    ModelCard, ModelList,
-                                                    ModelPermission,
+                                                    EmbeddingRequest,
+                                                    ErrorResponse, ModelCard,
+                                                    ModelList, ModelPermission,
                                                     TokenizeChatRequest,
                                                     TokenizeCompletionRequest,
                                                     TokenizeRequest)
 # yapf: enable
 from light_vllm.inputs import parse_and_batch_prompt
-from light_vllm.logger import init_logger
-
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import SamplingParams
+from light_vllm.logger import init_logger
 from light_vllm.sequence import Logprob
 from light_vllm.transformers_utils.tokenizer_group import AnyTokenizer
 
@@ -141,9 +140,8 @@ class OpenAIServing:
             err_type="NotFoundError",
             status_code=HTTPStatus.NOT_FOUND)
 
-    def _maybe_get_adapters(
-        self, request: AnyRequest
-    ) -> Union[Tuple[None, None]]:
+    def _maybe_get_adapters(self,
+                            request: AnyRequest) -> Union[Tuple[None, None]]:
         if request.model in self.served_model_names:
             return None, None
         # if _check_model has been called earlier, this will be unreachable

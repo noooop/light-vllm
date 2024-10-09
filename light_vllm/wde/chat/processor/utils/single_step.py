@@ -1,14 +1,16 @@
 from typing import Dict, List, Optional, Tuple, Union
 
+from light_vllm.layers.sampling_params import SamplingParams
+from light_vllm.logger import init_logger
+from light_vllm.utils import Counter
 from light_vllm.wde.chat.processor.utils.interfaces import (
     SequenceGroupOutputProcessor)
 from light_vllm.wde.chat.processor.utils.stop_checker import StopChecker
-from light_vllm.logger import init_logger
-from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.wde.core.schema.sequence import (Sequence, SequenceGroup, SequenceStatus)
-from light_vllm.wde.chat.schema.execute_io import SequenceGroupOutput, SequenceOutput
+from light_vllm.wde.chat.schema.execute_io import (SequenceGroupOutput,
+                                                   SequenceOutput)
 from light_vllm.wde.core.inputs.tokenizer import Tokenizer
-from light_vllm.utils import Counter
+from light_vllm.wde.core.schema.sequence import (Sequence, SequenceGroup,
+                                                 SequenceStatus)
 
 logger = init_logger(__name__)
 
@@ -75,8 +77,9 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
 
             seq_group.prompt_logprobs.extend(prompt_logprobs)
 
-    def _process_sequence_group_outputs(self, seq_group: SequenceGroup,
-                                        outputs: SequenceGroupOutput) -> Tuple[List]:
+    def _process_sequence_group_outputs(
+            self, seq_group: SequenceGroup,
+            outputs: SequenceGroupOutput) -> Tuple[List]:
         seq_need_free = []
         seq_need_fork = []
 
@@ -92,11 +95,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                     seq, sampling_params)
             else:
                 new_char_count = 0
-            self.stop_checker.maybe_stop_sequence(
-                seq,
-                new_char_count,
-                sampling_params
-            )
+            self.stop_checker.maybe_stop_sequence(seq, new_char_count,
+                                                  sampling_params)
             if seq.is_finished():
                 seq_need_free.append(seq)
             return seq_need_fork, seq_need_free
@@ -151,11 +151,8 @@ class SingleStepOutputProcessor(SequenceGroupOutputProcessor):
                     seq, sampling_params)
             else:
                 new_char_count = 0
-            self.stop_checker.maybe_stop_sequence(
-                seq,
-                new_char_count,
-                sampling_params
-            )
+            self.stop_checker.maybe_stop_sequence(seq, new_char_count,
+                                                  sampling_params)
 
         # Non-beam search case
         if not sampling_params.use_beam_search:

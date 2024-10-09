@@ -1,14 +1,18 @@
+import time
 from typing import Optional
 
-import time
 from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.wde.core.llm_engine import LLMEngine
-from light_vllm.wde.core.schema.engine_io import Params, PromptInput, TextPrompt, TokensPrompt
-from light_vllm.wde.encode_only.schema.engine_io import EncodeOnlyInput, EncodeOnlyRequest, EncodeOnlySchedulableRequest
-from light_vllm.wde.core.processor.input_processor import InputProcessor, RequestProcessor
+from light_vllm.wde.core.processor.input_processor import (InputProcessor,
+                                                           RequestProcessor)
+from light_vllm.wde.core.schema.engine_io import (Params, PromptInput,
+                                                  TextPrompt, TokensPrompt)
+from light_vllm.wde.encode_only.schema.engine_io import (
+    EncodeOnlyInput, EncodeOnlyRequest, EncodeOnlySchedulableRequest)
 
 
 class EncodeOnlyModelInputProcessor(InputProcessor):
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         return cls()
@@ -27,6 +31,7 @@ class EncodeOnlyModelInputProcessor(InputProcessor):
 
 
 class EncodeOnlyModelRequestProcessor(RequestProcessor):
+
     def __init__(self, tokenizer: Tokenizer):
         self.tokenizer = tokenizer
 
@@ -34,7 +39,8 @@ class EncodeOnlyModelRequestProcessor(RequestProcessor):
     def from_engine(cls, engine: LLMEngine):
         return cls(engine.tokenizer)
 
-    def __call__(self, request: EncodeOnlyRequest) -> EncodeOnlySchedulableRequest:
+    def __call__(self,
+                 request: EncodeOnlyRequest) -> EncodeOnlySchedulableRequest:
         inputs = request.inputs
 
         if isinstance(inputs, str):
@@ -53,11 +59,8 @@ class EncodeOnlyModelRequestProcessor(RequestProcessor):
 
         schedulable_request = EncodeOnlySchedulableRequest(
             request_id=request.request_id,
-            inputs=EncodeOnlyInput(
-                prompt_token_ids=prompt_token_ids,
-                prompt=inputs.get("prompt")
-            ),
-            arrival_time=request.arrival_time
-        )
+            inputs=EncodeOnlyInput(prompt_token_ids=prompt_token_ids,
+                                   prompt=inputs.get("prompt")),
+            arrival_time=request.arrival_time)
 
         return schedulable_request

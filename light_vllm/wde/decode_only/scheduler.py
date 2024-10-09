@@ -4,15 +4,19 @@ import random
 import time
 from collections import deque
 from dataclasses import dataclass, field
-from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union, Optional
+from typing import Deque, Dict, Iterable, List, Optional, Set, Tuple, Union
 
-from light_vllm.wde.chat.config import CacheConfig, SchedulerConfig
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
 from light_vllm.logger import init_logger
-from light_vllm.wde.core.schema.sequence import (Sequence, SequenceData, SequenceGroup,
-                                                 SequenceGroupMetadata, SequenceStatus)
-from light_vllm.wde.core.schema.engine_io import Request, SchedulableRequest, SchedulerOutput, RequestOutput
+from light_vllm.wde.chat.config import CacheConfig, SchedulerConfig
 from light_vllm.wde.core.processor.input_processor import RequestProcessor
+from light_vllm.wde.core.schema.engine_io import (Request, RequestOutput,
+                                                  SchedulerOutput)
+from light_vllm.wde.core.schema.sequence import (Sequence, SequenceData,
+                                                 SequenceGroup,
+                                                 SequenceGroupMetadata,
+                                                 SequenceStatus)
+
 logger = init_logger(__name__)
 
 # Test-only. If configured, decode is preempted with
@@ -233,10 +237,10 @@ class Scheduler:
     support_scheduling = ["sync_scheduling"]
 
     def __init__(
-            self,
-            scheduler_config: SchedulerConfig,
-            cache_config: CacheConfig,
-            request_processor: RequestProcessor,
+        self,
+        scheduler_config: SchedulerConfig,
+        cache_config: CacheConfig,
+        request_processor: RequestProcessor,
     ) -> None:
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
@@ -289,8 +293,7 @@ class Scheduler:
     @classmethod
     def from_engine(cls, engine):
         return cls(engine.engine_config.scheduler_config,
-                   engine.engine_config.cache_config,
-                   engine.request_processor)
+                   engine.engine_config.cache_config, engine.request_processor)
 
     @property
     def num_decoding_tokens_per_seq(self) -> int:
@@ -315,7 +318,7 @@ class Scheduler:
             request_id: The ID(s) of the sequence group to abort.
         """
         if isinstance(request_id, str):
-            request_id = (request_id,)
+            request_id = (request_id, )
         request_ids = set(request_id)
         for state_queue in [self.waiting, self.running, self.swapped]:
             aborted_groups: List[Union[Request, SequenceGroup]] = []
@@ -669,8 +672,7 @@ class Scheduler:
 
         # If any requests are swapped, prioritized swapped requests.
         if not self.swapped:
-            prefills = self._schedule_prefills(budget,
-                                               enable_chunking=False)
+            prefills = self._schedule_prefills(budget, enable_chunking=False)
 
         # Don't schedule decodes if prefills are scheduled.
         # NOTE: If `_schedule_prefills` doesn't enable chunking, self.running
@@ -685,8 +687,8 @@ class Scheduler:
                     running_scheduled.swapped_out) == 0:
                 swapped_in = self._schedule_swapped(budget)
 
-        assert (budget.num_batched_tokens <=
-                self.scheduler_config.max_num_batched_tokens)
+        assert (budget.num_batched_tokens
+                <= self.scheduler_config.max_num_batched_tokens)
         assert budget.num_curr_seqs <= self.scheduler_config.max_num_seqs
 
         # Update waiting requests.
@@ -756,11 +758,10 @@ class Scheduler:
             swapped_in = self._schedule_swapped(budget)
 
         # Schedule new prefills.
-        prefills = self._schedule_prefills(budget,
-                                           enable_chunking=True)
+        prefills = self._schedule_prefills(budget, enable_chunking=True)
 
-        assert (budget.num_batched_tokens <=
-                self.scheduler_config.max_num_batched_tokens)
+        assert (budget.num_batched_tokens
+                <= self.scheduler_config.max_num_batched_tokens)
         assert budget.num_curr_seqs <= self.scheduler_config.max_num_seqs
 
         # Update waiting requests.
@@ -865,8 +866,8 @@ class Scheduler:
                 # NOTE: We use get_len instead of get_prompt_len because when
                 # a sequence is preempted, prefill includes previous generated
                 # output tokens.
-                if (token_chunk_size + seqs[0].data.get_num_computed_tokens() <
-                        seqs[0].data.get_len()):
+                if (token_chunk_size + seqs[0].data.get_num_computed_tokens()
+                        < seqs[0].data.get_len()):
                     do_sample = False
 
             # It assumes the scheduled_seq_groups is ordered by
@@ -903,14 +904,16 @@ class Scheduler:
         """Free a sequence from a block table."""
         self.block_manager.free(seq)
 
-    def free_finished_request(self, request_outputs: List[RequestOutput]) -> None:
+    def free_finished_request(self,
+                              request_outputs: List[RequestOutput]) -> None:
         remaining: Deque[SequenceGroup] = deque()
         for seq_group in self.running:
             if not seq_group.is_finished():
                 remaining.append(seq_group)
         self.running = remaining
 
-    def remove_abort_request(self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
+    def remove_abort_request(
+            self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:
         return request_outputs
 
     def _allocate_and_set_running(self, seq_group: SequenceGroup) -> None:
@@ -1042,11 +1045,11 @@ class Scheduler:
                     arrival_time = e.arrival_time
                 else:
                     arrival_time = e.metrics.arrival_time
-                earliest_arrival_time = min(earliest_arrival_time, arrival_time)
-            passed_delay = (
-                    (now - earliest_arrival_time) >
-                    (self.scheduler_config.delay_factor * self.last_prompt_latency)
-                    or not self.running)
+                earliest_arrival_time = min(earliest_arrival_time,
+                                            arrival_time)
+            passed_delay = ((now - earliest_arrival_time)
+                            > (self.scheduler_config.delay_factor *
+                               self.last_prompt_latency) or not self.running)
         else:
             passed_delay = True
         return passed_delay

@@ -12,12 +12,13 @@ def benchmark(args):
 
     try:
         import light_vllm
-        from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        from light_vllm import (EngineArgs, LLMEngine, SamplingParams,
+                                TextPrompt)
         print("light_vllm:", light_vllm.__version__)
 
     except Exception:
         import vllm
-        from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        from vllm import EngineArgs, LLMEngine, SamplingParams, TextPrompt
         print("vllm:", vllm.__version__)
 
     engine_args = EngineArgs(
@@ -43,7 +44,7 @@ def benchmark(args):
     )
     engine = LLMEngine.from_engine_args(engine_args)
 
-    for batch_size in range(1, args.num_prompts+2):
+    for batch_size in range(1, args.num_prompts + 2):
         prompt = "hi" * (args.input_len - 1)
         requests = [(prompt, args.input_len, args.output_len)
                     for _ in range(batch_size)]
@@ -51,13 +52,13 @@ def benchmark(args):
         for request_id, (prompt, _, output_len) in enumerate(requests):
             inputs = TextPrompt(prompt=prompt)
             sampling_params = SamplingParams(
-                    n=args.n,
-                    temperature=0.0 if args.use_beam_search else 1.0,
-                    top_p=1.0,
-                    use_beam_search=args.use_beam_search,
-                    ignore_eos=True,
-                    max_tokens=output_len,
-                )
+                n=args.n,
+                temperature=0.0 if args.use_beam_search else 1.0,
+                top_p=1.0,
+                use_beam_search=args.use_beam_search,
+                ignore_eos=True,
+                max_tokens=output_len,
+            )
             engine.add_request(str(request_id), inputs, sampling_params)
 
         # prefill & Warming up

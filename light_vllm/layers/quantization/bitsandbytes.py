@@ -5,8 +5,7 @@ from torch.nn.parameter import Parameter
 
 from light_vllm.layers.linear import (LinearBase, LinearMethodBase,
                                       set_weight_attrs)
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 
 
 class BitsAndBytesConfig(QuantizationConfig):

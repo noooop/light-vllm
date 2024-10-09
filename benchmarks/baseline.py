@@ -1,8 +1,8 @@
-
 import os
 import random
-import numpy as np
 import time
+
+import numpy as np
 
 
 def benchmark(args):
@@ -11,14 +11,8 @@ def benchmark(args):
     os.environ["VLLM_LOGGING_LEVEL"] = "ERROR"
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
-    try:
-        import light_vllm
-        from light_vllm import LLMEngine, SamplingParams, TextPrompt
-        from light_vllm.wde.chat.arg_utils import ChatEngineArgs as EngineArgs
-    except Exception:
-        import vllm
-        from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
-        print("vllm:", vllm.__version__)
+    from light_vllm import LLMEngine, SamplingParams
+    from light_vllm.wde.chat.arg_utils import ChatEngineArgs as EngineArgs
 
     engine_args = EngineArgs(
         model=args.model,
@@ -40,8 +34,7 @@ def benchmark(args):
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         distributed_executor_backend=args.distributed_executor_backend,
-        disable_log_stats=True
-    )
+        disable_log_stats=True)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -51,7 +44,7 @@ def benchmark(args):
 
     start = time.perf_counter()
     for request_id, (prompt, _, output_len) in enumerate(requests):
-        inputs = TextPrompt(prompt=prompt)
+        inputs = prompt
         sampling_params = SamplingParams(
             n=args.n,
             temperature=0.0 if args.use_beam_search else 1.0,
@@ -78,7 +71,7 @@ def benchmark(args):
 
     tpot = []
     for v in timestamp.values():
-        dd = [v[i]-v[i-1] for i in range(1, len(v))]
+        dd = [v[i] - v[i - 1] for i in range(1, len(v))]
         tpot.extend(dd)
 
     tpot = np.mean(tpot)

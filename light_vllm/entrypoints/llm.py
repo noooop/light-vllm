@@ -1,22 +1,23 @@
-
 from typing import List, Optional, Sequence, Union, cast
+
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
-from light_vllm.wde.core.llm_engine import LLMEngine
 
-from light_vllm.wde.core.schema.engine_io import TextOnlyInputs as PromptInputs
-from light_vllm.wde.reranker.schema.engine_io import RerankerInputs
+from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.logger import init_logger
-
-from light_vllm.wde.core.schema.engine_io import RequestOutput, Params
+from light_vllm.utils import Counter
 from light_vllm.wde.chat.schema.engine_io import ChatModelRequestOutput
 from light_vllm.wde.core.inputs.tokenizer import get_cached_tokenizer
-from light_vllm.utils import Counter
+from light_vllm.wde.core.llm_engine import LLMEngine
+from light_vllm.wde.core.schema.engine_io import Params, RequestOutput
+from light_vllm.wde.core.schema.engine_io import TextOnlyInputs as PromptInputs
+from light_vllm.wde.reranker.schema.engine_io import RerankerInputs
 
 logger = init_logger(__name__)
 
 
 class LLM:
+
     def __init__(
         self,
         model: str,
@@ -67,8 +68,7 @@ class LLM:
             disable_custom_all_reduce=disable_custom_all_reduce,
             **kwargs,
         )
-        self.llm_engine = LLMEngine.from_engine_args(
-            engine_args)
+        self.llm_engine = LLMEngine.from_engine_args(engine_args)
         self.request_counter = Counter()
 
     def get_tokenizer(
@@ -88,12 +88,31 @@ class LLM:
             self.llm_engine.tokenizer.tokenizer = get_cached_tokenizer(
                 tokenizer)
 
+    def generate(
+        self,
+        inputs: Union[Union[PromptInputs, Sequence[PromptInputs]],
+                      Optional[Union[str, List[str]]]] = None,
+        sampling_params: Optional[Union[SamplingParams,
+                                        Sequence[SamplingParams]]] = None,
+        use_tqdm: bool = True,
+    ) -> List[RequestOutput]:
+
+        inputs = cast(Union[PromptInputs, Sequence[PromptInputs]], inputs)
+
+        if sampling_params is None:
+            # Use default sampling params.
+            sampling_params = SamplingParams()
+
+        self._validate_and_add_requests(inputs=inputs, params=sampling_params)
+
+        outputs = self._run_engine(use_tqdm=use_tqdm)
+        return LLMEngine.validate_outputs(outputs, RequestOutput)
+
     def encode(
         self,
         inputs: Union[Union[PromptInputs, Sequence[PromptInputs]],
-                       Optional[Union[str, List[str]]]] = None,
-        pooling_params: Optional[Union[Params,
-                                       Sequence[Params]]] = None,
+                      Optional[Union[str, List[str]]]] = None,
+        pooling_params: Optional[Union[Params, Sequence[Params]]] = None,
         use_tqdm: bool = True,
     ) -> List[RequestOutput]:
         inputs = cast(Union[PromptInputs, Sequence[PromptInputs]], inputs)
@@ -148,19 +167,14 @@ class LLM:
                 params[i] if isinstance(params, Sequence) else params)
 
     def _add_request(
-            self,
-            inputs: PromptInputs,
-            params: Params,
+        self,
+        inputs: PromptInputs,
+        params: Params,
     ) -> None:
         request_id = str(next(self.request_counter))
-        self.llm_engine.add_request(
-            request_id,
-            inputs,
-            params)
+        self.llm_engine.add_request(request_id, inputs, params)
 
-    def _run_engine(
-            self, *, use_tqdm: bool
-    ) -> List[RequestOutput]:
+    def _run_engine(self, *, use_tqdm: bool) -> List[RequestOutput]:
         # Initialize tqdm.
         if use_tqdm:
             num_requests = self.llm_engine.get_num_unfinished_requests()

@@ -7,7 +7,8 @@ import torch
 from light_vllm.logger import init_logger
 
 logger = init_logger(__name__)
-core_C_available = importlib.util.find_spec('._core_C', 'light_vllm') is not None
+core_C_available = importlib.util.find_spec('._core_C',
+                                            'light_vllm') is not None
 
 
 # Mirrors enum in `core/scalar_type.hpp`

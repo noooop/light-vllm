@@ -1,9 +1,10 @@
-
-
 from dataclasses import dataclass
+
 import torch
-from light_vllm.wde.core.schema.execute_io import ModelInput, ExecuteInput
-from light_vllm.wde.encode_only.layers.attention import EncodeOnlyAttentionMetadata
+
+from light_vllm.wde.core.schema.execute_io import ExecuteInput, ModelInput
+from light_vllm.wde.encode_only.layers.attention import (
+    EncodeOnlyAttentionMetadata)
 
 
 @dataclass
@@ -13,8 +14,9 @@ class ModelInputForGPU(ModelInput):
     attn_metadata: EncodeOnlyAttentionMetadata
 
     def to(self, target_device, non_blocking=False):
-        for k in self.__dict__.keys():
-            self.__dict__[k] = self.__dict__[k].to(device=target_device, non_blocking=non_blocking)
+        for k in self.__dict__:
+            self.__dict__[k] = self.__dict__[k].to(device=target_device,
+                                                   non_blocking=non_blocking)
 
     def to_dict(self):
         return self.__dict__

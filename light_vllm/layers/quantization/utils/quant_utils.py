@@ -4,8 +4,7 @@ from typing import List
 import numpy
 import torch
 
-from light_vllm.layers.quantization.qqq import (
-    MARLIN_QQQ_SUPPORTED_NUM_BITS)
+from light_vllm.layers.quantization.qqq import MARLIN_QQQ_SUPPORTED_NUM_BITS
 from light_vllm.layers.scalar_type import ScalarType, scalar_types
 
 SUPPORTED_GPTQ_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]

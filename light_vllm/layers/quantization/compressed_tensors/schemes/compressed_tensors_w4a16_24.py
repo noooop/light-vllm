@@ -8,8 +8,8 @@ from light_vllm.layers.quantization.compressed_tensors.schemes import (
     CompressedTensorsScheme)
 from light_vllm.layers.quantization.gptq_marlin_24 import (
     GPTQ_MARLIN_24_MAX_PARALLEL, GPTQ_MARLIN_24_MIN_THREAD_N)
-from light_vllm.layers.utils import set_weight_attrs
 from light_vllm.layers.scalar_type import scalar_types
+from light_vllm.layers.utils import set_weight_attrs
 
 __all__ = ["CompressedTensorsW4A16Sparse24"]
 W4A16SPARSE24_SUPPORTED_TYPES_MAP = {

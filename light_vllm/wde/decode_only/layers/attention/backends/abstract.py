@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
-from enum import Enum, auto
-from typing import (TYPE_CHECKING, Any, Dict, Generic, List, Optional, Set,
-                    Tuple, Type, TypeVar)
+from typing import (Any, Dict, Generic, List, Optional, Set, Tuple, Type,
+                    TypeVar)
 
 import torch
-from light_vllm.wde.core.layers.attention.abstract import AttentionType, AttentionBackend, AttentionMetadata, AttentionMetadataBuilder, AttentionImpl
+
+from light_vllm.wde.core.layers.attention.abstract import (
+    AttentionBackend, AttentionImpl, AttentionMetadata,
+    AttentionMetadataBuilder, AttentionType)
 
 
 class DecodeOnlyAttentionBackend(AttentionBackend, ABC):
@@ -36,8 +38,8 @@ class DecodeOnlyAttentionBackend(AttentionBackend, ABC):
         raise NotImplementedError
 
     @classmethod
-    def make_metadata_builder(cls, *args,
-                              **kwargs) -> "DncodeOnlyAttentionMetadataBuilder":
+    def make_metadata_builder(
+            cls, *args, **kwargs) -> "DncodeOnlyAttentionMetadataBuilder":
         return cls.get_builder_cls()(*args, **kwargs)
 
     @staticmethod
@@ -115,7 +117,8 @@ class DecodeOnlyAttentionMetadata(AttentionMetadata):
 T = TypeVar("T", bound=DecodeOnlyAttentionMetadata)
 
 
-class DecodeOnlyAttentionMetadataBuilder(AttentionMetadataBuilder, ABC, Generic[T]):
+class DecodeOnlyAttentionMetadataBuilder(AttentionMetadataBuilder, ABC,
+                                         Generic[T]):
     """Abstract class for attention metadata builders."""
 
     @abstractmethod

@@ -1,15 +1,16 @@
-
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, TypedDict, List, Optional, Tuple, Dict
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+
 import torch
-from light_vllm.wde.core.schema.sequence import Logprob, PromptLogprobs, SequenceGroupMetadata
-from light_vllm.wde.core.schema.execute_io import ModelInput, ExecuteOutput
+
+from light_vllm.wde.core.schema.execute_io import ExecuteOutput, ModelInput
+from light_vllm.wde.core.schema.sequence import (Logprob, PromptLogprobs,
+                                                 SequenceGroupMetadata)
 
 if TYPE_CHECKING:
-    from light_vllm.wde.decode_only.layers.attention import AttentionMetadata
     from light_vllm.layers.sampling_metadata import SamplingMetadata
-
+    from light_vllm.wde.decode_only.layers.attention import AttentionMetadata
 
 
 @dataclass
@@ -57,10 +58,6 @@ class WorkerInput:
 class ExecuteInput(ABC):
     worker_input: Optional[WorkerInput]
     model_input: ModelInput
-
-
-
-
 
 
 @dataclass

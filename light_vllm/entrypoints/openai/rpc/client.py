@@ -7,14 +7,14 @@ import zmq.asyncio
 
 from light_vllm.config import (DecodingConfig, LoRAConfig, ModelConfig,
                                ParallelConfig, SchedulerConfig)
-from light_vllm.entrypoints.openai.rpc import (RPC_REQUEST_TYPE,
-                                               VLLM_RPC_HEALTHY_STR,
-                                               VLLM_RPC_SUCCESS_STR, RPCAbortRequest,
-                                               RPCGenerateRequest, RPCUtilityRequest)
+from light_vllm.entrypoints.openai.rpc import (
+    RPC_REQUEST_TYPE, VLLM_RPC_HEALTHY_STR, VLLM_RPC_SUCCESS_STR,
+    RPCAbortRequest, RPCGenerateRequest, RPCUtilityRequest)
 from light_vllm.inputs import PromptInputs
-from light_vllm.outputs import EmbeddingRequestOutput, RequestOutput
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.transformers_utils.tokenizer_group import init_tokenizer_from_configs
+from light_vllm.outputs import EmbeddingRequestOutput, RequestOutput
+from light_vllm.transformers_utils.tokenizer_group import (
+    init_tokenizer_from_configs)
 
 
 class AsyncEngineRPCClient:
@@ -194,11 +194,10 @@ class AsyncEngineRPCClient:
             # Send RPCGenerateRequest to the RPCServer.
             await socket.send_multipart([
                 cloudpickle.dumps(
-                    RPCGenerateRequest(
-                        inputs=inputs,
-                        sampling_params=sampling_params,
-                        request_id=request_id,
-                        trace_headers=trace_headers))
+                    RPCGenerateRequest(inputs=inputs,
+                                       sampling_params=sampling_params,
+                                       request_id=request_id,
+                                       trace_headers=trace_headers))
             ])
 
             # Stream back the results from the RPC Server.

@@ -1,16 +1,15 @@
+import gc
+import random
+from typing import List, Optional, TypeVar
 
 import numpy as np
 import pytest
-import random
-from typing import (Any, Callable, Dict, List, Optional, Tuple, TypedDict,
-                    TypeVar, Union)
-
-import gc
-from light_vllm.utils import STR_DTYPE_TO_TORCH_DTYPE, is_cpu
-from transformers import BatchEncoding, BatchFeature
 import torch
 import torch.nn as nn
+from transformers import BatchEncoding, BatchFeature
+
 from light_vllm import LLM
+from light_vllm.utils import is_cpu
 
 _T = TypeVar("_T", nn.Module, torch.Tensor, BatchEncoding, BatchFeature)
 
@@ -22,6 +21,7 @@ def cleanup():
 
 
 class HfRunner:
+
     def wrap_device(self, input: _T) -> _T:
         if not is_cpu():
             # Check if the input is already on the GPU
@@ -58,6 +58,7 @@ class HfRunner:
 
 
 class VllmRunner:
+
     def __init__(
         self,
         model_name: str,
@@ -65,12 +66,11 @@ class VllmRunner:
         tokenizer_name: Optional[str] = None,
         dtype: str = "half",
     ) -> None:
-        self.model = LLM(
-            model=model_name,
-            tokenizer=tokenizer_name,
-            trust_remote_code=True,
-            max_num_seqs=max_num_seqs,
-            dtype=dtype)
+        self.model = LLM(model=model_name,
+                         tokenizer=tokenizer_name,
+                         trust_remote_code=True,
+                         max_num_seqs=max_num_seqs,
+                         dtype=dtype)
 
     def encode(self, prompts: List[str]) -> List[List[float]]:
         req_outputs = self.model.encode(prompts)
@@ -110,16 +110,11 @@ def example_prompts():
     return prompts
 
 
-MODELS = [
-    'BAAI/bge-m3'
-]
+MODELS = ['BAAI/bge-m3']
 
 
 def compare_embeddings_np(embeddings1, embeddings2):
-    similarities = [
-        e1 @ e2.T
-        for e1, e2 in zip(embeddings1, embeddings2)
-    ]
+    similarities = [e1 @ e2.T for e1, e2 in zip(embeddings1, embeddings2)]
     return similarities
 
 
@@ -128,19 +123,13 @@ def compare_embeddings_np(embeddings1, embeddings2):
 @pytest.mark.parametrize("max_num_seqs", [2, 3, 5, 7])
 @pytest.mark.parametrize("scheduling", ["sync", "async", "double_buffer"])
 @torch.inference_mode
-def test_models(
-    hf_runner,
-    vllm_runner,
-    example_prompts,
-    model: str,
-    dtype: str,
-    max_num_seqs: int,
-    scheduling: str
-) -> None:
+def test_models(hf_runner, vllm_runner, example_prompts, model: str,
+                dtype: str, max_num_seqs: int, scheduling: str) -> None:
     with hf_runner(model, dtype=dtype) as hf_model:
         hf_outputs = hf_model.encode(example_prompts)
 
-    with vllm_runner(model, dtype=dtype, max_num_seqs=max_num_seqs) as vllm_model:
+    with vllm_runner(model, dtype=dtype,
+                     max_num_seqs=max_num_seqs) as vllm_model:
         vllm_outputs = vllm_model.encode(example_prompts)
         vllm_outputs = [t.cpu().numpy() for t in vllm_outputs]
 
@@ -148,5 +137,5 @@ def test_models(
     all_similarities = np.stack(similarities)
     tolerance = 1e-2
     assert np.all((all_similarities <= 1.0 + tolerance)
-                     & (all_similarities >= 1.0 - tolerance)
-                     ), f"Not all values are within {tolerance} of 1.0"
+                  & (all_similarities >= 1.0 - tolerance)
+                  ), f"Not all values are within {tolerance} of 1.0"

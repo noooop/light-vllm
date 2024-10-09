@@ -5,8 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from light_vllm.layers.linear import LinearBase, LinearMethodBase
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.utils import set_weight_attrs
 
 

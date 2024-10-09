@@ -1,8 +1,8 @@
-
 import os
 import random
-import numpy as np
 import time
+
+import numpy as np
 
 
 def benchmark(args):
@@ -12,7 +12,7 @@ def benchmark(args):
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
     import vllm
-    from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+    from vllm import EngineArgs, LLMEngine, SamplingParams, TextPrompt
 
     print(vllm.__version__)
 
@@ -38,8 +38,7 @@ def benchmark(args):
         distributed_executor_backend=args.distributed_executor_backend,
         disable_log_stats=True,
         preemption_mode=args.preemption_mode,
-        swap_space=args.swap_space
-    )
+        swap_space=args.swap_space)
     engine = LLMEngine.from_engine_args(engine_args)
 
     prompt = "hi" * (args.input_len - 1)
@@ -75,7 +74,7 @@ def benchmark(args):
 
     tpot = []
     for v in timestamp.values():
-        dd = [v[i]-v[i-1] for i in range(1, len(v))]
+        dd = [v[i] - v[i - 1] for i in range(1, len(v))]
         tpot.extend(dd)
 
     tpot = np.mean(tpot)
@@ -119,14 +118,12 @@ if __name__ == '__main__':
     args.download_dir = None
     args.swap_space = 40
 
-    import sys
     from concurrent.futures import ProcessPoolExecutor
 
     def run(args):
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark, args)
             f.result()
-
 
     max_num_seqs_list = [1024, 768, 512, 384, 256, 128, 64, 32]
 

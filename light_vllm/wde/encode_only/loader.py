@@ -1,10 +1,10 @@
 from torch import nn
 
+from light_vllm.wde.chat.config import ModelConfig
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
-from light_vllm.wde.chat.config import CacheConfig, ModelConfig, SchedulerConfig
 from light_vllm.wde.core.loader.loader import BaseModelLoader, get_model_loader
-from light_vllm.wde.core.loader.utils import (
-    get_architecture_class_name, get_model_architecture)
+from light_vllm.wde.core.loader.utils import (get_architecture_class_name,
+                                              get_model_architecture)
 
 
 def get_model(*, model_config: ModelConfig, load_config: LoadConfig,

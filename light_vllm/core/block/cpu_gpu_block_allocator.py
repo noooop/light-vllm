@@ -3,7 +3,8 @@ from typing import Dict, FrozenSet, List, Optional, Tuple
 from light_vllm.core.block.interfaces import (Block, BlockAllocator, BlockId,
                                               DeviceAwareBlockAllocator)
 from light_vllm.core.block.naive_block import NaiveBlock, NaiveBlockAllocator
-from light_vllm.core.block.prefix_caching_block import PrefixCachingBlockAllocator
+from light_vllm.core.block.prefix_caching_block import (
+    PrefixCachingBlockAllocator)
 from light_vllm.utils import Device
 
 

@@ -1,17 +1,16 @@
-import dataclasses
 import importlib
 import os
 from abc import ABC, abstractmethod
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
+from typing import Callable, Dict, List, Optional, Tuple, Type
 
 import torch
 
 from light_vllm.logger import init_logger
-from light_vllm.wde.core.schema.execute_io import ExecuteOutput
-from light_vllm.wde.core.schema.execute_io import ExecuteInput, WorkerInput, ModelInput
-from light_vllm.wde.core.runner.model_runner_base import ModelRunnerBase
 from light_vllm.utils import (enable_trace_function_call_for_thread,
                               update_environment_variables)
+from light_vllm.wde.core.runner.model_runner_base import ModelRunnerBase
+from light_vllm.wde.core.schema.execute_io import (ExecuteInput, ExecuteOutput,
+                                                   WorkerInput)
 
 logger = init_logger(__name__)
 

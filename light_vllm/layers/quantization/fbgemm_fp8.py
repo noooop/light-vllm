@@ -4,19 +4,18 @@ import torch
 from torch.nn import Module
 from torch.nn.parameter import Parameter
 
-from light_vllm.logger import init_logger
 from light_vllm.layers.linear import (LinearBase, LinearMethodBase,
                                       UnquantizedLinearMethod)
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig, QuantizeMethodBase)
+from light_vllm.layers.quantization.base_config import (QuantizationConfig,
+                                                        QuantizeMethodBase)
 from light_vllm.layers.quantization.fp8 import cutlass_fp8_supported
 from light_vllm.layers.quantization.utils.marlin_utils_fp8 import (
     apply_fp8_marlin_linear, prepare_fp8_layer_for_marlin)
-from light_vllm.layers.quantization.utils.quant_utils import (
-    is_layer_skipped)
+from light_vllm.layers.quantization.utils.quant_utils import is_layer_skipped
 from light_vllm.layers.quantization.utils.w8a8_utils import (
     apply_fp8_linear, create_per_channel_scale_param)
 from light_vllm.layers.utils import set_weight_attrs
+from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
 
 logger = init_logger(__name__)

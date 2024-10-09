@@ -8,11 +8,14 @@ from light_vllm.core.block.block_table import BlockTable
 from light_vllm.core.block.cpu_gpu_block_allocator import CpuGpuBlockAllocator
 from light_vllm.core.block.interfaces import Block
 from light_vllm.core.block.prefix_caching_block import (ComputedBlocksTracker,
-                                                        LastAccessBlocksTracker)
-from light_vllm.core.block.utils import check_no_caching_or_swa_for_blockmgr_encdec
+                                                        LastAccessBlocksTracker
+                                                        )
+from light_vllm.core.block.utils import (
+    check_no_caching_or_swa_for_blockmgr_encdec)
 from light_vllm.core.interfaces import AllocStatus, BlockSpaceManager
-from light_vllm.wde.core.schema.sequence import Sequence, SequenceGroup, SequenceStatus
 from light_vllm.utils import Device
+from light_vllm.wde.core.schema.sequence import (Sequence, SequenceGroup,
+                                                 SequenceStatus)
 
 SeqId = int
 EncoderSeqId = str
@@ -133,8 +136,8 @@ class BlockSpaceManagerV2(BlockSpaceManager):
             device=Device.GPU)
 
         # Use watermark to avoid frequent cache eviction.
-        if (self.num_total_gpu_blocks - num_required_blocks <
-                self.watermark_blocks):
+        if (self.num_total_gpu_blocks - num_required_blocks
+                < self.watermark_blocks):
             return AllocStatus.NEVER
         if num_free_gpu_blocks - num_required_blocks >= self.watermark_blocks:
             return AllocStatus.OK

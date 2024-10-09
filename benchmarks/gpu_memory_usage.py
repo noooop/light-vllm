@@ -1,15 +1,14 @@
-
-import torch
 import os
 import random
-import numpy as np
-import time
+
+import torch
 
 
 def pitch():
     import gc
+    from typing import Tuple
+
     from vllm.worker.worker import Worker
-    from typing import List, Optional, Set, Tuple, Type
 
     @torch.inference_mode()
     def determine_num_available_blocks(self) -> Tuple[int, int]:
@@ -72,12 +71,12 @@ def benchmark(args):
 
     try:
         import light_vllm
-        from light_vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        from light_vllm import EngineArgs, LLMEngine
         print("light_vllm:", light_vllm.__version__)
 
     except Exception:
         import vllm
-        from vllm import LLMEngine, EngineArgs, SamplingParams, TextPrompt
+        from vllm import EngineArgs, LLMEngine
         pitch()
         print("vllm:", vllm.__version__)
 
@@ -101,15 +100,18 @@ def benchmark(args):
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
         distributed_executor_backend=args.distributed_executor_backend,
-        disable_log_stats=True
-    )
+        disable_log_stats=True)
     engine = LLMEngine.from_engine_args(engine_args)
 
+    init_gpu_memory = engine.model_executor.driver_worker.init_gpu_memory
+    free_gpu_memory = engine.model_executor.driver_worker.free_gpu_memory
+    total_gpu_memory = engine.model_executor.driver_worker.total_gpu_memory
 
-    print(f"init_gpu_memory {engine.model_executor.driver_worker.init_gpu_memory / float(2 ** 30): .4f} GB")
-    print(f"free_gpu_memory {engine.model_executor.driver_worker.free_gpu_memory / float(2 ** 30): .4f} GB")
-    print(f"total_gpu_memory {engine.model_executor.driver_worker.total_gpu_memory / float(2 ** 30): .4f} GB")
-    print(engine.cache_config.block_size, engine.cache_config.num_gpu_blocks, engine.cache_config.num_cpu_blocks)
+    print(f"init_gpu_memory { init_gpu_memory/ float(2 ** 30): .4f} GB")
+    print(f"free_gpu_memory { free_gpu_memory/ float(2 ** 30): .4f} GB")
+    print(f"total_gpu_memory { total_gpu_memory / float(2 ** 30): .4f} GB")
+    print(engine.cache_config.block_size, engine.cache_config.num_gpu_blocks,
+          engine.cache_config.num_cpu_blocks)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,10 @@
-
-from typing import Optional
 from dataclasses import dataclass
+from typing import Optional
+
 import torch
-from light_vllm.wde.core.schema.execute_io import WorkerInput, ModelInput, ExecuteInput, ExecuteOutput
+
+from light_vllm.wde.core.schema.execute_io import (ExecuteInput, ExecuteOutput,
+                                                   ModelInput, WorkerInput)
 
 
 @dataclass

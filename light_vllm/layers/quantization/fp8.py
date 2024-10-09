@@ -5,22 +5,21 @@ from torch.nn import Module
 from torch.nn.parameter import Parameter
 
 from light_vllm.layers import _custom_ops as ops
-from light_vllm.logger import init_logger
 from light_vllm.layers.fused_moe import FusedMoE, FusedMoEMethodBase
 from light_vllm.layers.linear import (LinearBase, LinearMethodBase,
                                       UnquantizedLinearMethod)
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig, QuantizeMethodBase)
+from light_vllm.layers.quantization.base_config import (QuantizationConfig,
+                                                        QuantizeMethodBase)
 from light_vllm.layers.quantization.kv_cache import BaseKVCacheMethod
 from light_vllm.layers.quantization.utils.marlin_utils_fp8 import (
     apply_fp8_marlin_linear, prepare_fp8_layer_for_marlin)
-from light_vllm.layers.quantization.utils.quant_utils import (
-    is_layer_skipped)
+from light_vllm.layers.quantization.utils.quant_utils import is_layer_skipped
 from light_vllm.layers.quantization.utils.w8a8_utils import (
     all_close_1d, apply_fp8_linear, convert_to_channelwise,
     create_per_tensor_scale_param, cutlass_fp8_supported,
     per_tensor_dequantize, requantize_with_max_scale)
 from light_vllm.layers.utils import set_weight_attrs
+from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
 from light_vllm.utils import print_warning_once
 
@@ -76,7 +75,8 @@ class Fp8Config(QuantizationConfig):
 
     def get_quant_method(self, layer: torch.nn.Module,
                          prefix: str) -> Optional["QuantizeMethodBase"]:
-        from light_vllm.attention.layer import Attention  # Avoid circular import
+        from light_vllm.attention.layer import (Attention
+                                                )  # Avoid circular import
 
         if isinstance(layer, LinearBase):
             if is_layer_skipped(prefix, self.ignored_layers):

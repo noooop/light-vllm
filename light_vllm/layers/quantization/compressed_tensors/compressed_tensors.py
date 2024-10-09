@@ -57,7 +57,8 @@ class CompressedTensorsConfig(QuantizationConfig):
         layer: torch.nn.Module,
         prefix: str,
     ) -> Optional["QuantizeMethodBase"]:
-        from light_vllm.attention.layer import Attention  # Avoid circular import
+        from light_vllm.attention.layer import (Attention
+                                                )  # Avoid circular import
         if isinstance(layer, LinearBase):
             return CompressedTensorsLinearMethod(self)
         if isinstance(layer, Attention):
@@ -67,8 +68,8 @@ class CompressedTensorsConfig(QuantizationConfig):
     @classmethod
     def from_config(cls, config: Dict[str, Any]) -> "CompressedTensorsConfig":
         target_scheme_map: Dict[str, Any] = dict()
-        ignore: List[str] = config.get("ignore", None)
-        quant_format: str = config.get("format", None)
+        ignore: List[str] = config.get("ignore")
+        quant_format: str = config.get("format")
 
         # The quant_config has multiple config_groups, each containing
         # an input_activations key with details about how the activations are

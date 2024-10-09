@@ -2,7 +2,8 @@ from typing import List, Optional, Union
 
 from light_vllm.config import ModelConfig
 from light_vllm.engine.protocol import AsyncEngineClient
-from light_vllm.entrypoints.chat_utils import load_chat_template, parse_chat_messages
+from light_vllm.entrypoints.chat_utils import (load_chat_template,
+                                               parse_chat_messages)
 from light_vllm.entrypoints.logger import RequestLogger
 # yapf conflicts with isort for this block
 # yapf: disable

@@ -1,10 +1,16 @@
-
 from dataclasses import dataclass
-from typing import List, Iterable
+from typing import Iterable, List
+
 import torch
+
 from light_vllm.layers.sampling_params import SamplingParams
-from light_vllm.wde.core.schema.engine_io import Request, PromptInput, TextOnlyInputs, SchedulableRequest, RequestOutput, SchedulerOutput
+from light_vllm.wde.core.schema.engine_io import (PromptInput, Request,
+                                                  RequestOutput,
+                                                  SchedulableRequest,
+                                                  SchedulerOutput,
+                                                  TextOnlyInputs)
 from light_vllm.wde.core.schema.sequence import SequenceGroup
+
 
 @dataclass
 class ChatInput(TextOnlyInputs):
@@ -41,11 +47,8 @@ class ChatRequestOutput(RequestOutput):
         finished (bool): A flag indicating whether the embedding is completed.
     """
 
-    def __init__(self,
-                 request_id: str,
-                 outputs: torch.Tensor,
-                 prompt_token_ids: List[int],
-                 finished: bool):
+    def __init__(self, request_id: str, outputs: torch.Tensor,
+                 prompt_token_ids: List[int], finished: bool):
         self.request_id = request_id
         self.prompt_token_ids = prompt_token_ids
         self.finished = finished
@@ -67,17 +70,15 @@ class ChatRequestOutput(RequestOutput):
                 f"finished={self.finished})")
 
 
-
-
-
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Set, Tuple,
-                    Union)
-
 import time
-from light_vllm.wde.core.schema.sequence import PromptLogprobs, SampleLogprobs, RequestMetrics, SequenceGroup, SequenceStatus
+from dataclasses import dataclass
+from typing import List, Optional, Tuple, Union
+
 from light_vllm.wde.core.schema.engine_io import RequestOutput
+from light_vllm.wde.core.schema.sequence import (PromptLogprobs,
+                                                 RequestMetrics,
+                                                 SampleLogprobs, SequenceGroup,
+                                                 SequenceStatus)
 
 
 @dataclass
@@ -194,13 +195,8 @@ class ChatModelRequestOutput(RequestOutput):
         finished = seq_group.is_finished()
         finished_time = time.time() if finished else None
         seq_group.set_finished_time(finished_time)
-        return cls(seq_group.request_id,
-                   prompt,
-                   prompt_token_ids,
-                   prompt_logprobs,
-                   outputs,
-                   finished,
-                   seq_group.metrics)
+        return cls(seq_group.request_id, prompt, prompt_token_ids,
+                   prompt_logprobs, outputs, finished, seq_group.metrics)
 
     def __repr__(self) -> str:
         return (f"RequestOutput(request_id={self.request_id}, "

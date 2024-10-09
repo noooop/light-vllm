@@ -1,18 +1,17 @@
 """Attention layer with FlashAttention."""
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 import torch
 from vllm_flash_attn import flash_attn_varlen_func, flash_attn_with_kvcache
 
 from light_vllm.layers import _custom_ops as ops
-from light_vllm.wde.decode_only.layers.attention.backends.abstract import (DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
-                                                           DecodeOnlyAttentionMetadata,
-                                                           DecodeOnlyAttentionMetadataBuilder,
-                                                           AttentionType)
-from light_vllm.wde.decode_only.layers.attention.backends.utils import (compute_slot_mapping,
-                                                        compute_slot_mapping_start_idx,
-                                                        is_block_tables_empty)
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    AttentionType, DecodeOnlyAttentionBackend, DecodeOnlyAttentionImpl,
+    DecodeOnlyAttentionMetadata, DecodeOnlyAttentionMetadataBuilder)
+from light_vllm.wde.decode_only.layers.attention.backends.utils import (
+    compute_slot_mapping, compute_slot_mapping_start_idx,
+    is_block_tables_empty)
 
 
 class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
@@ -39,10 +38,10 @@ class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def get_kv_cache_shape(
-            num_blocks: int,
-            block_size: int,
-            num_kv_heads: int,
-            head_size: int,
+        num_blocks: int,
+        block_size: int,
+        num_kv_heads: int,
+        head_size: int,
     ) -> Tuple[int, ...]:
         if block_size % 16 != 0:
             raise ValueError("Block size must be a multiple of 16.")
@@ -50,9 +49,9 @@ class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def swap_blocks(
-            src_kv_cache: torch.Tensor,
-            dst_kv_cache: torch.Tensor,
-            src_to_dst: torch.Tensor,
+        src_kv_cache: torch.Tensor,
+        dst_kv_cache: torch.Tensor,
+        src_to_dst: torch.Tensor,
     ) -> None:
         src_key_cache = src_kv_cache[0]
         dst_key_cache = dst_kv_cache[0]
@@ -64,8 +63,8 @@ class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
 
     @staticmethod
     def copy_blocks(
-            kv_caches: List[torch.Tensor],
-            src_to_dists: torch.Tensor,
+        kv_caches: List[torch.Tensor],
+        src_to_dists: torch.Tensor,
     ) -> None:
         key_caches = [kv_cache[0] for kv_cache in kv_caches]
         value_caches = [kv_cache[1] for kv_cache in kv_caches]
@@ -128,8 +127,10 @@ class DecodeOnlyFlashAttentionMetadata(DecodeOnlyAttentionMetadata):
     # TODO(woosuk): Move `use_cuda_graph` out since it's unrelated to attention.
     use_cuda_graph: bool
 
-    _cached_prefill_metadata: Optional["DecodeOnlyFlashAttentionMetadata"] = None
-    _cached_decode_metadata: Optional["DecodeOnlyFlashAttentionMetadata"] = None
+    _cached_prefill_metadata: Optional[
+        "DecodeOnlyFlashAttentionMetadata"] = None
+    _cached_decode_metadata: Optional[
+        "DecodeOnlyFlashAttentionMetadata"] = None
 
     @property
     def prefill_metadata(self) -> Optional["DecodeOnlyFlashAttentionMetadata"]:
@@ -194,7 +195,7 @@ class DecodeOnlyFlashAttentionMetadata(DecodeOnlyAttentionMetadata):
 
 
 class DecodeOnlyFlashAttentionMetadataBuilder(
-    DecodeOnlyAttentionMetadataBuilder[DecodeOnlyFlashAttentionMetadata]):
+        DecodeOnlyAttentionMetadataBuilder[DecodeOnlyFlashAttentionMetadata]):
 
     def __init__(self, input_builder: "ModelInputForGPUBuilder"):
         self.slot_mapping: List[int] = []
@@ -226,10 +227,10 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
 
         for (seq_id, token_len, seq_len, curr_seq_len, query_len, context_len,
              curr_sliding_window_block) in zip(
-            inter_data.seq_ids, [len(t) for t in inter_data.input_tokens],
-            inter_data.orig_seq_lens, inter_data.seq_lens,
-            inter_data.query_lens, inter_data.context_lens,
-            inter_data.curr_sliding_window_blocks):
+                 inter_data.seq_ids, [len(t) for t in inter_data.input_tokens],
+                 inter_data.orig_seq_lens, inter_data.seq_lens,
+                 inter_data.query_lens, inter_data.context_lens,
+                 inter_data.curr_sliding_window_blocks):
             self.context_lens.append(context_len)
 
             if is_prompt:
@@ -297,7 +298,9 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
         assert max_query_len > 0, ("query_lens: {}".format(query_lens))
 
         num_decode_tokens, block_tables = (
-            self.input_builder.cuda_graph.attention_metadata_builder_maybe_pad(self, cuda_graph_pad_size, num_decode_tokens, batch_size, device))
+            self.input_builder.cuda_graph.attention_metadata_builder_maybe_pad(
+                self, cuda_graph_pad_size, num_decode_tokens, batch_size,
+                device))
 
         context_lens_tensor = torch.tensor(self.context_lens,
                                            dtype=torch.int,
@@ -375,16 +378,16 @@ class DecodeOnlyFlashAttentionImpl(DecodeOnlyAttentionImpl):
     """
 
     def __init__(
-            self,
-            num_heads: int,
-            head_size: int,
-            scale: float,
-            num_kv_heads: int,
-            alibi_slopes: Optional[List[float]],
-            sliding_window: Optional[int],
-            kv_cache_dtype: str,
-            blocksparse_params: Optional[Dict[str, Any]] = None,
-            logits_soft_cap: Optional[float] = None,
+        self,
+        num_heads: int,
+        head_size: int,
+        scale: float,
+        num_kv_heads: int,
+        alibi_slopes: Optional[List[float]],
+        sliding_window: Optional[int],
+        kv_cache_dtype: str,
+        blocksparse_params: Optional[Dict[str, Any]] = None,
+        logits_soft_cap: Optional[float] = None,
     ) -> None:
         if blocksparse_params is not None:
             raise ValueError(
@@ -413,22 +416,23 @@ class DecodeOnlyFlashAttentionImpl(DecodeOnlyAttentionImpl):
             raise ValueError(
                 "Sliding window is not supported in FlashAttention.")
 
-        support_head_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes()
+        support_head_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes(
+        )
         if head_size not in support_head_sizes:
             raise ValueError(
                 f"Head size {head_size} is not supported by FlashAttention. "
                 f"Supported head sizes are: {support_head_sizes}.")
 
     def forward(
-            self,
-            query: torch.Tensor,
-            key: torch.Tensor,
-            value: torch.Tensor,
-            kv_cache: torch.Tensor,
-            attn_metadata: DecodeOnlyFlashAttentionMetadata,
-            k_scale: float = 1.0,
-            v_scale: float = 1.0,
-            attn_type: AttentionType = AttentionType.DECODER,
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        kv_cache: torch.Tensor,
+        attn_metadata: DecodeOnlyFlashAttentionMetadata,
+        k_scale: float = 1.0,
+        v_scale: float = 1.0,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
         """Forward pass with FlashAttention.
 

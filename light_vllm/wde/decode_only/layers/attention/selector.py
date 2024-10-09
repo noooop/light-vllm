@@ -5,12 +5,12 @@ from typing import Optional, Type
 import torch
 
 import light_vllm.envs as envs
-from light_vllm.wde.core.llm_engine import LLMEngine
-
-from light_vllm.wde.decode_only.layers.attention.backends.abstract import AttentionBackend
 from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
 from light_vllm.utils import is_cpu
+from light_vllm.wde.core.llm_engine import LLMEngine
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    AttentionBackend)
 
 logger = init_logger(__name__)
 
@@ -55,7 +55,8 @@ def get_attn_backend(
         assert is_cpu(), RuntimeError(
             "Torch SDPA backend is only used for the CPU device.")
         logger.info("Using Torch SDPA backend.")
-        from light_vllm.wde.decode_only.layers.attention.backends.torch_sdpa import DecodeOnlyTorchSDPABackend
+        from light_vllm.wde.decode_only.layers.attention.backends.torch_sdpa import (
+            DecodeOnlyTorchSDPABackend)
         return DecodeOnlyTorchSDPABackend
     else:
         raise ValueError("Invalid attention backend.")
@@ -121,10 +122,12 @@ def which_attn_to_use(
     if selected_backend == _Backend.FLASH_ATTN:
         try:
             import vllm_flash_attn  # noqa: F401
+
             from light_vllm.wde.decode_only.layers.attention.backends.flash_attn import (  # noqa: F401
                 DecodeOnlyFlashAttentionBackend)
 
-            supported_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes()
+            supported_sizes = DecodeOnlyFlashAttentionBackend.get_supported_head_sizes(
+            )
             if head_size not in supported_sizes:
                 logger.info(
                     "Cannot use FlashAttention-2 backend for head size %d.",
@@ -141,6 +144,7 @@ def which_attn_to_use(
 
 
 class GetAttnBackend:
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         from light_vllm.wde.decode_only.layers.attention.backends.flash_attn import (  # noqa: F401

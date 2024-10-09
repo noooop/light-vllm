@@ -5,7 +5,8 @@ from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple
 
 from light_vllm.core.block.common import (CopyOnWriteTracker,
                                           get_all_blocks_recursively)
-from light_vllm.core.block.interfaces import Block, BlockAllocator, BlockId, Device
+from light_vllm.core.block.interfaces import (Block, BlockAllocator, BlockId,
+                                              Device)
 from light_vllm.core.block.naive_block import (BlockPool, NaiveBlock,
                                                NaiveBlockAllocator)
 from light_vllm.core.evictor_v2 import EvictionPolicy, Evictor, make_evictor

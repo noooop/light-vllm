@@ -3,21 +3,16 @@ from typing import Dict, Type
 from light_vllm.layers.quantization.aqlm import AQLMConfig
 from light_vllm.layers.quantization.awq import AWQConfig
 from light_vllm.layers.quantization.awq_marlin import AWQMarlinConfig
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
-from light_vllm.layers.quantization.bitsandbytes import (
-    BitsAndBytesConfig)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
+from light_vllm.layers.quantization.bitsandbytes import BitsAndBytesConfig
 from light_vllm.layers.quantization.compressed_tensors.compressed_tensors import (  # noqa: E501
     CompressedTensorsConfig)
-from light_vllm.layers.quantization.deepspeedfp import (
-    DeepSpeedFPConfig)
+from light_vllm.layers.quantization.deepspeedfp import DeepSpeedFPConfig
 from light_vllm.layers.quantization.fbgemm_fp8 import FBGEMMFp8Config
 from light_vllm.layers.quantization.fp8 import Fp8Config
 from light_vllm.layers.quantization.gptq import GPTQConfig
-from light_vllm.layers.quantization.gptq_marlin import (
-    GPTQMarlinConfig)
-from light_vllm.layers.quantization.gptq_marlin_24 import (
-    GPTQMarlin24Config)
+from light_vllm.layers.quantization.gptq_marlin import GPTQMarlinConfig
+from light_vllm.layers.quantization.gptq_marlin_24 import GPTQMarlin24Config
 from light_vllm.layers.quantization.marlin import MarlinConfig
 from light_vllm.layers.quantization.qqq import QQQConfig
 from light_vllm.layers.quantization.squeezellm import SqueezeLLMConfig

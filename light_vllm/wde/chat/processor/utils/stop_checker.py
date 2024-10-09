@@ -1,7 +1,7 @@
 from typing import Optional
 
-from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.layers.sampling_params import SamplingParams
+from light_vllm.wde.core.inputs.tokenizer import Tokenizer
 from light_vllm.wde.core.schema.sequence import Sequence, SequenceStatus
 
 
@@ -12,9 +12,7 @@ class StopChecker:
     emitted, or if we have exceeded the max model len.
     """
 
-    def __init__(self,
-                 max_model_len: int,
-                 tokenizer: Tokenizer):
+    def __init__(self, max_model_len: int, tokenizer: Tokenizer):
         # Do not use it directly, but use `self._get_max_model_len`.
         self._max_model_len = max_model_len
         self.tokenizer = tokenizer

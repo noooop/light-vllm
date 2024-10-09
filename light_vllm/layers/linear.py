@@ -5,10 +5,10 @@ import torch
 import torch.nn.functional as F
 from torch.nn.parameter import Parameter
 
-from light_vllm.logger import init_logger
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig, QuantizeMethodBase)
+from light_vllm.layers.quantization.base_config import (QuantizationConfig,
+                                                        QuantizeMethodBase)
 from light_vllm.layers.utils import set_weight_attrs
+from light_vllm.logger import init_logger
 
 logger = init_logger(__name__)
 

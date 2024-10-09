@@ -1,16 +1,19 @@
 import enum
 import json
-import torch
-import light_vllm.envs as envs
 from dataclasses import dataclass, field, fields
-from light_vllm.models.transformers_utils.config import get_config, get_hf_text_config
-from typing import TYPE_CHECKING, ClassVar, List, Optional, Tuple, Type, Union
-from light_vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
-                              is_hip, is_neuron, is_openvino, is_tpu, is_xpu,
-                              print_warning_once)
-from light_vllm.layers.quantization import QUANTIZATION_METHODS
+from typing import List, Optional, Union
+
+import torch
 from transformers import PretrainedConfig
+
+import light_vllm.envs as envs
+from light_vllm.layers.quantization import QUANTIZATION_METHODS
 from light_vllm.logger import init_logger
+from light_vllm.models.transformers_utils.config import (get_config,
+                                                         get_hf_text_config)
+from light_vllm.utils import (get_cpu_memory, is_cpu, is_hip, is_neuron,
+                              is_openvino, is_tpu, is_xpu, print_warning_once)
+
 logger = init_logger(__name__)
 
 _GB = 1 << 30
@@ -489,7 +492,7 @@ class ModelConfig:
         # the tensor parallel size. We will replicate the KV heads in the
         # case where the number of KV heads is smaller than the tensor
         # parallel size so each GPU has at least one KV head.
-        return max(1,total_num_kv_heads)
+        return max(1, total_num_kv_heads)
 
     def get_num_attention_heads(self) -> int:
         num_heads = getattr(self.hf_text_config, "num_attention_heads", 0)
@@ -509,10 +512,8 @@ class ModelConfig:
                        ["attention"] * num_layers)
 
     def get_num_attention_layers(self) -> int:
-        return len([
-            t for t in self.get_layers_block_type()
-            if t == "attention"
-        ])
+        return len(
+            [t for t in self.get_layers_block_type() if t == "attention"])
 
 
 class SchedulerConfig:
@@ -766,7 +767,10 @@ def filter_unexpected_fields(cls):
 
     def new_init(self, *args, **kwargs):
         expected_fields = {field.name for field in fields(cls)}
-        cleaned_kwargs = {key: value for key, value in kwargs.items() if key in expected_fields}
+        cleaned_kwargs = {
+            key: value
+            for key, value in kwargs.items() if key in expected_fields
+        }
         original_init(self, *args, **cleaned_kwargs)
 
     cls.__init__ = new_init

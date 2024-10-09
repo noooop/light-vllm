@@ -1,24 +1,26 @@
-
 import os
+
 import torch
+
 from light_vllm.layers.utils import set_random_seed
 from light_vllm.platforms import current_platform
 from light_vllm.wde.core.config import DeviceConfig, LoadConfig
-from light_vllm.wde.encode_only.config import ModelConfig, EncodeOnlySchedulerConfig, EncodeOnlyEngineConfig
-
+from light_vllm.wde.encode_only.config import EncodeOnlyEngineConfig
+from light_vllm.wde.encode_only.layers.attention.backends.abstract import (
+    EncodeOnlyAttentionBackend)
 from light_vllm.wde.encode_only.runner.model_runner import ModelRunner
 from light_vllm.wde.encode_only.schema.execute_io import EncodeOnlyExecuteInput
-from light_vllm.wde.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
 
 
 class Worker:
+
     def __init__(
         self,
         engine_config: EncodeOnlyEngineConfig,
         attn_backend: EncodeOnlyAttentionBackend,
     ) -> None:
-        self.model_config: ModelConfig = engine_config.model_config
-        self.scheduler_config: EncodeOnlySchedulerConfig = engine_config.scheduler_config
+        self.model_config = engine_config.model_config
+        self.scheduler_config = engine_config.scheduler_config
         self.device_config: DeviceConfig = engine_config.device_config
         self.load_config: LoadConfig = engine_config.load_config
         self.device = self.device_config.device
@@ -27,13 +29,10 @@ class Worker:
             from light_vllm.utils import init_cached_hf_modules
             init_cached_hf_modules()
 
-        self.model_runner = ModelRunner(
-            self.model_config,
-            self.scheduler_config,
-            self.device_config,
-            self.load_config,
-            attn_backend
-        )
+        self.model_runner = ModelRunner(self.model_config,
+                                        self.scheduler_config,
+                                        self.device_config, self.load_config,
+                                        attn_backend)
 
     def init_device(self) -> None:
         if self.device_config.device.type == "cuda":
@@ -47,7 +46,7 @@ class Worker:
 
             # This env var set by Ray causes exceptions with graph building.
             os.environ.pop("NCCL_ASYNC_ERROR_HANDLING", None)
-            self.device = torch.device(f"cuda:0")
+            self.device = torch.device("cuda:0")
             torch.cuda.set_device(self.device)
 
             _check_if_gpu_supports_dtype(self.model_config.dtype)
@@ -66,8 +65,7 @@ class Worker:
 
     @torch.inference_mode
     def __call__(self, execute_input: EncodeOnlyExecuteInput):
-        output = self.model_runner.execute_model(
-            execute_input.model_input)
+        output = self.model_runner.execute_model(execute_input.model_input)
         return output
 
 

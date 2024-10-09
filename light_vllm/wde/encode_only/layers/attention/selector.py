@@ -4,10 +4,10 @@ from typing import Optional, Type
 
 import torch
 
-from light_vllm.wde.encode_only.layers.attention.backends.abstract import EncodeOnlyAttentionBackend
-from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.logger import init_logger
-
+from light_vllm.wde.core.llm_engine import LLMEngine
+from light_vllm.wde.encode_only.layers.attention.backends.abstract import (
+    EncodeOnlyAttentionBackend)
 
 logger = init_logger(__name__)
 
@@ -36,12 +36,15 @@ def get_attn_backend(
 ) -> Type[EncodeOnlyAttentionBackend]:
     """Selects which attention backend to use and lazily imports it."""
 
-    from light_vllm.wde.encode_only.layers.attention.backends.flash_attn import EncodeOnlyFlashAttentionBackend
+    from light_vllm.wde.encode_only.layers.attention.backends.flash_attn import (
+        EncodeOnlyFlashAttentionBackend)
     return EncodeOnlyFlashAttentionBackend
 
 
 class GetAttnBackend:
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
-        from light_vllm.wde.encode_only.layers.attention.backends.flash_attn import EncodeOnlyFlashAttentionBackend
+        from light_vllm.wde.encode_only.layers.attention.backends.flash_attn import (
+            EncodeOnlyFlashAttentionBackend)
         return EncodeOnlyFlashAttentionBackend

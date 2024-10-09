@@ -149,7 +149,6 @@ class ScaledActivation(nn.Module):
         self,
         act_module: nn.Module,
         intermediate_size: int,
-
         params_dtype: Optional[torch.dtype] = None,
     ):
         super().__init__()

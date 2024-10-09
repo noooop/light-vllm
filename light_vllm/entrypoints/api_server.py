@@ -17,8 +17,8 @@ from fastapi.responses import JSONResponse, Response, StreamingResponse
 from light_vllm.engine.arg_utils import AsyncEngineArgs
 from light_vllm.engine.async_llm_engine import AsyncLLMEngine
 from light_vllm.entrypoints.launcher import serve_http
-from light_vllm.logger import init_logger
 from light_vllm.layers.sampling_params import SamplingParams
+from light_vllm.logger import init_logger
 from light_vllm.usage.usage_lib import UsageContext
 from light_vllm.utils import FlexibleArgumentParser, random_uuid
 from light_vllm.version import __version__ as VLLM_VERSION

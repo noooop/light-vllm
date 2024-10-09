@@ -1,8 +1,12 @@
 from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
+
 import torch
-from light_vllm.wde.core.layers.attention.abstract import AttentionMetadata, AttentionBackend, AttentionImpl, AttentionMetadataBuilder
+
+from light_vllm.wde.core.layers.attention.abstract import (
+    AttentionBackend, AttentionImpl, AttentionMetadata,
+    AttentionMetadataBuilder)
 
 
 class EncodeOnlyAttentionBackend(AttentionBackend, ABC):

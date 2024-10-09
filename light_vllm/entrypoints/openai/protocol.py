@@ -10,7 +10,8 @@ from transformers import PreTrainedTokenizer
 from typing_extensions import Annotated
 
 from light_vllm.entrypoints.chat_utils import ChatCompletionMessageParam
-from light_vllm.entrypoints.openai.logits_processors import get_logits_processors
+from light_vllm.entrypoints.openai.logits_processors import (
+    get_logits_processors)
 from light_vllm.layers.pooling_params import PoolingParams
 from light_vllm.layers.sampling_params import LogitsProcessor, SamplingParams
 from light_vllm.utils import random_uuid

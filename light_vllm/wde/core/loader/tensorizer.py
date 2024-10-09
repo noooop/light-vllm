@@ -13,11 +13,9 @@ from torch import nn
 from transformers import PretrainedConfig
 
 import light_vllm.envs as envs
+from light_vllm.layers.quantization.base_config import QuantizationConfig
+from light_vllm.layers.vocab_embedding import VocabParallelEmbedding
 from light_vllm.logger import init_logger
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
-from light_vllm.layers.vocab_embedding import (
-    VocabParallelEmbedding)
 from light_vllm.utils import FlexibleArgumentParser
 
 tensorizer_error_msg = None
@@ -285,8 +283,8 @@ class TensorizerAgent:
         to allow for adapter added tokens."""
         for child in self.model.modules():
             if (isinstance(child, VocabParallelEmbedding)
-                    and child.weight.shape[0] <
-                    child.num_embeddings_per_partition):
+                    and child.weight.shape[0]
+                    < child.num_embeddings_per_partition):
                 new_weight = torch.empty(child.num_embeddings_per_partition,
                                          child.embedding_dim,
                                          dtype=child.weight.dtype,

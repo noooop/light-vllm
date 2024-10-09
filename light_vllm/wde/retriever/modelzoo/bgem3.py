@@ -1,20 +1,22 @@
-
-
 from typing import Iterable, Optional, Tuple
+
 import torch
 from torch import nn
-from light_vllm.wde.encode_only.modelzoo.xlm_roberta import XLMRobertaModel, XLMRobertaConfig
-from light_vllm.wde.encode_only.layers.attention import EncodeOnlyAttentionMetadata, EncodeOnlyAttentionBackend
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
 
-from light_vllm.wde.core.loader.weight_utils import (
-    default_weight_loader, maybe_remap_kv_scale_name)
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.models.utils import is_pp_missing_parameter
+from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
+                                                     maybe_remap_kv_scale_name)
+from light_vllm.wde.encode_only.layers.attention import (
+    EncodeOnlyAttentionBackend, EncodeOnlyAttentionMetadata)
+from light_vllm.wde.encode_only.modelzoo.xlm_roberta import (XLMRobertaConfig,
+                                                             XLMRobertaModel)
 
 
 class BGEM3Model(nn.Module):
-    _ignore_weights_keys = ["roberta.pooler.dense.weight", "roberta.pooler.dense.bias"]
+    _ignore_weights_keys = [
+        "roberta.pooler.dense.weight", "roberta.pooler.dense.bias"
+    ]
 
     def __init__(self,
                  config: XLMRobertaConfig,
@@ -22,7 +24,8 @@ class BGEM3Model(nn.Module):
                  quant_config: Optional[QuantizationConfig] = None,
                  sentence_pooling_method="cls",
                  normlized=True,
-                 *args, **kwargs):
+                 *args,
+                 **kwargs):
         super().__init__()
         self.config = config
         self.quant_config = quant_config
@@ -32,10 +35,10 @@ class BGEM3Model(nn.Module):
         self.roberta = XLMRobertaModel(config, attn_backend, quant_config)
 
     def forward(
-            self,
-            input_ids: torch.Tensor,
-            positions: torch.Tensor,
-            attn_metadata: EncodeOnlyAttentionMetadata,
+        self,
+        input_ids: torch.Tensor,
+        positions: torch.Tensor,
+        attn_metadata: EncodeOnlyAttentionMetadata,
     ) -> torch.Tensor:
 
         sequence_output = self.roberta(
@@ -70,9 +73,12 @@ class BGEM3Model(nn.Module):
                 continue
 
             if name == "roberta.embeddings.token_type_embeddings.weight":
-                # token_type_ids is all zero, so we only need token_type_embeddings[0]
+                # token_type_ids is all zero,
+                # so we only need token_type_embeddings[0]
                 self.roberta.embeddings.init_token_type_embeddings0()
-                default_weight_loader(self.roberta.embeddings.token_type_embeddings0, loaded_weight[0])
+                default_weight_loader(
+                    self.roberta.embeddings.token_type_embeddings0,
+                    loaded_weight[0])
                 continue
 
             for (param_name, weight_name, shard_id) in stacked_params_mapping:

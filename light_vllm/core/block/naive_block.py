@@ -1,9 +1,11 @@
 from collections import deque
 from typing import Deque, FrozenSet, Iterable, List, Optional, Tuple
 
-from light_vllm.core.block.common import (BlockPool, CopyOnWriteTracker, RefCounter,
+from light_vllm.core.block.common import (BlockPool, CopyOnWriteTracker,
+                                          RefCounter,
                                           get_all_blocks_recursively)
-from light_vllm.core.block.interfaces import Block, BlockAllocator, BlockId, Device
+from light_vllm.core.block.interfaces import (Block, BlockAllocator, BlockId,
+                                              Device)
 from light_vllm.utils import cdiv
 
 Refcount = int

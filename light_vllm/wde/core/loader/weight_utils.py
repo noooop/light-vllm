@@ -15,18 +15,16 @@ import torch
 from huggingface_hub import HfFileSystem, hf_hub_download, snapshot_download
 from safetensors.torch import load_file, safe_open, save_file
 from tqdm.auto import tqdm
+from transformers import PretrainedConfig
 from transformers.utils import SAFE_WEIGHTS_INDEX_NAME
 
-
-from transformers import PretrainedConfig
-from light_vllm.wde.core.config import LoadConfig
-
-from light_vllm.logger import init_logger
 from light_vllm.layers.quantization import (QuantizationConfig,
                                             get_quantization_config)
 from light_vllm.layers.quantization.schema import QuantParamSchema
+from light_vllm.logger import init_logger
 from light_vllm.platforms import current_platform
 from light_vllm.utils import print_warning_once
+from light_vllm.wde.core.config import LoadConfig
 
 logger = init_logger(__name__)
 
@@ -128,12 +126,10 @@ def get_quant_config(model: str,
 
     quant_cls = get_quantization_config(quantization)
     # Read the quantization config from the HF model config, if available.
-    hf_quant_config = getattr(hf_config, "quantization_config",
-                              None)
+    hf_quant_config = getattr(hf_config, "quantization_config", None)
     if hf_quant_config is None:
         # compressed-tensors uses a compressions_config
-        hf_quant_config = getattr(hf_config, "compression_config",
-                                  None)
+        hf_quant_config = getattr(hf_config, "compression_config", None)
     if hf_quant_config is not None:
         return quant_cls.from_config(hf_quant_config)
     # In case of bitsandbytes/QLoRA, get quant config from the adapter model.
@@ -175,12 +171,10 @@ def get_quant_config(model: str,
             f.endswith(x) for x in possible_config_filenames)
     ]
     if len(quant_config_files) == 0:
-        raise ValueError(
-            f"Cannot find the config file for {quantization}")
+        raise ValueError(f"Cannot find the config file for {quantization}")
     if len(quant_config_files) > 1:
-        raise ValueError(
-            f"Found multiple config files for {quantization}: "
-            f"{quant_config_files}")
+        raise ValueError(f"Found multiple config files for {quantization}: "
+                         f"{quant_config_files}")
 
     quant_config_file = quant_config_files[0]
     with open(quant_config_file, "r") as f:

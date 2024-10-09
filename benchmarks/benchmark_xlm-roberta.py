@@ -1,5 +1,5 @@
-import time
 import random
+import time
 
 from light_vllm.utils import STR_DTYPE_TO_TORCH_DTYPE
 
@@ -8,11 +8,13 @@ def benchmark_hf(args):
     random.seed(args.seed)
 
     import torch
-    from transformers import AutoTokenizer, AutoModelForMaskedLM
+    from transformers import AutoModelForMaskedLM, AutoTokenizer
     torch_dtype = STR_DTYPE_TO_TORCH_DTYPE[args.dtype]
 
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
-    model = AutoModelForMaskedLM.from_pretrained(args.model,  torch_dtype=torch_dtype).to(args.device)
+    model = AutoModelForMaskedLM.from_pretrained(args.model,
+                                                 torch_dtype=torch_dtype).to(
+                                                     args.device)
 
     prompt = "if" * args.input_len
     requests = [prompt for _ in range(args.num_prompts)]
@@ -23,15 +25,17 @@ def benchmark_hf(args):
             n_step = 0
             for i in range(0, len(requests), batchsize):
                 batch = requests[i:i + batchsize]
-                encoded_input = tokenizer(batch, return_tensors='pt').to(args.device)
-                output = model(**encoded_input)
+                encoded_input = tokenizer(batch,
+                                          return_tensors='pt').to(args.device)
+                model(**encoded_input)
                 n_step += 1
             end = time.perf_counter()
 
             elapsed_time = end - start
             delay = elapsed_time / n_step
 
-            print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
+            print(f"Batchsize {batchsize}, Throughput: "
+                  f"{len(requests) / elapsed_time:.4f} requests/s, "
                   f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
 
 
@@ -39,9 +43,12 @@ def benchmark_vllm(args):
     random.seed(args.seed)
 
     import gc
+
     import torch
+
     from light_vllm import LLMEngine
-    from light_vllm.wde.encode_only.arg_utils import EncodeOnlyEngineArgs as EngineArgs
+    from light_vllm.wde.encode_only.arg_utils import (EncodeOnlyEngineArgs as
+                                                      EngineArgs)
 
     prompt = "if" * args.input_len
     requests = [prompt for _ in range(args.num_prompts)]
@@ -57,8 +64,7 @@ def benchmark_vllm(args):
         quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
-        scheduling=args.scheduling
-    )
+        scheduling=args.scheduling)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -78,7 +84,8 @@ def benchmark_vllm(args):
         elapsed_time = end - start
         delay = elapsed_time / n_step
 
-        print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
+        print(f"Batchsize {batchsize}, Throughput: "
+              f"{len(requests) / elapsed_time:.4f} requests/s, "
               f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
 
         engine.executor.shutdown_execute_loop()
@@ -118,7 +125,6 @@ if __name__ == '__main__':
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark_vllm, args)
             f.result()
-
 
     for scheduling in ["sync", "async", "double_buffer"]:
         print(scheduling)

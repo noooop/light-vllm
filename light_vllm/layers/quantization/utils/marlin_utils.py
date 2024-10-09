@@ -3,10 +3,10 @@ from typing import List, Optional, Tuple
 import numpy
 import torch
 
-from ... import _custom_ops as ops
-from light_vllm.platforms import current_platform
 from light_vllm.layers.scalar_type import ScalarType, scalar_types
+from light_vllm.platforms import current_platform
 
+from ... import _custom_ops as ops
 from .quant_utils import pack_cols, unpack_cols
 
 GPTQ_MARLIN_TILE = 16

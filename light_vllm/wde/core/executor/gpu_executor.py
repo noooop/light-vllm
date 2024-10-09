@@ -1,8 +1,7 @@
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import List, Optional, Tuple
 
-from light_vllm.wde.core.executor.executor_base import ExecutorBase
 from light_vllm.logger import init_logger
-
+from light_vllm.wde.core.executor.executor_base import ExecutorBase
 from light_vllm.wde.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.wde.core.worker.worker_base import WorkerWrapperBase
 
@@ -52,7 +51,8 @@ class GPUExecutor(ExecutorBase):
 
         self.driver_worker.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
-    def execute_model(self, execute_input: ExecuteInput
-    ) -> Optional[List[ExecuteOutput]]:
+    def execute_model(
+            self,
+            execute_input: ExecuteInput) -> Optional[List[ExecuteOutput]]:
         output = self.driver_worker(execute_input)
         return output

@@ -15,8 +15,11 @@ from light_vllm.layers.sampling_metadata import (SamplingMetadata,
                                                  SamplingTensors,
                                                  SequenceGroupToSample)
 from light_vllm.layers.sampling_params import SamplingType
-from light_vllm.wde.core.schema.sequence import Logprob, PromptLogprobs, SampleLogprobs
-from light_vllm.wde.chat.schema.execute_io import CompletionSequenceGroupOutput, SamplerOutput, SequenceOutput
+from light_vllm.wde.chat.schema.execute_io import (
+    CompletionSequenceGroupOutput, SamplerOutput, SequenceOutput)
+from light_vllm.wde.core.schema.sequence import (Logprob, PromptLogprobs,
+                                                 SampleLogprobs)
+
 # (num_token_ids, num_parent_ids) per sequence group.
 SampleResultType = List[Tuple[List[int], List[int]]]
 
@@ -502,9 +505,10 @@ def _sample_with_torch(
     include_gpu_probs_tensor: bool,
     modify_greedy_probs: bool,
 ) -> Tuple[SampleResultType, Optional[torch.Tensor]]:
-    categorized_seq_group_ids: Dict[SamplingType,
-                                    List[int]] = {t: []
-                                                  for t in SamplingType}
+    categorized_seq_group_ids: Dict[SamplingType, List[int]] = {
+        t: []
+        for t in SamplingType
+    }
     categorized_sample_indices = sampling_metadata.categorized_sample_indices
     for i, seq_group in enumerate(sampling_metadata.seq_groups):
         sampling_params = seq_group.sampling_params
@@ -613,9 +617,10 @@ def _sample_with_triton_kernel(
     sampling_metadata: SamplingMetadata,
     sampling_tensors: SamplingTensors,
 ) -> SampleResultType:
-    categorized_seq_group_ids: Dict[SamplingType,
-                                    List[int]] = {t: []
-                                                  for t in SamplingType}
+    categorized_seq_group_ids: Dict[SamplingType, List[int]] = {
+        t: []
+        for t in SamplingType
+    }
     categorized_sample_indices = sampling_metadata.categorized_sample_indices
     for i, seq_group in enumerate(sampling_metadata.seq_groups):
         sampling_params = seq_group.sampling_params

@@ -1,19 +1,10 @@
-import enum
-import json
-from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, ClassVar, List, Optional, Tuple, Type, Union
+from dataclasses import dataclass, fields
+from typing import List, Optional, Union
 
 import torch
-from transformers import PretrainedConfig
 
-import light_vllm.envs as envs
 from light_vllm.logger import init_logger
-from light_vllm.layers.quantization import QUANTIZATION_METHODS
-from light_vllm.models.transformers_utils.config import get_config, get_hf_text_config
-from light_vllm.utils import (cuda_device_count_stateless, get_cpu_memory, is_cpu,
-                              is_hip, is_neuron, is_openvino, is_tpu, is_xpu,
-                              print_warning_once)
-from light_vllm.wde.core.config import EngineConfig, CacheConfig, ModelConfig
+from light_vllm.wde.core.config import CacheConfig, EngineConfig, ModelConfig
 
 logger = init_logger(__name__)
 
@@ -119,24 +110,12 @@ class ChatModelConfig(ModelConfig):
         skip_tokenizer_init: bool = False,
         served_model_name: Optional[Union[str, List[str]]] = None,
     ) -> None:
-        super().__init__(
-            model,
-            tokenizer,
-            tokenizer_mode,
-            trust_remote_code,
-            dtype,
-            seed,
-            revision,
-            code_revision,
-            rope_scaling,
-            rope_theta,
-            tokenizer_revision,
-            max_model_len,
-            quantization,
-            quantization_param_path,
-            disable_sliding_window,
-            skip_tokenizer_init,
-            served_model_name)
+        super().__init__(model, tokenizer, tokenizer_mode, trust_remote_code,
+                         dtype, seed, revision, code_revision, rope_scaling,
+                         rope_theta, tokenizer_revision, max_model_len,
+                         quantization, quantization_param_path,
+                         disable_sliding_window, skip_tokenizer_init,
+                         served_model_name)
         self.max_logprobs = max_logprobs
         self.enforce_eager = enforce_eager
         if max_context_len_to_capture is not None:

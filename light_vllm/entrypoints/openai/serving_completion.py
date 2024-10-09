@@ -12,13 +12,10 @@ from light_vllm.engine.protocol import AsyncEngineClient
 from light_vllm.entrypoints.logger import RequestLogger
 # yapf conflicts with isort for this block
 # yapf: disable
-from light_vllm.entrypoints.openai.protocol import (CompletionLogProbs,
-                                                    CompletionRequest,
-                                                    CompletionResponse,
-                                                    CompletionResponseChoice,
-                                                    CompletionResponseStreamChoice,
-                                                    CompletionStreamResponse,
-                                                    UsageInfo)
+from light_vllm.entrypoints.openai.protocol import (
+    CompletionLogProbs, CompletionRequest, CompletionResponse,
+    CompletionResponseChoice, CompletionResponseStreamChoice,
+    CompletionStreamResponse, UsageInfo)
 # yapf: enable
 from light_vllm.entrypoints.openai.serving_engine import (LoRAModulePath,
                                                           OpenAIServing,
@@ -449,11 +446,10 @@ class OpenAIServingCompletion(OpenAIServing):
                 out_top_logprobs.append({
                     # Convert float("-inf") to the
                     # JSON-serializable float that OpenAI uses
-                    self._get_decoded_token(
-                        top_lp[1],
-                        top_lp[0],
-                        tokenizer,
-                        return_as_token_id=self.return_tokens_as_token_ids):
+                    self._get_decoded_token(top_lp[1],
+                                            top_lp[0],
+                                            tokenizer,
+                                            return_as_token_id=self.return_tokens_as_token_ids):
                     max(top_lp[1].logprob, -9999.0)
                     for i, top_lp in enumerate(step_top_logprobs.items())
                     if num_output_top_logprobs >= i

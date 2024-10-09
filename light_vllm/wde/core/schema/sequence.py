@@ -3,14 +3,12 @@ import enum
 import math
 from array import array
 from dataclasses import dataclass
-from typing import (TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple,
-                    Union)
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple, Union
 
 from light_vllm.layers.sampling_params import SamplingParams
 
 if TYPE_CHECKING:
     from light_vllm.wde.chat.schema import PromptInput
-
 
 
 @dataclass
@@ -243,11 +241,11 @@ class Sequence:
     """
 
     def __init__(
-            self,
-            seq_id: int,
-            input: "PromptInput",
-            block_size: int,
-            eos_token_id: Optional[int] = None,
+        self,
+        seq_id: int,
+        input: "PromptInput",
+        block_size: int,
+        eos_token_id: Optional[int] = None,
     ) -> None:
         self.seq_id = seq_id
         self.input = input

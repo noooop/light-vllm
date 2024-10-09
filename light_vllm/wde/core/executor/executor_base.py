@@ -1,9 +1,9 @@
 from abc import ABC, abstractmethod
-from typing import List, Optional, Set, Tuple
+from typing import List, Optional, Tuple
 
 from light_vllm.wde.core.config import EngineConfig
-from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.schema.execute_io import ExecuteInput, ExecuteOutput
+from light_vllm.wde.core.workflow import Workflow
 
 
 class ExecutorBase(ABC):
@@ -12,21 +12,16 @@ class ExecutorBase(ABC):
     An executor is responsible for executing the model on a specific device type.
     """
 
-    def __init__(
-        self,
-        engine_config: EngineConfig,
-        workflow: Workflow
-    ) -> None:
+    def __init__(self, engine_config: EngineConfig,
+                 workflow: Workflow) -> None:
         self.engine_config = engine_config
         self.workflow = workflow
         self._init_executor()
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(
-            engine_config=engine.engine_config,
-            workflow=engine.workflow
-        )
+        return cls(engine_config=engine.engine_config,
+                   workflow=engine.workflow)
 
     @abstractmethod
     def _init_executor(self) -> None:
@@ -56,8 +51,9 @@ class ExecutorBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def execute_model(self, execute_input: ExecuteInput
-    ) -> Optional[List[ExecuteOutput]]:
+    def execute_model(
+            self,
+            execute_input: ExecuteInput) -> Optional[List[ExecuteOutput]]:
         """Executes at least one model step on the given sequences."""
         raise NotImplementedError
 

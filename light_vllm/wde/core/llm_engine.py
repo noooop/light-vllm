@@ -1,13 +1,16 @@
-
 from contextlib import contextmanager
-from typing import (TYPE_CHECKING, Type, Union, ClassVar, Dict, Iterable, List, Optional)
+from queue import Empty, Queue
+from typing import TYPE_CHECKING, ClassVar, Dict, Iterable, List, Optional
 from typing import Sequence as GenericSequence
+from typing import Type, Union
+
 from light_vllm.logger import init_logger
-from queue import Queue, Empty
-from light_vllm.wde.core.schema.engine_io import Params, Inputs, RequestOutput, ValidationError
-from light_vllm.wde.core.workflow import Workflow
 from light_vllm.wde.core.arg_utils import EngineArgs
 from light_vllm.wde.core.config import EngineConfig
+from light_vllm.wde.core.schema.engine_io import (Inputs, Params,
+                                                  RequestOutput,
+                                                  ValidationError)
+from light_vllm.wde.core.workflow import Workflow
 
 logger = init_logger(__name__)
 _O = RequestOutput
@@ -35,9 +38,9 @@ class LLMEngine:
 
     @classmethod
     def validate_output(
-            cls,
-            output: object,
-            output_type: Type[_O],
+        cls,
+        output: object,
+        output_type: Type[_O],
     ) -> _O:
         do_validate = cls.DO_VALIDATE_OUTPUT
 
@@ -50,9 +53,9 @@ class LLMEngine:
 
     @classmethod
     def validate_outputs(
-            cls,
-            outputs: GenericSequence[object],
-            output_type: Type[_O],
+        cls,
+        outputs: GenericSequence[object],
+        output_type: Type[_O],
     ) -> List[_O]:
         do_validate = cls.DO_VALIDATE_OUTPUT
 
@@ -70,7 +73,8 @@ class LLMEngine:
 
         return outputs_
 
-    def __init__(self, engine_config: EngineConfig, workflow_cls: Type[Workflow]) -> None:
+    def __init__(self, engine_config: EngineConfig,
+                 workflow_cls: Type[Workflow]) -> None:
         self.engine_config = engine_config
         self.engine_config.log_config()
         self.workflow = workflow_cls.from_engine(self)
@@ -84,18 +88,23 @@ class LLMEngine:
         else:
             self.step = self.sync_step
 
-        self.attn_backend = lazy_import(self.workflow.GetAttnBackend).from_engine(self)
+        self.attn_backend = lazy_import(
+            self.workflow.GetAttnBackend).from_engine(self)
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
-        self.model_inputs_builder = lazy_import(self.workflow.ModelInputBuilder).from_engine(self)
+        self.model_inputs_builder = lazy_import(
+            self.workflow.ModelInputBuilder).from_engine(self)
 
         if hasattr(self.executor, "initialize_kv_caches"):
             self.executor.initialize_kv_caches(self)
 
-        self.input_processor = lazy_import(self.workflow.InputProcessor).from_engine(self)
-        self.request_processor = lazy_import(self.workflow.RequestProcessor).from_engine(self)
+        self.input_processor = lazy_import(
+            self.workflow.InputProcessor).from_engine(self)
+        self.request_processor = lazy_import(
+            self.workflow.RequestProcessor).from_engine(self)
         self.scheduler = lazy_import(self.workflow.Scheduler).from_engine(self)
-        self.output_processor = lazy_import(self.workflow.OutputProcessor).from_engine(self)
+        self.output_processor = lazy_import(
+            self.workflow.OutputProcessor).from_engine(self)
 
     def use_async_scheduling(self):
         executor_cls = lazy_import(self.workflow.Executor)
@@ -109,15 +118,14 @@ class LLMEngine:
             logger.info("Use sync scheduling")
             return False
 
-        raise RuntimeError(f"Executor support scheduling: {executor_cls.support_scheduling}."
-                           f"Scheduler support scheduling: {executor_cls.support_scheduling}."
-                           f"Not compatible")
+        raise RuntimeError(
+            f"Executor support scheduling: {executor_cls.support_scheduling}."
+            f"Scheduler support scheduling: {executor_cls.support_scheduling}."
+            f"Not compatible")
 
     @classmethod
-    def from_engine_args(
-            cls,
-            engine_args: Union[Dict, EngineArgs]
-    ) -> "LLMEngine":
+    def from_engine_args(cls, engine_args: Union[Dict,
+                                                 EngineArgs]) -> "LLMEngine":
         """Creates an LLM engine from the engine arguments."""
 
         from light_vllm.models.transformers_utils.config import get_config
@@ -146,7 +154,8 @@ class LLMEngine:
                     params: Optional[Params] = None,
                     arrival_time: Optional[float] = None) -> None:
         try:
-            request = self.input_processor(request_id, inputs, params, arrival_time)
+            request = self.input_processor(request_id, inputs, params,
+                                           arrival_time)
         except ValidationError:
             logger.error(f"{request_id} validation error")
         self.scheduler.add_request(request)
@@ -161,7 +170,8 @@ class LLMEngine:
 
         executor_input = self.model_inputs_builder(scheduler_output)
         executor_output = self.executor.execute_model(executor_input)
-        request_outputs = self.output_processor(scheduler_output, executor_output)
+        request_outputs = self.output_processor(scheduler_output,
+                                                executor_output)
         self.scheduler.free_finished_request(request_outputs)
         request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs
@@ -197,7 +207,8 @@ class LLMEngine:
         # practically, task can be inqueue before doing post-processing
         self._put_as_many_as_possible()
 
-        request_outputs = self.output_processor(scheduler_output, executor_output)
+        request_outputs = self.output_processor(scheduler_output,
+                                                executor_output)
         self.scheduler.free_finished_request(request_outputs)
         request_outputs = self.scheduler.remove_abort_request(request_outputs)
         return request_outputs

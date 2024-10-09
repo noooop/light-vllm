@@ -30,15 +30,18 @@ from light_vllm.entrypoints.openai.protocol import (ChatCompletionRequest,
                                                     CompletionRequest,
                                                     DetokenizeRequest,
                                                     DetokenizeResponse,
-                                                    EmbeddingRequest, ErrorResponse,
+                                                    EmbeddingRequest,
+                                                    ErrorResponse,
                                                     TokenizeRequest,
                                                     TokenizeResponse)
 from light_vllm.entrypoints.openai.rpc.client import AsyncEngineRPCClient
 from light_vllm.entrypoints.openai.rpc.server import run_rpc_server
 # yapf: enable
 from light_vllm.entrypoints.openai.serving_chat import OpenAIServingChat
-from light_vllm.entrypoints.openai.serving_completion import OpenAIServingCompletion
-from light_vllm.entrypoints.openai.serving_embedding import OpenAIServingEmbedding
+from light_vllm.entrypoints.openai.serving_completion import (
+    OpenAIServingCompletion)
+from light_vllm.entrypoints.openai.serving_embedding import (
+    OpenAIServingEmbedding)
 from light_vllm.entrypoints.openai.serving_tokenization import (
     OpenAIServingTokenization)
 from light_vllm.logger import init_logger

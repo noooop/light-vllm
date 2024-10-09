@@ -1,38 +1,36 @@
-
 import time
 from typing import List
 
-from light_vllm.wde.decode_only.scheduler import SchedulerOutput
-from light_vllm.wde.core.schema.sequence import SequenceGroup, SequenceGroupMetadata
-from light_vllm.wde.chat.schema.execute_io import SequenceGroupOutput, SamplerOutput
 from light_vllm.wde.chat.schema.engine_io import ChatModelRequestOutput
+from light_vllm.wde.chat.schema.execute_io import SequenceGroupOutput
 from light_vllm.wde.core.processor.output_processor import OutputProcessor
+from light_vllm.wde.decode_only.scheduler import SchedulerOutput
 
 
 class ChatModelOutputProcessor(OutputProcessor):
+
     def __init__(self, scheduler_config, scheduler, tokenizer, seq_counter):
-        from light_vllm.wde.chat.processor.utils.stop_checker import StopChecker
-        from light_vllm.wde.chat.processor.utils.single_step import SingleStepOutputProcessor
+        from light_vllm.wde.chat.processor.utils.single_step import (
+            SingleStepOutputProcessor)
+        from light_vllm.wde.chat.processor.utils.stop_checker import (
+            StopChecker)
         self.scheduler = scheduler
 
         self.output_processor = SingleStepOutputProcessor(
             tokenizer,
             seq_counter,
-            stop_checker=StopChecker(
-                scheduler_config.max_model_len,
-                tokenizer
-            ),
+            stop_checker=StopChecker(scheduler_config.max_model_len,
+                                     tokenizer),
             max_model_len=scheduler_config.max_model_len,
         )
 
     @classmethod
     def from_engine(cls, engine):
-        return cls(engine.engine_config.scheduler_config,
-                   engine.scheduler,
-                   engine.tokenizer,
-                   engine.seq_counter)
+        return cls(engine.engine_config.scheduler_config, engine.scheduler,
+                   engine.tokenizer, engine.seq_counter)
 
-    def __call__(self, scheduler_output: SchedulerOutput, execute_output) -> List[ChatModelRequestOutput]:
+    def __call__(self, scheduler_output: SchedulerOutput,
+                 execute_output) -> List[ChatModelRequestOutput]:
         now = time.time()
 
         scheduled_seq_groups = scheduler_output.scheduled_seq_groups
@@ -58,7 +56,8 @@ class ChatModelOutputProcessor(OutputProcessor):
 
             self.output_processor.process_prompt_logprob(seq_group, outputs)
             if seq_group_meta.do_sample:
-                seq_need_fork, seq_need_free = self.output_processor.process_outputs(seq_group, outputs)
+                seq_need_fork, seq_need_free = self.output_processor.process_outputs(
+                    seq_group, outputs)
 
                 for parent, seq in seq_need_fork:
                     self.scheduler.fork_seq(parent, seq)

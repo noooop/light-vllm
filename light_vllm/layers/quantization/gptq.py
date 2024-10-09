@@ -8,10 +8,9 @@ from torch.nn.parameter import Parameter
 
 from light_vllm.layers import _custom_ops as ops
 from light_vllm.layers.linear import LinearBase, LinearMethodBase
-from light_vllm.layers.quantization.base_config import (
-    QuantizationConfig)
-from light_vllm.layers.vocab_embedding import ParallelLMHead
+from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.utils import set_weight_attrs
+from light_vllm.layers.vocab_embedding import ParallelLMHead
 
 
 class GPTQConfig(QuantizationConfig):

@@ -1,40 +1,37 @@
-import time
 import random
+import time
 
 
 def patch():
-    from light_vllm.wde.encode_only.executor.gpu_executor import GPUAsyncExecutor
+    from light_vllm.wde.encode_only.executor.gpu_executor import (
+        GPUAsyncExecutor)
 
     simple_execute_loop = GPUAsyncExecutor.simple_execute_loop
 
     def p_execute_loop(self, *args, **kwargs):
         import torch
-        with torch.profiler.profile(
-                activities=[
-                    torch.profiler.ProfilerActivity.CPU,
-                    torch.profiler.ProfilerActivity.CUDA,
-                ]) as prof:
+        with torch.profiler.profile(activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+        ]) as prof:
             simple_execute_loop(self, *args, **kwargs)
 
-        prof.export_chrome_trace(f"simple_execute_loop.json")
+        prof.export_chrome_trace("simple_execute_loop.json")
 
     GPUAsyncExecutor.simple_execute_loop = p_execute_loop
 
     double_buffer_execute_loop = GPUAsyncExecutor.double_buffer_execute_loop
+
     def p_execute_loop(self, *args, **kwargs):
         import torch
-        with torch.profiler.profile(
-                activities=[
-                    torch.profiler.ProfilerActivity.CPU,
-                    torch.profiler.ProfilerActivity.CUDA,
-                ]) as prof:
+        with torch.profiler.profile(activities=[
+                torch.profiler.ProfilerActivity.CPU,
+                torch.profiler.ProfilerActivity.CUDA,
+        ]) as prof:
             double_buffer_execute_loop(self, *args, **kwargs)
-        prof.export_chrome_trace(f"double_buffer_execute_loop.json")
+        prof.export_chrome_trace("double_buffer_execute_loop.json")
 
     GPUAsyncExecutor.double_buffer_execute_loop = p_execute_loop
-
-
-
 
 
 def benchmark_vllm(args):
@@ -42,7 +39,8 @@ def benchmark_vllm(args):
     patch()
 
     from light_vllm import LLMEngine
-    from light_vllm.wde.encode_only.arg_utils import EncodeOnlyEngineArgs as EngineArgs
+    from light_vllm.wde.encode_only.arg_utils import (EncodeOnlyEngineArgs as
+                                                      EngineArgs)
 
     prompt = "if" * args.input_len
     requests = [prompt for _ in range(args.num_prompts)]
@@ -58,8 +56,7 @@ def benchmark_vllm(args):
         quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
-        scheduling=args.scheduling
-    )
+        scheduling=args.scheduling)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -79,7 +76,8 @@ def benchmark_vllm(args):
         elapsed_time = end - start
         delay = elapsed_time / n_step
 
-        print(f"Batchsize {batchsize}, Throughput: {len(requests) / elapsed_time:.4f} requests/s, "
+        print(f"Batchsize {batchsize}, Throughput: "
+              f"{len(requests) / elapsed_time:.4f} requests/s, "
               f"Delay {delay * 1000:0.2f} ms, n_step {n_step}")
 
         engine.executor.shutdown_execute_loop()
