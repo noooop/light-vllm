@@ -1,7 +1,22 @@
 TASK = "retriever"
-WORKFLOW = "light_vllm.wde.retriever.workflow:RetrieverWorkflow"
+RETRIEVER_ENCODER_ONLY_WORKFLOW = ("light_vllm.wde.retriever.workflow:"
+                                   "RetrieverEncodeOnlyWorkflow")
 
-# Architecture -> (wde, module, class, workflow).
+# Architecture -> (task, module, class, workflow).
+RETRIEVER_ENCODER_ONLY_MODELS = {
+    "XLMRobertaModel":
+    (TASK, "bge_m3", "BGEM3Model", RETRIEVER_ENCODER_ONLY_WORKFLOW),
+    "BertModel":
+    (TASK, "bert_retriever", "BertRetriever", RETRIEVER_ENCODER_ONLY_WORKFLOW),
+}
+
+RETRIEVER_DECODER_ONLY_WORKFLOW = ("light_vllm.wde.retriever.workflow:"
+                                   "RetrieverDecodeOnlyWorkflow")
+
+# Architecture -> (task, module, class, workflow).
+RETRIEVER_DECODER_ONLY_MODELS = {}
+
 RETRIEVER_MODELS = {
-    "XLMRobertaModel": (TASK, "bgem3", "BGEM3Model", WORKFLOW),
+    **RETRIEVER_ENCODER_ONLY_MODELS,
+    **RETRIEVER_DECODER_ONLY_MODELS
 }

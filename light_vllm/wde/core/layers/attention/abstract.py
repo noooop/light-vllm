@@ -11,9 +11,29 @@ class AttentionType(Enum):
     ENCODER = auto()  # Encoder attention between previous layer Q/K/V
     ENCODER_DECODER = auto()  # Attention between dec. Q and enc. K/V
 
+    @staticmethod
+    def attn_type_name_to_enum(attn_type: str) -> "AttentionType":
+        assert attn_type is not None
+
+        attn_type_members = AttentionType.__members__
+        if attn_type not in attn_type_members:
+            raise ValueError(
+                f"Invalid attn_type '{attn_type}'. "
+                f"Available backends: {', '.join(attn_type_members)} "
+                "(case-sensitive).")
+
+        return AttentionType[attn_type]
+
 
 class AttentionBackend(ABC):
     """Abstract class for attention backends."""
+
+    def __init__(self, attn_type: AttentionType):
+        self._attn_type = attn_type
+
+    @property
+    def attn_type(self) -> AttentionType:
+        return self._attn_type
 
     @staticmethod
     @abstractmethod
@@ -49,10 +69,10 @@ class AttentionBackend(ABC):
 class AttentionMetadata:
     pass
 
-    def to(self, device):
+    def to(self, device, non_blocking=False):
         for k, v in self.__dict__.items():
             if isinstance(v, torch.Tensor):
-                self.__dict__[k] = v.to(device)
+                self.__dict__[k] = v.to(device, non_blocking=non_blocking)
 
         return self
 
@@ -90,5 +110,15 @@ class AttentionImpl(ABC, Generic[T]):
         raise NotImplementedError
 
     @abstractmethod
-    def forward(self, *args, **kwargs) -> torch.Tensor:
+    def forward(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        attn_metadata: AttentionMetadata,
+        kv_cache: Optional[torch.Tensor] = None,
+        k_scale: float = 1.0,
+        v_scale: float = 1.0,
+        attn_type: AttentionType = AttentionType.ENCODER,
+    ) -> torch.Tensor:
         raise NotImplementedError

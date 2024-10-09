@@ -6,8 +6,8 @@ from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.processor.input_processor import (InputProcessor,
                                                            RequestProcessor)
 from light_vllm.wde.core.schema.engine_io import Params, ValidationError
-from light_vllm.wde.encode_only.schema.engine_io import (
-    EncodeOnlyInput, EncodeOnlySchedulableRequest)
+from light_vllm.wde.prefill_only.schema.engine_io import (
+    PrefillOnlyInput, PrefillOnlySchedulableRequest)
 from light_vllm.wde.reranker.schema.engine_io import (Pairs, RerankerInputs,
                                                       RerankerRequest)
 
@@ -47,12 +47,12 @@ class RerankerRequestProcessor(RequestProcessor):
         return cls(engine.tokenizer)
 
     def __call__(self,
-                 request: RerankerRequest) -> EncodeOnlySchedulableRequest:
+                 request: RerankerRequest) -> PrefillOnlySchedulableRequest:
         text_pair = (request.inputs.query, request.inputs.passage)
         prompt_token_ids = self.tokenizer.encode(text_pair)
-        schedulable_request = EncodeOnlySchedulableRequest(
+        schedulable_request = PrefillOnlySchedulableRequest(
             request_id=request.request_id,
-            inputs=EncodeOnlyInput(prompt_token_ids=prompt_token_ids,
-                                   prompt=None),
+            inputs=PrefillOnlyInput(prompt_token_ids=prompt_token_ids,
+                                    prompt=None),
             arrival_time=request.arrival_time)
         return schedulable_request

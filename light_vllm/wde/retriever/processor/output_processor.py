@@ -2,16 +2,16 @@ from typing import List
 
 import torch
 
-from light_vllm.wde.encode_only.processor.output_processor import (
-    EncodeOnlyModelOutputProcessor)
-from light_vllm.wde.encode_only.schema.engine_io import (
-    EncodeOnlySchedulerOutput)
+from light_vllm.wde.prefill_only.processor.output_processor import (
+    PrefillOnlyModelOutputProcessor)
+from light_vllm.wde.prefill_only.schema.engine_io import (
+    PrefillOnlySchedulerOutput)
 from light_vllm.wde.retriever.schema.engine_io import EmbeddingRequestOutput
 
 
-class RetrieverModelOutputProcessor(EncodeOnlyModelOutputProcessor):
+class RetrieverModelOutputProcessor(PrefillOnlyModelOutputProcessor):
 
-    def __call__(self, scheduler_output: EncodeOnlySchedulerOutput,
+    def __call__(self, scheduler_output: PrefillOnlySchedulerOutput,
                  execute_output: torch.Tensor) -> List[EmbeddingRequestOutput]:
         request_outputs = []
         for request, outputs in zip(scheduler_output.requests, execute_output):

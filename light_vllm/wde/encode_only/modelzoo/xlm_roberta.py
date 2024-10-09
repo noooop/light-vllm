@@ -28,14 +28,74 @@ from light_vllm.layers.linear import (ColumnParallelLinear, QKVParallelLinear,
                                       RowParallelLinear)
 from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.models.utils import is_pp_missing_parameter
+from light_vllm.wde.core.layers.attention import (Attention, AttentionBackend,
+                                                  AttentionMetadata)
 from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
                                                      maybe_remap_kv_scale_name)
-from light_vllm.wde.encode_only.layers.attention import (
-    EncodeOnlyAttention, EncodeOnlyAttentionMetadata)
-from light_vllm.wde.encode_only.layers.attention.backends.abstract import (
-    EncodeOnlyAttentionBackend)
 
 logger = logging.get_logger(__name__)
+
+
+class LoadWeightsMixin:
+
+    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
+        stacked_params_mapping = [
+            # (param_name, shard_name, shard_id)
+            ("qkv_proj", "query", "q"),
+            ("qkv_proj", "key", "k"),
+            ("qkv_proj", "value", "v")
+        ]
+
+        params_dict = dict(self.named_parameters(remove_duplicate=False))
+
+        for name, loaded_weight in weights:
+            if hasattr(self, "prefix"):
+                name = self.prefix + name
+
+            if name in self._ignore_weights_keys:
+                continue
+
+            if name == "roberta.embeddings.token_type_embeddings.weight":
+                # token_type_ids is all zero,
+                # so we only need token_type_embeddings[0]
+                self.roberta.embeddings.init_token_type_embeddings0()
+                default_weight_loader(
+                    self.roberta.embeddings.token_type_embeddings0,
+                    loaded_weight[0])
+                continue
+
+            for (param_name, weight_name, shard_id) in stacked_params_mapping:
+                if weight_name not in name:
+                    continue
+
+                name = name.replace(weight_name, param_name)
+
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                if is_pp_missing_parameter(name, self):
+                    continue
+
+                param = params_dict[name]
+                weight_loader = param.weight_loader
+                weight_loader(param, loaded_weight, shard_id)
+                break
+            else:
+                # Skip loading extra bias for GPTQ models.
+                if name.endswith(".bias") and name not in params_dict:
+                    continue
+                # Remapping the name of FP8 kv-scale.
+                name = maybe_remap_kv_scale_name(name, params_dict)
+                if name is None:
+                    continue
+                if is_pp_missing_parameter(name, self):
+                    continue
+                param = params_dict[name]
+                weight_loader = getattr(param, "weight_loader",
+                                        default_weight_loader)
+                weight_loader(param, loaded_weight)
+
+        if hasattr(self, "tie_weights"):
+            self.tie_weights()
 
 
 class XLMRobertaEmbeddings(nn.Module):
@@ -70,8 +130,8 @@ class XLMRobertaEmbeddings(nn.Module):
     def forward(self, input_ids, positions):
         embeddings = self.word_embeddings(input_ids)
 
-        # token_type_embeddings is all zero in
-        # FacebookAI/xlm-roberta, so we don't need it.
+        # token_type_embeddings is all zero in FacebookAI/xlm-roberta,
+        # so we don't need it.
         # token_type_ids is all zero in BGEM3,
         # so we only need token_type_embeddings[0]
         if self.token_type_embeddings0 is not None:
@@ -87,7 +147,7 @@ class XLMRobertaSelfAttention(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         hidden_size = config.hidden_size
@@ -111,17 +171,17 @@ class XLMRobertaSelfAttention(nn.Module):
             quant_config=quant_config,
         )
 
-        self.attn = EncodeOnlyAttention(self.num_heads,
-                                        self.head_dim,
-                                        self.scaling,
-                                        num_kv_heads=self.num_kv_heads,
-                                        quant_config=quant_config,
-                                        attn_backend=attn_backend)
+        self.attn = Attention(self.num_heads,
+                              self.head_dim,
+                              self.scaling,
+                              num_kv_heads=self.num_kv_heads,
+                              quant_config=quant_config,
+                              attn_backend=attn_backend)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
@@ -152,7 +212,7 @@ class XLMRobertaAttention(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.self = XLMRobertaSelfAttention(config, attn_backend)
@@ -161,7 +221,7 @@ class XLMRobertaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         self_outputs = self.self(hidden_states, attn_metadata)
         attention_output = self.output(self_outputs, hidden_states)
@@ -210,7 +270,7 @@ class XLMRobertaLayer(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.attention = XLMRobertaAttention(config, attn_backend,
@@ -221,7 +281,7 @@ class XLMRobertaLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         attention_output = self.attention(hidden_states, attn_metadata)
         intermediate_output = self.intermediate(attention_output)
@@ -233,7 +293,7 @@ class XLMRobertaEncoder(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.layer = nn.ModuleList([
@@ -244,7 +304,7 @@ class XLMRobertaEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attn_metadata)
@@ -255,7 +315,7 @@ class XLMRobertaModel(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.config = config
@@ -266,7 +326,7 @@ class XLMRobertaModel(nn.Module):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         positions += self.config.pad_token_id + 1
 
@@ -305,7 +365,7 @@ class XLMRobertaLMHead(nn.Module):
         return x
 
 
-class XLMRobertaForMaskedLM(nn.Module):
+class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
     _ignore_weights_keys = [
         "roberta.pooler.dense.weight",
         "roberta.pooler.dense.bias",
@@ -315,7 +375,7 @@ class XLMRobertaForMaskedLM(nn.Module):
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None,
                  *args,
                  **kwargs):
@@ -330,7 +390,7 @@ class XLMRobertaForMaskedLM(nn.Module):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
         sequence_output = self.roberta(
             input_ids,
@@ -339,52 +399,6 @@ class XLMRobertaForMaskedLM(nn.Module):
         )
         logits = self.lm_head(sequence_output)
         return logits
-
-    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "query", "q"),
-            ("qkv_proj", "key", "k"),
-            ("qkv_proj", "value", "v")
-        ]
-
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-
-        for name, loaded_weight in weights:
-            if name in self._ignore_weights_keys:
-                continue
-
-            for (param_name, weight_name, shard_id) in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-
-                name = name.replace(weight_name, param_name)
-
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                # Remapping the name of FP8 kv-scale.
-                name = maybe_remap_kv_scale_name(name, params_dict)
-                if name is None:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader",
-                                        default_weight_loader)
-                weight_loader(param, loaded_weight)
-
-        self.tie_weights()
 
     def tie_weights(self):
         self.lm_head.decoder.weight = (
@@ -412,14 +426,14 @@ class XLMRobertaClassificationHead(nn.Module):
         return x
 
 
-class XLMRobertaForSequenceClassification(nn.Module):
+class XLMRobertaForSequenceClassification(nn.Module, LoadWeightsMixin):
     _ignore_weights_keys = [
         "roberta.pooler.dense.weight", "roberta.pooler.dense.bias"
     ]
 
     def __init__(self,
                  config: XLMRobertaConfig,
-                 attn_backend: EncodeOnlyAttentionBackend,
+                 attn_backend: AttentionBackend,
                  quant_config: Optional[QuantizationConfig] = None,
                  *args,
                  **kwargs):
@@ -435,7 +449,7 @@ class XLMRobertaForSequenceClassification(nn.Module):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
-        attn_metadata: EncodeOnlyAttentionMetadata,
+        attn_metadata: AttentionMetadata,
     ) -> torch.Tensor:
 
         sequence_output = self.roberta(
@@ -448,58 +462,6 @@ class XLMRobertaForSequenceClassification(nn.Module):
 
         # take <s> token (equiv. to [CLS])
         cls_features = sequence_output[seq_start_loc[:-1]]
-        return self.classifier(cls_features)
 
-    def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
-        stacked_params_mapping = [
-            # (param_name, shard_name, shard_id)
-            ("qkv_proj", "query", "q"),
-            ("qkv_proj", "key", "k"),
-            ("qkv_proj", "value", "v")
-        ]
-
-        params_dict = dict(self.named_parameters(remove_duplicate=False))
-
-        for name, loaded_weight in weights:
-            if name in self._ignore_weights_keys:
-                continue
-
-            if name == "roberta.embeddings.token_type_embeddings.weight":
-                # token_type_ids is all zero,
-                # so we only need token_type_embeddings[0]
-                self.roberta.embeddings.init_token_type_embeddings0()
-                default_weight_loader(
-                    self.roberta.embeddings.token_type_embeddings0,
-                    loaded_weight[0])
-                continue
-
-            for (param_name, weight_name, shard_id) in stacked_params_mapping:
-                if weight_name not in name:
-                    continue
-
-                name = name.replace(weight_name, param_name)
-
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-
-                param = params_dict[name]
-                weight_loader = param.weight_loader
-                weight_loader(param, loaded_weight, shard_id)
-                break
-            else:
-                # Skip loading extra bias for GPTQ models.
-                if name.endswith(".bias") and name not in params_dict:
-                    continue
-                # Remapping the name of FP8 kv-scale.
-                name = maybe_remap_kv_scale_name(name, params_dict)
-                if name is None:
-                    continue
-                if is_pp_missing_parameter(name, self):
-                    continue
-
-                param = params_dict[name]
-                weight_loader = getattr(param, "weight_loader",
-                                        default_weight_loader)
-                weight_loader(param, loaded_weight)
+        logits = self.classifier(cls_features)
+        return logits

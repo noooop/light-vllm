@@ -25,4 +25,4 @@ llm = LLM(model='BAAI/bge-m3')
 outputs = llm.encode(prompts)
 # Print the outputs.
 for output in outputs:
-    print(output.outputs)
+    print(output.outputs.shape)

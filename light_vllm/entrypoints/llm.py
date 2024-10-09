@@ -106,7 +106,7 @@ class LLM:
         self._validate_and_add_requests(inputs=inputs, params=sampling_params)
 
         outputs = self._run_engine(use_tqdm=use_tqdm)
-        return LLMEngine.validate_outputs(outputs, RequestOutput)
+        return outputs
 
     def encode(
         self,
@@ -127,7 +127,7 @@ class LLM:
         )
 
         outputs = self._run_engine(use_tqdm=use_tqdm)
-        return LLMEngine.validate_outputs(outputs, RequestOutput)
+        return outputs
 
     def reranker(
         self,
@@ -143,7 +143,7 @@ class LLM:
                 params[i] if isinstance(params, Sequence) else params)
 
         outputs = self._run_engine(use_tqdm=use_tqdm)
-        return LLMEngine.validate_outputs(outputs, RequestOutput)
+        return outputs
 
     def _validate_and_add_requests(
         self,

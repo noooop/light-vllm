@@ -11,8 +11,8 @@ from light_vllm.layers.quantization import QUANTIZATION_METHODS
 from light_vllm.logger import init_logger
 from light_vllm.models.transformers_utils.config import (get_config,
                                                          get_hf_text_config)
-from light_vllm.utils import (get_cpu_memory, is_cpu, is_hip, is_neuron,
-                              is_openvino, is_tpu, is_xpu, print_warning_once)
+from light_vllm.utils import (is_cpu, is_hip, is_neuron, is_openvino, is_xpu,
+                              print_warning_once)
 
 logger = init_logger(__name__)
 
@@ -29,8 +29,6 @@ class DeviceConfig:
                 self.device_type = "neuron"
             elif is_openvino():
                 self.device_type = "openvino"
-            elif is_tpu():
-                self.device_type = "tpu"
             elif is_cpu():
                 self.device_type = "cpu"
             elif is_xpu():
@@ -88,7 +86,7 @@ class LoadConfig:
 
     """
 
-    load_format: Union[str, LoadFormat, "BaseModelLoader"] = LoadFormat.AUTO
+    load_format: Union[str, LoadFormat] = LoadFormat.AUTO
     download_dir: Optional[str] = None
     model_loader_extra_config: Optional[Union[str, dict]] = field(
         default_factory=dict)
@@ -202,24 +200,6 @@ class CacheConfig:
             raise NotImplementedError(
                 "Prefix caching is not supported for fp8 cache_dtype. "
                 "Run with --kv-cache-dtype auto to use prefix caching.")
-
-    def verify_with_parallel_config(
-        self,
-        parallel_config: "ParallelConfig",
-    ) -> None:
-        total_cpu_memory = get_cpu_memory()
-        # FIXME(woosuk): Here, it is assumed that the GPUs in a tensor parallel
-        # group are in the same node. However, the GPUs may span multiple nodes.
-        num_gpus_per_node = parallel_config.tensor_parallel_size
-        cpu_memory_usage = self.swap_space_bytes * num_gpus_per_node
-
-        msg = (f"{cpu_memory_usage / _GB:.2f} GiB out of "
-               f"the {total_cpu_memory / _GB:.2f} GiB total CPU memory is "
-               "allocated for the swap space.")
-        if cpu_memory_usage > 0.7 * total_cpu_memory:
-            raise ValueError("Too large swap space. " + msg)
-        elif cpu_memory_usage > 0.4 * total_cpu_memory:
-            logger.warning("Possibly too large swap space. %s", msg)
 
 
 class ModelConfig:
@@ -520,6 +500,10 @@ class SchedulerConfig:
     pass
 
 
+class ParallelConfig:
+    pass
+
+
 _STR_DTYPE_TO_TORCH_DTYPE = {
     "half": torch.float16,
     "float16": torch.float16,
@@ -721,6 +705,7 @@ class EngineConfig:
     device_config: DeviceConfig
     load_config: LoadConfig
     scheduler_config: SchedulerConfig
+    parallel_config: Optional[ParallelConfig]
 
     def to_dict(self):
         """Return the configs as a dictionary, for use in **kwargs.

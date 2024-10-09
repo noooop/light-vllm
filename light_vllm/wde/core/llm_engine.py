@@ -1,8 +1,5 @@
-from contextlib import contextmanager
 from queue import Empty, Queue
-from typing import TYPE_CHECKING, ClassVar, Dict, Iterable, List, Optional
-from typing import Sequence as GenericSequence
-from typing import Type, Union
+from typing import Dict, Iterable, List, Optional, Type, Union
 
 from light_vllm.logger import init_logger
 from light_vllm.wde.core.arg_utils import EngineArgs
@@ -13,7 +10,6 @@ from light_vllm.wde.core.schema.engine_io import (Inputs, Params,
 from light_vllm.wde.core.workflow import Workflow
 
 logger = init_logger(__name__)
-_O = RequestOutput
 
 
 def lazy_import(module):
@@ -24,54 +20,6 @@ def lazy_import(module):
 
 
 class LLMEngine:
-    DO_VALIDATE_OUTPUT: ClassVar[bool] = False
-    """A flag to toggle whether to validate the type of request output."""
-
-    @classmethod
-    @contextmanager
-    def enable_output_validation(cls):
-        cls.DO_VALIDATE_OUTPUT = True
-
-        yield
-
-        cls.DO_VALIDATE_OUTPUT = False
-
-    @classmethod
-    def validate_output(
-        cls,
-        output: object,
-        output_type: Type[_O],
-    ) -> _O:
-        do_validate = cls.DO_VALIDATE_OUTPUT
-
-        if ((TYPE_CHECKING or do_validate)
-                and not isinstance(output, output_type)):
-            raise TypeError(f"Expected output of type {output_type}, "
-                            f"but found type {type(output)}")
-
-        return output
-
-    @classmethod
-    def validate_outputs(
-        cls,
-        outputs: GenericSequence[object],
-        output_type: Type[_O],
-    ) -> List[_O]:
-        do_validate = cls.DO_VALIDATE_OUTPUT
-
-        outputs_: List[_O]
-        if TYPE_CHECKING or do_validate:
-            outputs_ = []
-            for output in outputs:
-                if not isinstance(output, output_type):
-                    raise TypeError(f"Expected output of type {output_type}, "
-                                    f"but found type {type(output)}")
-
-                outputs_.append(output)
-        else:
-            outputs_ = outputs
-
-        return outputs_
 
     def __init__(self, engine_config: EngineConfig,
                  workflow_cls: Type[Workflow]) -> None:
@@ -79,17 +27,10 @@ class LLMEngine:
         self.engine_config.log_config()
         self.workflow = workflow_cls.from_engine(self)
 
-        if self.use_async_scheduling():
-            self.executor_in = Queue()
-            self.executor_out = Queue()
-            self.max_num_on_the_fly = self.engine_config.scheduler_config.max_num_on_the_fly
-            self.num_on_the_fly = 0
-            self.step = self.async_step
-        else:
-            self.step = self.sync_step
+        self._maybe_init_async_scheduling()
 
         self.attn_backend = lazy_import(
-            self.workflow.GetAttnBackend).from_engine(self)
+            self.workflow.AttnBackend).from_engine(self)
         self.executor = lazy_import(self.workflow.Executor).from_engine(self)
         self.tokenizer = lazy_import(self.workflow.Tokenizer).from_engine(self)
         self.model_inputs_builder = lazy_import(
@@ -106,22 +47,36 @@ class LLMEngine:
         self.output_processor = lazy_import(
             self.workflow.OutputProcessor).from_engine(self)
 
-    def use_async_scheduling(self):
+    def _maybe_init_async_scheduling(self):
         executor_cls = lazy_import(self.workflow.Executor)
         scheduler_cls = lazy_import(self.workflow.Scheduler)
 
-        if "async_scheduling" in executor_cls.support_scheduling and "async_scheduling" in scheduler_cls.support_scheduling:
+        if ("async_scheduling" in executor_cls.support_scheduling
+                and "async_scheduling" in scheduler_cls.support_scheduling):
             logger.info("Use async scheduling")
-            return True
+            self.use_async_scheduling = True
 
-        if "sync_scheduling" in executor_cls.support_scheduling and "sync_scheduling" in scheduler_cls.support_scheduling:
+        elif ("sync_scheduling" in executor_cls.support_scheduling
+              and "sync_scheduling" in scheduler_cls.support_scheduling):
             logger.info("Use sync scheduling")
-            return False
+            self.use_async_scheduling = False
 
-        raise RuntimeError(
-            f"Executor support scheduling: {executor_cls.support_scheduling}."
-            f"Scheduler support scheduling: {executor_cls.support_scheduling}."
-            f"Not compatible")
+        else:
+            raise RuntimeError(f"Executor support scheduling: "
+                               f"{executor_cls.support_scheduling}."
+                               f"Scheduler support scheduling: "
+                               f"{executor_cls.support_scheduling}."
+                               f"Not compatible")
+
+        if self.use_async_scheduling:
+            self.executor_in = Queue()
+            self.executor_out = Queue()
+            self.max_num_on_the_fly = (
+                self.engine_config.scheduler_config.max_num_on_the_fly)
+            self.num_on_the_fly = 0
+            self.step = self.async_step
+        else:
+            self.step = self.sync_step
 
     @classmethod
     def from_engine_args(cls, engine_args: Union[Dict,
