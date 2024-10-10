@@ -4,7 +4,7 @@
 # BertRetriever also supports Snowflake Arctic Embed (Family)
 # Arctic is licensed under the Apache-2.
 
-from typing import Optional
+from typing import Optional, List
 
 import torch
 from torch import nn
@@ -12,6 +12,7 @@ from torch import nn
 from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.wde.core.layers.attention import (AttentionBackend,
                                                   AttentionMetadata)
+from light_vllm.wde.core.schema.execute_io import IntermediateTensors
 from light_vllm.wde.encode_only.modelzoo.bert import (BertConfig, BertModel,
                                                       LoadWeightsMixin)
 
@@ -49,8 +50,11 @@ class BertRetriever(nn.Module, LoadWeightsMixin):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
+        kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
+        intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> torch.Tensor:
+        assert kv_caches is None
 
         sequence_output, pooled_output = self.bert(
             input_ids,

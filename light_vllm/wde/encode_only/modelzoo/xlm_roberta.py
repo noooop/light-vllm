@@ -16,7 +16,7 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model."""
 
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional, Tuple, List
 
 import torch
 from torch import nn
@@ -32,6 +32,7 @@ from light_vllm.wde.core.layers.attention import (Attention, AttentionBackend,
                                                   AttentionMetadata)
 from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
                                                      maybe_remap_kv_scale_name)
+from light_vllm.wde.core.schema.execute_io import IntermediateTensors
 
 logger = logging.get_logger(__name__)
 
@@ -185,7 +186,11 @@ class XLMRobertaSelfAttention(nn.Module):
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        attn_output = self.attn(q, k, v, attn_metadata)
+        attn_output = self.attn(q,
+                                k,
+                                v,
+                                kv_cache=None,
+                                attn_metadata=attn_metadata)
         return attn_output
 
 
@@ -390,8 +395,11 @@ class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
+        kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
+        intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> torch.Tensor:
+        assert kv_caches is None
         sequence_output = self.roberta(
             input_ids,
             positions,
@@ -449,8 +457,11 @@ class XLMRobertaForSequenceClassification(nn.Module, LoadWeightsMixin):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
+        kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
+        intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> torch.Tensor:
+        assert kv_caches is None
 
         sequence_output = self.roberta(
             input_ids,

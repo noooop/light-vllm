@@ -16,7 +16,7 @@
 # limitations under the License.
 """PyTorch BERT model."""
 
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import nn
@@ -32,7 +32,7 @@ from light_vllm.wde.core.layers.attention import (Attention, AttentionBackend,
                                                   AttentionMetadata)
 from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
                                                      maybe_remap_kv_scale_name)
-
+from light_vllm.wde.core.schema.execute_io import IntermediateTensors
 logger = logging.get_logger(__name__)
 
 
@@ -185,7 +185,11 @@ class BertSelfAttention(nn.Module):
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
-        attn_output = self.attn(q, k, v, attn_metadata)
+        attn_output = self.attn(q,
+                                k,
+                                v,
+                                kv_cache=None,
+                                attn_metadata=attn_metadata)
         return attn_output
 
 
@@ -352,7 +356,7 @@ class BertModel(nn.Module):
         input_ids: torch.Tensor,
         positions: torch.Tensor,
         attn_metadata: AttentionMetadata,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         embedding_output = self.embeddings(
             input_ids=input_ids,
             positions=positions,
@@ -390,8 +394,11 @@ class BertForMaskedLM(nn.Module, LoadWeightsMixin):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
+        kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
-    ) -> Tuple[torch.Tensor]:
+        intermediate_tensors: Optional[IntermediateTensors] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        assert kv_caches is None
 
         sequence_output, pooled_output = self.bert(
             input_ids,

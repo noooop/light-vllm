@@ -148,13 +148,13 @@ class Qwen2Attention(nn.Module):
         self,
         positions: torch.Tensor,
         hidden_states: torch.Tensor,
+        kv_cache: torch.Tensor,
         attn_metadata: AttentionMetadata,
-        kv_cache: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         qkv, _ = self.qkv_proj(hidden_states)
         q, k, v = qkv.split([self.q_size, self.kv_size, self.kv_size], dim=-1)
         q, k = self.rotary_emb(positions, q, k)
-        attn_output = self.attn(q, k, v, attn_metadata, kv_cache)
+        attn_output = self.attn(q, k, v, kv_cache, attn_metadata)
         output, _ = self.o_proj(attn_output)
         return output
 
@@ -308,6 +308,16 @@ class Qwen2ForCausalLM(nn.Module):
         ],
     }
 
+    # LoRA specific attributes
+    supported_lora_modules = [
+        "qkv_proj",
+        "o_proj",
+        "gate_up_proj",
+        "down_proj",
+    ]
+    embedding_modules = {}
+    embedding_padding_modules = []
+
     def __init__(
         self,
         config: Qwen2Config,
@@ -315,6 +325,18 @@ class Qwen2ForCausalLM(nn.Module):
         cache_config: Optional[CacheConfig] = None,
         quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
+        # TODO (@robertgshaw2): see if this can be moved out
+        if (cache_config is not None and cache_config.sliding_window is not None
+                and hasattr(config, "max_window_layers")):
+            raise ValueError("Sliding window for some but all layers is not "
+                             "supported. This model uses sliding window "
+                             "but `max_window_layers` = %s is less than "
+                             "`num_hidden_layers` = %s. Please open an issue "
+                             "to discuss this feature." % (
+                                 config.max_window_layers,
+                                 config.num_hidden_layers,
+                             ))
+
         super().__init__()
 
         self.config = config
@@ -336,8 +358,8 @@ class Qwen2ForCausalLM(nn.Module):
         self,
         input_ids: torch.Tensor,
         positions: torch.Tensor,
+        kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
-        kv_caches: Optional[List[torch.Tensor]] = None,
         intermediate_tensors: Optional[IntermediateTensors] = None,
     ) -> torch.Tensor:
         hidden_states = self.model(input_ids, positions, kv_caches,
