@@ -15,7 +15,8 @@ class PrefillOnlyWorkflow(Workflow):
         "model_input_builder:PrefillOnlyModelInputBuilder")
     Worker: str = "light_vllm.wde.prefill_only.worker.gpu_worker:Worker"
     Executor: str = "light_vllm.wde.prefill_only.executor.gpu_executor"
-    Scheduler: str = "light_vllm.wde.prefill_only.scheduler:PrefillOnlyScheduler"
+    Scheduler: str = ("light_vllm.wde.prefill_only.scheduler:"
+                      "PrefillOnlyScheduler")
     AttnBackend: str = ("light_vllm.wde.prefill_only.layers."
                         "attention.selector:AttnBackend")
 
