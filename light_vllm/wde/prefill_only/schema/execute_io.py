@@ -18,7 +18,12 @@ class ModelInputForGPU(ModelInput):
                                                    non_blocking=non_blocking)
 
     def to_dict(self):
-        return self.__dict__
+        out = self.__dict__
+
+        if "kv_caches" not in out:
+            out["kv_caches"] = None
+
+        return out
 
 
 class PrefillOnlyExecuteInput(ExecuteInput):
