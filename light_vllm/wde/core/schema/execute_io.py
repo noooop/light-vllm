@@ -1,4 +1,3 @@
-from abc import ABC
 from dataclasses import dataclass
 from typing import Dict, Optional, Union
 
@@ -7,7 +6,7 @@ import torch
 
 
 @dataclass
-class ModelInput(ABC):
+class ModelInput:
     pass
 
 
@@ -17,12 +16,12 @@ class WorkerInput:
 
 
 @dataclass
-class ExecuteInput(ABC):
+class ExecuteInput:
     worker_input: Optional[WorkerInput]
     model_input: Optional[ModelInput]
 
 
-class ExecuteOutput(ABC):
+class ExecuteOutput:
     pass
 
 

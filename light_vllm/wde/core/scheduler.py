@@ -33,7 +33,8 @@ class Scheduler(ABC):
         raise NotImplementedError
 
     def add_request(self, request: Request) -> None:
-        if request.request_id in self.requests or request.request_id in self.aborted_requests:
+        if (request.request_id in self.requests
+                or request.request_id in self.aborted_requests):
             logger.warning("[%s] request_id conflict")
             return
 
