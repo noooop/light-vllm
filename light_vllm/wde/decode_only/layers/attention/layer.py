@@ -1,4 +1,3 @@
-"""Attention layer."""
 from typing import Any, Dict, List, Optional
 
 import torch
@@ -7,12 +6,11 @@ import torch.nn as nn
 from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.quantization.kv_cache import BaseKVCacheMethod
 from light_vllm.wde.core.config import CacheConfig
-from light_vllm.wde.core.layers.attention import (AttentionBackend,
-                                                  AttentionMetadata,
-                                                  AttentionType)
+from light_vllm.wde.decode_only.layers.attention.backends.abstract import (
+    AttentionType, DecodeOnlyAttentionBackend, DecodeOnlyAttentionMetadata)
 
 
-class Attention(nn.Module):
+class DecodeOnlyAttention(nn.Module):
     """Attention layer.
 
     This class takes query, key, and value tensors as input. The input tensors
@@ -36,7 +34,7 @@ class Attention(nn.Module):
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
         prefix: str = "",
-        attn_backend: Optional[AttentionBackend] = None,
+        attn_backend: Optional[DecodeOnlyAttentionBackend] = None,
     ) -> None:
         super().__init__()
         if cache_config is not None:
@@ -74,9 +72,7 @@ class Attention(nn.Module):
             self.quant_method = quant_method
             self.quant_method.create_weights(self)
 
-        self.attn_backend = attn_backend
-
-        impl_cls = self.attn_backend.get_impl_cls()
+        impl_cls = attn_backend.get_impl_cls()
         self.impl = impl_cls(num_heads, head_size, scale, num_kv_heads,
                              alibi_slopes, sliding_window, kv_cache_dtype,
                              blocksparse_params, logits_soft_cap)
@@ -87,14 +83,9 @@ class Attention(nn.Module):
         key: torch.Tensor,
         value: torch.Tensor,
         kv_cache: Optional[torch.Tensor],
-        attn_metadata: AttentionMetadata,
+        attn_metadata: DecodeOnlyAttentionMetadata,
         attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
-        if hasattr(self.attn_backend, "attn_type"):
-            return self.impl.forward(query, key, value, kv_cache,
-                                     attn_metadata, self._k_scale,
-                                     self._v_scale,
-                                     self.attn_backend.attn_type)
 
         return self.impl.forward(query,
                                  key,

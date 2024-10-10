@@ -1,12 +1,10 @@
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
 import torch
 
-from light_vllm.wde.core.layers.attention.abstract import AttentionType
 from light_vllm.wde.prefill_only.layers.attention.backends.abstract import (
-    PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
-    PrefillOnlyAttentionMetadata, PrefillOnlyAttentionMetadataBuilder)
+    AttentionType, PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
+    PrefillOnlyAttentionMetadata)
 
 
 class PrefillOnlyFlashAttentionBackend(PrefillOnlyAttentionBackend):
@@ -23,25 +21,6 @@ class PrefillOnlyFlashAttentionBackend(PrefillOnlyAttentionBackend):
     def get_impl_cls() -> Type["PrefillOnlyFlashAttentionImpl"]:
         return PrefillOnlyFlashAttentionImpl
 
-    @staticmethod
-    def get_metadata_cls() -> Type["PrefillOnlyFlashAttentionMetadata"]:
-        return PrefillOnlyFlashAttentionMetadata
-
-    @staticmethod
-    def get_builder_cls() -> Type["PrefillOnlyAttentionMetadataBuilder"]:
-        return PrefillOnlyFlashAttentionMetadataBuilder
-
-
-@dataclass
-class PrefillOnlyFlashAttentionMetadata(PrefillOnlyAttentionMetadata):
-    pass
-
-
-class PrefillOnlyFlashAttentionMetadataBuilder(
-        PrefillOnlyAttentionMetadataBuilder[PrefillOnlyFlashAttentionMetadata]
-):
-    pass
-
 
 class PrefillOnlyFlashAttentionImpl(PrefillOnlyAttentionImpl):
 
@@ -50,20 +29,16 @@ class PrefillOnlyFlashAttentionImpl(PrefillOnlyAttentionImpl):
         num_heads: int,
         head_size: int,
         scale: float,
-        num_kv_heads: Optional[int] = None,
-        alibi_slopes: Optional[List[float]] = None,
-        sliding_window: Optional[int] = None,
-        kv_cache_dtype: str = "auto",
+        num_kv_heads: int,
+        alibi_slopes: Optional[List[float]],
+        sliding_window: Optional[int],
+        kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
     ) -> None:
         if blocksparse_params is not None:
             raise ValueError(
                 "FlashAttention does not support block-sparse attention.")
-
-        from vllm_flash_attn import flash_attn_varlen_func
-
-        self.flash_attn_varlen_func = flash_attn_varlen_func
         self.num_heads = num_heads
         self.head_size = head_size
         self.scale = float(scale)
@@ -73,6 +48,7 @@ class PrefillOnlyFlashAttentionImpl(PrefillOnlyAttentionImpl):
         self.alibi_slopes = alibi_slopes
         self.sliding_window = ((sliding_window, sliding_window)
                                if sliding_window is not None else (-1, -1))
+        self.kv_cache_dtype = kv_cache_dtype
         if logits_soft_cap is None:
             # In flash-attn, setting logits_soft_cap as 0 means no soft cap.
             logits_soft_cap = 0
@@ -94,27 +70,23 @@ class PrefillOnlyFlashAttentionImpl(PrefillOnlyAttentionImpl):
                 f"Head size {head_size} is not supported by FlashAttention. "
                 f"Supported head sizes are: {support_head_sizes}.")
 
+        from vllm_flash_attn import flash_attn_varlen_func
+
+        self.flash_attn_varlen_func = flash_attn_varlen_func
+
     def forward(
         self,
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attn_metadata: PrefillOnlyFlashAttentionMetadata,
-        kv_cache: Optional[torch.Tensor] = None,
+        kv_cache: Optional[torch.Tensor],
+        attn_metadata: PrefillOnlyAttentionMetadata,
         k_scale: float = 1.0,
         v_scale: float = 1.0,
-        attn_type: AttentionType = AttentionType.ENCODER,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
-        """Forward pass with FlashAttention.
 
-        Args:
-            query: shape = [num_tokens, num_heads * head_size]
-            key: shape = [num_tokens, num_kv_heads * head_size]
-            value: shape = [num_tokens, num_kv_heads * head_size]
-            attn_metadata: Metadata for attention.
-        Returns:
-            shape = [num_tokens, num_heads * head_size]
-        """
+        assert kv_cache is None
 
         if attn_type == AttentionType.ENCODER:
             causal = False
@@ -125,7 +97,6 @@ class PrefillOnlyFlashAttentionImpl(PrefillOnlyAttentionImpl):
                                       "are not implemented for "
                                       "PrefillOnlyFlashAttentionImpl")
 
-        # NOTE(woosuk): FlashAttention does not support FP8 KV cache.
         assert k_scale == 1.0 and v_scale == 1.0, (
             "key/v_scale is not supported in FlashAttention.")
 

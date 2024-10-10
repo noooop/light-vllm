@@ -1,14 +1,12 @@
-from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Type
 
 import torch
 from torch.nn.functional import scaled_dot_product_attention
 
 from light_vllm.utils import is_pin_memory_available
-from light_vllm.wde.core.layers.attention.abstract import AttentionType
 from light_vllm.wde.prefill_only.layers.attention.backends.abstract import (
-    PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
-    PrefillOnlyAttentionMetadata, PrefillOnlyAttentionMetadataBuilder)
+    AttentionType, PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
+    PrefillOnlyAttentionMetadata)
 
 pin_memory = is_pin_memory_available()
 
@@ -23,24 +21,6 @@ class PrefillOnlyTorchSDPABackend(PrefillOnlyAttentionBackend):
     def get_impl_cls() -> Type["PrefillOnlyTorchSDPABackendImpl"]:
         return PrefillOnlyTorchSDPABackendImpl
 
-    @staticmethod
-    def get_metadata_cls() -> Type["PrefillOnlyTorchSDPAMetadata"]:
-        return PrefillOnlyTorchSDPAMetadata
-
-    @staticmethod
-    def get_builder_cls() -> Type["PrefillOnlyAttentionMetadataBuilder"]:
-        return PrefillOnlyTorchSDPAMetadataBuilder
-
-
-@dataclass
-class PrefillOnlyTorchSDPAMetadata(PrefillOnlyAttentionMetadata):
-    pass
-
-
-class PrefillOnlyTorchSDPAMetadataBuilder(
-        PrefillOnlyAttentionMetadataBuilder[PrefillOnlyTorchSDPAMetadata]):
-    pass
-
 
 class PrefillOnlyTorchSDPABackendImpl(PrefillOnlyAttentionImpl):
 
@@ -49,10 +29,10 @@ class PrefillOnlyTorchSDPABackendImpl(PrefillOnlyAttentionImpl):
         num_heads: int,
         head_size: int,
         scale: float,
-        num_kv_heads: Optional[int] = None,
-        alibi_slopes: Optional[List[float]] = None,
-        sliding_window: Optional[int] = None,
-        kv_cache_dtype: str = "auto",
+        num_kv_heads: int,
+        alibi_slopes: Optional[List[float]],
+        sliding_window: Optional[int],
+        kv_cache_dtype: str,
         blocksparse_params: Optional[Dict[str, Any]] = None,
         logits_soft_cap: Optional[float] = None,
     ) -> None:
@@ -61,7 +41,6 @@ class PrefillOnlyTorchSDPABackendImpl(PrefillOnlyAttentionImpl):
                 "Torch SPDA does not support block-sparse attention.")
         if logits_soft_cap is not None:
             raise ValueError("Torch SPDA does not support logits soft cap.")
-
         self.num_heads = num_heads
         self.head_size = head_size
         self.scale = float(scale)
@@ -70,23 +49,32 @@ class PrefillOnlyTorchSDPABackendImpl(PrefillOnlyAttentionImpl):
             alibi_slopes = torch.tensor(alibi_slopes, dtype=torch.float32)
         self.alibi_slopes = alibi_slopes
         self.sliding_window = sliding_window
+        self.kv_cache_dtype = kv_cache_dtype
 
         assert self.num_heads % self.num_kv_heads == 0
         self.num_queries_per_kv = self.num_heads // self.num_kv_heads
         self.need_mask = (self.alibi_slopes is not None
                           or self.sliding_window is not None)
 
+        if kv_cache_dtype != "auto":
+            raise NotImplementedError(
+                "Torch SDPA backend does not support FP8 KV cache. "
+                "Please use xFormers backend instead.")
+
     def forward(
         self,
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attn_metadata: PrefillOnlyTorchSDPAMetadata,
-        kv_cache: Optional[torch.Tensor] = None,
+        kv_cache: Optional[torch.Tensor],
+        attn_metadata: PrefillOnlyAttentionMetadata,
         k_scale: float = 1.0,
         v_scale: float = 1.0,
-        attn_type: AttentionType = AttentionType.ENCODER,
+        attn_type: AttentionType = AttentionType.DECODER,
     ) -> torch.Tensor:
+
+        assert kv_cache is None
+
         assert k_scale == 1.0 and v_scale == 1.0, (
             "key/v_scale is not supported in TorchSDPA.")
 
