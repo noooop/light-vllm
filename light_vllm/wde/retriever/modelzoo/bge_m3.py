@@ -2,7 +2,7 @@
 # https://github.com/FlagOpen/FlagEmbedding/blob/master/FlagEmbedding/BGE_M3/modeling.py
 # FlagEmbedding is licensed under the MIT License.
 
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 from torch import nn

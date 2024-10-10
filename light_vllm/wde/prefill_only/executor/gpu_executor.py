@@ -174,8 +174,8 @@ def double_buffer_execute_loop(worker: WorkerBase,
                     break
 
                 with torch.cuda.stream(compute_stream):
-                    current_task.executor_input.model_input.to(worker.device,
-                                                               non_blocking=True)
+                    current_task.executor_input.model_input.to(
+                        worker.device, non_blocking=True)
                     current_task.executor_output = worker(
                         current_task.executor_input)
                     end_compute = torch.cuda.Event()
@@ -189,8 +189,8 @@ def double_buffer_execute_loop(worker: WorkerBase,
                     go_on = False
                 else:
                     with torch.cuda.stream(io_stream):
-                        next_task.executor_input.model_input.to(worker.device,
-                                                                non_blocking=True)
+                        next_task.executor_input.model_input.to(
+                            worker.device, non_blocking=True)
 
                     compute_stream.wait_stream(io_stream)
 

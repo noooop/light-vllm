@@ -4,7 +4,7 @@
 # BertRetriever also supports Snowflake Arctic Embed (Family)
 # Arctic is licensed under the Apache-2.
 
-from typing import Optional, List
+from typing import List, Optional
 
 import torch
 from torch import nn

@@ -16,7 +16,7 @@
 # limitations under the License.
 """PyTorch XLM-RoBERTa model."""
 
-from typing import Iterable, Optional, Tuple, List
+from typing import Iterable, List, Optional, Tuple
 
 import torch
 from torch import nn
