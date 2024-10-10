@@ -118,16 +118,19 @@ def simple_execute_loop(worker: WorkerBase,
             output.to("cpu")
         return output
 
-    while True:
-        o = executor_in.get()
-        if o is None:
-            break
+    try:
+        while True:
+            o = executor_in.get()
+            if o is None:
+                break
 
-        scheduler_output, executor_input = o
-        executor_output = execute_model(executor_input)
-        if output_to_cpu:
-            executor_output.to("cpu")
-        executor_out.put((scheduler_output, executor_output))
+            scheduler_output, executor_input = o
+            executor_output = execute_model(executor_input)
+            if output_to_cpu:
+                executor_output.to("cpu")
+            executor_out.put((scheduler_output, executor_output))
+    except Exception as e:
+        executor_out.put(e)
 
 
 def double_buffer_execute_loop(worker: WorkerBase,
@@ -161,48 +164,51 @@ def double_buffer_execute_loop(worker: WorkerBase,
     next_task: Optional[Task] = None
     compute_stream = torch.cuda.Stream()
     io_stream = torch.cuda.Stream()
-
     go_on = True
-    while go_on:
-        if current_task is None:
-            current_task = Task.get(block=True)
+
+    try:
+        while go_on:
             if current_task is None:
-                break
-
-            with torch.cuda.stream(compute_stream):
-                current_task.executor_input.model_input.to(worker.device,
-                                                           non_blocking=True)
-                current_task.executor_output = worker(
-                    current_task.executor_input)
-                end_compute = torch.cuda.Event()
-        else:
-            with torch.cuda.stream(compute_stream):
-                end_compute = torch.cuda.Event()
-
-        try:
-            next_task = Task.get(block=False)
-            if next_task is None:
-                go_on = False
-            else:
-                with torch.cuda.stream(io_stream):
-                    next_task.executor_input.model_input.to(worker.device,
-                                                            non_blocking=True)
-
-                compute_stream.wait_stream(io_stream)
+                current_task = Task.get(block=True)
+                if current_task is None:
+                    break
 
                 with torch.cuda.stream(compute_stream):
-                    next_task.executor_output = worker(
-                        next_task.executor_input)
-        except queue.Empty:
-            pass
+                    current_task.executor_input.model_input.to(worker.device,
+                                                               non_blocking=True)
+                    current_task.executor_output = worker(
+                        current_task.executor_input)
+                    end_compute = torch.cuda.Event()
+            else:
+                with torch.cuda.stream(compute_stream):
+                    end_compute = torch.cuda.Event()
 
-        end_compute.wait()
-        if output_to_cpu:
-            with torch.cuda.stream(io_stream):
-                current_task.executor_output.to("cpu", non_blocking=True)
-                io_stream.synchronize()
-        executor_out.put(
-            (current_task.scheduler_output, current_task.executor_output))
+            try:
+                next_task = Task.get(block=False)
+                if next_task is None:
+                    go_on = False
+                else:
+                    with torch.cuda.stream(io_stream):
+                        next_task.executor_input.model_input.to(worker.device,
+                                                                non_blocking=True)
 
-        current_task = next_task
-        next_task = None
+                    compute_stream.wait_stream(io_stream)
+
+                    with torch.cuda.stream(compute_stream):
+                        next_task.executor_output = worker(
+                            next_task.executor_input)
+            except queue.Empty:
+                pass
+
+            end_compute.wait()
+            if output_to_cpu:
+                with torch.cuda.stream(io_stream):
+                    current_task.executor_output.to("cpu", non_blocking=True)
+                    io_stream.synchronize()
+            executor_out.put(
+                (current_task.scheduler_output, current_task.executor_output))
+
+            current_task = next_task
+            next_task = None
+    except Exception as e:
+        executor_out.put(e)

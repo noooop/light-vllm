@@ -4,9 +4,7 @@ from typing import Dict, Iterable, List, Optional, Type, Union
 from light_vllm.logger import init_logger
 from light_vllm.wde.core.arg_utils import EngineArgs
 from light_vllm.wde.core.config import EngineConfig
-from light_vllm.wde.core.schema.engine_io import (Inputs, Params,
-                                                  RequestOutput,
-                                                  ValidationError)
+from light_vllm.wde.core.schema.engine_io import Inputs, Params, RequestOutput
 from light_vllm.wde.core.workflow import Workflow
 
 logger = init_logger(__name__)
@@ -94,13 +92,17 @@ class LLMEngine:
                                engine_args.get("revision", None),
                                engine_args.get("code_revision", None))
 
-        workflow_class = get_model_workflow(hf_config)
-        workflow = lazy_import(workflow_class)
+        workflow_cls_str = get_model_workflow(hf_config)
+        workflow_cls = lazy_import(workflow_cls_str)
 
-        engine_args = lazy_import(workflow.EngineArgs)(**engine_args)
+        if hasattr(workflow_cls, "workflow_cls_from_engine_args"):
+            workflow_cls = workflow_cls.workflow_cls_from_engine_args(
+                engine_args)
+
+        engine_args = lazy_import(workflow_cls.EngineArgs)(**engine_args)
 
         engine_config = engine_args.create_engine_config()
-        engine = cls(engine_config, workflow)
+        engine = cls(engine_config, workflow_cls)
         return engine
 
     def add_request(self,
@@ -108,11 +110,10 @@ class LLMEngine:
                     inputs: Optional[Union[str, Inputs]] = None,
                     params: Optional[Params] = None,
                     arrival_time: Optional[float] = None) -> None:
-        try:
-            request = self.input_processor(request_id, inputs, params,
-                                           arrival_time)
-        except ValidationError:
-            logger.error(f"{request_id} validation error")
+        request = self.input_processor(request_id, inputs, params,
+                                       arrival_time)
+
+        # The raised ValidationError will be passed to the upper call stack
         self.scheduler.add_request(request)
 
     def abort_request(self, request_id: Union[str, Iterable[str]]) -> None:
@@ -152,9 +153,14 @@ class LLMEngine:
 
     def _get(self, block):
         try:
-            scheduler_output, executor_output = self.executor_out.get(block)
+            maybe_except = self.executor_out.get(block)
         except Empty:
             return
+
+        if isinstance(maybe_except, Exception):
+            raise maybe_except
+
+        scheduler_output, executor_output = maybe_except
 
         self.num_on_the_fly -= 1
 
