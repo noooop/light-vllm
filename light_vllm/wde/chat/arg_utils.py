@@ -2,7 +2,7 @@ import argparse
 import dataclasses
 import json
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Type, Union
+from typing import List, Optional, Tuple, Union
 
 from light_vllm.layers.quantization import QUANTIZATION_METHODS
 from light_vllm.logger import init_logger
@@ -62,7 +62,6 @@ class ChatEngineArgs(EngineArgs):
     # Note: Specifying a tokenizer pool by passing a class
     # is intended for expert use only. The API may change without
     # notice.
-    tokenizer_pool_type: Union[str, Type["BaseTokenizerGroup"]] = "ray"
     tokenizer_pool_extra_config: Optional[dict] = None
     enable_lora: bool = False
     max_loras: int = 1
@@ -776,7 +775,8 @@ class ChatEngineArgs(EngineArgs):
                                 cache_config=cache_config,
                                 scheduler_config=scheduler_config,
                                 device_config=device_config,
-                                load_config=load_config)
+                                load_config=load_config,
+                                parallel_config=None)
 
 
 @dataclass

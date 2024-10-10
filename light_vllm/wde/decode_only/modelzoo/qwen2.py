@@ -326,7 +326,8 @@ class Qwen2ForCausalLM(nn.Module):
         quant_config: Optional[QuantizationConfig] = None,
     ) -> None:
         # TODO (@robertgshaw2): see if this can be moved out
-        if (cache_config is not None and cache_config.sliding_window is not None
+        if (cache_config is not None
+                and cache_config.sliding_window is not None
                 and hasattr(config, "max_window_layers")):
             raise ValueError("Sliding window for some but all layers is not "
                              "supported. This model uses sliding window "
