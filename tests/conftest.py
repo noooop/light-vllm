@@ -1,6 +1,6 @@
 import pytest
 
-from tests.wde.utils import HfRunner, VllmRunner
+from tests.utils import HfRunner, VllmRunner
 
 
 @pytest.fixture(scope="session")

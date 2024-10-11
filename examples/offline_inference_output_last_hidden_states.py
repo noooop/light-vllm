@@ -1,4 +1,4 @@
-from light_vllm.wde.entrypoints.llm import LLM
+from light_vllm.entrypoints.llm import LLM
 
 prompts = [
     "Hello, my name is",

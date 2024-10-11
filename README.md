@@ -12,62 +12,11 @@ Does not support multiple machines and multiple GPUs
 
 大概删除568个文件，修改47个文件后，终于又可以跑起来最简单的llm推理
 
-benchmarks
-
-python -m benchmarks.baseline
-
-简化前 0.5.4
-- Throughput: 4.76 requests/s, 4878.61 tokens/s, Delay 42.62 ms
-- Throughput: 4.41 requests/s, 4512.93 tokens/s, Delay 58.77 ms
-- Throughput: 4.20 requests/s, 4297.53 tokens/s, Delay 32.85 ms
-- Throughput: 4.91 requests/s, 5023.96 tokens/s, Delay 48.38 ms
-
-简化后
-- Throughput: 4.85 requests/s, 4967.57 tokens/s, Delay 41.71 ms
-- Throughput: 4.99 requests/s, 5113.93 tokens/s, Delay 50.99 ms
-- Throughput: 4.25 requests/s, 4351.67 tokens/s, Delay 32.44 ms
-- Throughput: 5.35 requests/s, 5474.75 tokens/s, Delay 43.90 ms
-
-对贡献这些代码的提交者表示深深的歉意
-
 # step 2 Refactor
+...
 
 # step 3 Modularization + Workflow
-
-将工程拆分成可以即插即用的模型，并提过Workflow配置
-
-```
-抽象 Workflow::
-
-Input(request_id, prompt, params, arrival_time) -> InputProcessor -> Request
-scheduler.add_request(request: Request)
-
-engine.step
-    Request -> RequestProcessor -> SequenceGroup (lazy RequestProcessor)
-    seq_group_metadata_list, scheduler_outputs = scheduler.schedule()
-
-    List[SequenceGroupMetadata], SchedulerOutputs -> ModelPreProcessor -> ExecuteInput
-
-    ExecuteInput -> Executor -> List[ExecuteOutput]
-
-    List[ExecuteOutput] -> OutputProcessor -> RequestOutput
-    RequestOutput -> return to downstream
-```
-
-定义chat模型的ChatWorkflow
-
-```
-class ChatWorkflow(Workflow):
-    InputProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelInputProcessor"
-    RequestProcessor: str = "light_vllm.task.chat.processor.input_processor:ChatModelRequestProcessor"
-    OutputProcessor: str = "light_vllm.task.chat.processor.output_processor:ChatModelOutputProcessor"
-    ModelPreProcessor: str = "light_vllm.task.chat.processor.model_pre_processor:ChatModelPreProcessor"
-    Worker: str = "light_vllm.task.chat.worker.gpu_worker:Worker"
-    
-    Executor: str = "light_vllm.task.base.executor.gpu_executor:GPUExecutor"
-    Scheduler: str = "light_vllm.core.scheduler:Scheduler"
-    Tokenizer: str = "light_vllm.inputs.tokenizer:Tokenizer"
-```
+将工程拆分成可以即插即用的模型，并通过Workflow配置
 
 # step 4 Workflow Defined Engine
 为不同架构的模型实现不同的模块，并按需加载所需的模块。
@@ -76,10 +25,26 @@ class ChatWorkflow(Workflow):
 # step 5 支持 prefill only models
 请移步 [[RFC]: Support encode only models by Workflow Defined Engine](https://github.com/vllm-project/vllm/issues/8453)
 
+# step 6 全部接入Workflow Defined Engine
+将所有东西移入wde文件夹，将所有东西移出wde文件夹，向wde致敬，删除wde文件夹
+
+暂时看起来不错
+
+# 警告
+这只是我个人实验（写着玩的）项目，快速测试各种想法
+
+未经严格测试
+
+我会把成熟功能提交到vllm仓库
+
+生产环境请使用[vllm](https://github.com/vllm-project/vllm)
 
 # Warning
-Not rigorously tested.
-For research and experimentation only.
+This is just my personal experiment project to quickly test various ideas
+
+Not rigorously tested
+
+I will submit tested features to the vllm
 
 Use [vllm](https://github.com/vllm-project/vllm) for production environment
 

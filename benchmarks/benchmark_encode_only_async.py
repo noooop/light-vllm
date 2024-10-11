@@ -3,8 +3,7 @@ import time
 
 
 def patch():
-    from light_vllm.wde.encode_only.executor.gpu_executor import (
-        GPUAsyncExecutor)
+    from light_vllm.encode_only.executor.gpu_executor import GPUAsyncExecutor
 
     simple_execute_loop = GPUAsyncExecutor.simple_execute_loop
 
@@ -39,8 +38,8 @@ def benchmark_vllm(args):
     patch()
 
     from light_vllm import LLMEngine
-    from light_vllm.wde.encode_only.arg_utils import (EncodeOnlyEngineArgs as
-                                                      EngineArgs)
+    from light_vllm.encode_only.arg_utils import (EncodeOnlyEngineArgs as
+                                                  EngineArgs)
 
     prompt = "if" * args.input_len
     requests = [prompt for _ in range(args.num_prompts)]

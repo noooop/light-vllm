@@ -26,7 +26,7 @@ import torch.types
 from typing_extensions import ParamSpec
 
 import light_vllm.envs as envs
-from light_vllm.layers import _custom_ops as ops
+from light_vllm.backends import _custom_ops as ops
 from light_vllm.logger import enable_trace_function_call, init_logger
 
 logger = init_logger(__name__)
@@ -432,7 +432,7 @@ def _generate_random_fp8(
     #-----|-------------|-------------------
     # Inf | N/A         | s.11111.00
     # NaN | s.1111.111  | s.11111.{01,10,11}
-    from light_vllm.layers import _custom_ops as ops
+    from light_vllm.backends import _custom_ops as ops
     tensor_tmp = torch.empty_like(tensor, dtype=torch.float16)
     tensor_tmp.uniform_(low, high)
     ops.convert_fp8(tensor, tensor_tmp)

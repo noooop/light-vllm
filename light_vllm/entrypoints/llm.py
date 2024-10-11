@@ -3,15 +3,14 @@ from typing import List, Optional, Sequence, Union, cast
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
+from light_vllm.core.inputs.tokenizer import get_cached_tokenizer
+from light_vllm.core.llm_engine import LLMEngine
+from light_vllm.core.schema.engine_io import Params, RequestOutput
+from light_vllm.core.schema.engine_io import TextOnlyInputs as PromptInputs
+from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.logger import init_logger
+from light_vllm.reranker.schema.engine_io import RerankerInputs
 from light_vllm.utils import Counter
-from light_vllm.wde.core.inputs.tokenizer import get_cached_tokenizer
-from light_vllm.wde.core.llm_engine import LLMEngine
-from light_vllm.wde.core.schema.engine_io import Params, RequestOutput
-from light_vllm.wde.core.schema.engine_io import TextOnlyInputs as PromptInputs
-from light_vllm.wde.decoding.layers.sampling_params import SamplingParams
-from light_vllm.wde.decoding.schema.engine_io import ChatModelRequestOutput
-from light_vllm.wde.reranker.schema.engine_io import RerankerInputs
 
 logger = init_logger(__name__)
 
@@ -187,25 +186,12 @@ class LLM:
             )
         # Run the engine.
         outputs: List[RequestOutput] = []
-        total_in_toks = 0
-        total_out_toks = 0
         while self.llm_engine.has_unfinished_requests():
             step_outputs = self.llm_engine.step()
             for output in step_outputs:
                 if output.finished:
                     outputs.append(output)
                     if use_tqdm:
-                        if isinstance(output, ChatModelRequestOutput):
-                            # Calculate tokens only for RequestOutput
-                            total_in_toks += len(output.prompt_token_ids)
-                            in_spd = total_in_toks / pbar.format_dict["elapsed"]
-                            total_out_toks += sum(
-                                len(stp.token_ids) for stp in output.outputs)
-                            out_spd = total_out_toks / pbar.format_dict[
-                                "elapsed"]
-                            pbar.postfix = (
-                                f"est. speed input: {in_spd:.2f} toks/s, "
-                                f"output: {out_spd:.2f} toks/s")
                         pbar.update(1)
         if use_tqdm:
             pbar.close()

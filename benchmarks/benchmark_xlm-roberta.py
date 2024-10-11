@@ -47,8 +47,8 @@ def benchmark_vllm(args):
     import torch
 
     from light_vllm import LLMEngine
-    from light_vllm.wde.encode_only.arg_utils import (EncodeOnlyEngineArgs as
-                                                      EngineArgs)
+    from light_vllm.encode_only.arg_utils import (EncodeOnlyEngineArgs as
+                                                  EngineArgs)
 
     prompt = "if" * args.input_len
     requests = [prompt for _ in range(args.num_prompts)]
