@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 from transformers import BatchEncoding, BatchFeature
 
-from light_vllm.prefill_only.layers.attention.selector import AttentionImpls
+from light_vllm.prefill_only.backends.attention.selector import AttentionImpls
 from tests.utils import compare_embeddings
 
 _T = TypeVar("_T", nn.Module, torch.Tensor, BatchEncoding, BatchFeature)

@@ -17,7 +17,7 @@ class PrefillOnlyWorkflow(Workflow):
     Executor: str = "light_vllm.prefill_only.executor.gpu_executor"
     Scheduler: str = ("light_vllm.prefill_only.scheduler:"
                       "PrefillOnlyScheduler")
-    AttnBackend: str = ("light_vllm.prefill_only.layers."
+    AttnBackend: str = ("light_vllm.prefill_only.backends."
                         "attention.selector:AttnBackend")
 
     @classmethod

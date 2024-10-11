@@ -6,7 +6,7 @@ from xformers.ops.fmha.attn_bias import (BlockDiagonalCausalMask,
                                          BlockDiagonalMask)
 
 from light_vllm.logger import init_logger
-from light_vllm.prefill_only.layers.attention.backends.abstract import (
+from light_vllm.prefill_only.backends.attention.backends.abstract import (
     AttentionType, PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
     PrefillOnlyAttentionMetadata)
 

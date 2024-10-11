@@ -2,7 +2,7 @@ from typing import Any, Dict, List, Optional, Type
 
 import torch
 
-from light_vllm.prefill_only.layers.attention.backends.abstract import (
+from light_vllm.prefill_only.backends.attention.backends.abstract import (
     AttentionType, PrefillOnlyAttentionBackend, PrefillOnlyAttentionImpl,
     PrefillOnlyAttentionMetadata)
 

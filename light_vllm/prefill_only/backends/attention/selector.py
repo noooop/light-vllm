@@ -62,29 +62,29 @@ class AttnBackend:
     def get_backend_cls(backend):
         if backend == _Backend.FLASH_ATTN:
             logger.info("Using FLASH ATTN backend.")
-            from light_vllm.prefill_only.layers.attention.backends.flash_attn import (  # noqa: E501
+            from light_vllm.prefill_only.backends.attention.backends.flash_attn import (  # noqa: E501
                 PrefillOnlyFlashAttentionBackend)
             return PrefillOnlyFlashAttentionBackend
         if backend == _Backend.XFORMERS:
             logger.info("Using XFormers backend.")
-            from light_vllm.prefill_only.layers.attention.backends.xformers import (  # noqa: E501
+            from light_vllm.prefill_only.backends.attention.backends.xformers import (  # noqa: E501
                 PrefillOnlyXFormersBackend)
             return PrefillOnlyXFormersBackend
         elif backend == _Backend.TORCH_SDPA:
             logger.info("Using Torch SDPA backend.")
-            from light_vllm.prefill_only.layers.attention.backends.torch_sdpa import (  # noqa: E501
+            from light_vllm.prefill_only.backends.attention.backends.torch_sdpa import (  # noqa: E501
                 PrefillOnlyTorchSDPABackend)
             return PrefillOnlyTorchSDPABackend
         elif backend == _Backend.FLASHINFER:
             logger.info("Using Flashinfer backend.")
             logger.info("When using Flashinfer backend in encode only models, "
                         "you are actually using FLASH ATTN backend")
-            from light_vllm.prefill_only.layers.attention.backends.flashinfer import (  # noqa: E501
+            from light_vllm.prefill_only.backends.attention.backends.flashinfer import (  # noqa: E501
                 PrefillOnlyFlashInferBackend)
             return PrefillOnlyFlashInferBackend
         elif backend == _Backend.TORCH_NAIVE:
             logger.info("Using Torch naive backend.")
-            from light_vllm.prefill_only.layers.attention.backends.torch_naive import (  # noqa: E501
+            from light_vllm.prefill_only.backends.attention.backends.torch_naive import (  # noqa: E501
                 PrefillOnlyTorchNAIVEBackend)
             return PrefillOnlyTorchNAIVEBackend
         else:

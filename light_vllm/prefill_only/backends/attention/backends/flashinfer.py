@@ -1,6 +1,6 @@
 from typing import Type
 
-from light_vllm.prefill_only.layers.attention.backends.flash_attn import (
+from light_vllm.prefill_only.backends.attention.backends.flash_attn import (
     PrefillOnlyFlashAttentionBackend, PrefillOnlyFlashAttentionImpl)
 
 

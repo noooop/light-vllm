@@ -3,7 +3,7 @@ import torch
 from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.processor.model_input_builder import ModelInputBuilder
 from light_vllm.core.schema.execute_io import ExecuteInput
-from light_vllm.prefill_only.layers.attention.backends.abstract import (
+from light_vllm.prefill_only.backends.attention.backends.abstract import (
     PrefillOnlyAttentionMetadataBuilder)
 from light_vllm.prefill_only.schema.engine_io import PrefillOnlySchedulerOutput
 from light_vllm.prefill_only.schema.execute_io import ModelInputForGPU
