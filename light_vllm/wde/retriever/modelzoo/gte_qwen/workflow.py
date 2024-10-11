@@ -6,7 +6,7 @@ from light_vllm.wde.decode_only.workflow import DecodeOnlyWorkflow, Workflow
 class Qwen2Workflow(Workflow):
 
     @classmethod
-    def workflow_cls_from_engine_args(cls, engine_args: Dict):
+    def from_engine_args(cls, engine_args: Dict):
         # gte-Qwen2 and Qwen2 use the same architecture name，Qwen2ForCausalLM.
         # gte-Qwen2 family may have multiple different architectures.
         # gte-Qwen2-1.5B-instruct, does not use enable bidirectional.
@@ -18,4 +18,4 @@ class Qwen2Workflow(Workflow):
             engine_args["output_last_hidden_states"] = True
             engine_args["enable_bidirectional"] = True
 
-        return DecodeOnlyWorkflow.workflow_cls_from_engine_args(engine_args)
+        return DecodeOnlyWorkflow.from_engine_args(engine_args)

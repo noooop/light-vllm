@@ -12,7 +12,7 @@ def benchmark(args):
     os.environ["VLLM_NO_USAGE_STATS"] = "True"
 
     from light_vllm import LLMEngine, SamplingParams
-    from light_vllm.wde.chat.arg_utils import ChatEngineArgs as EngineArgs
+    from light_vllm.wde.decoding.arg_utils import ChatEngineArgs as EngineArgs
 
     engine_args = EngineArgs(
         model=args.model,

@@ -5,8 +5,8 @@ from transformers import (AutoTokenizer, PreTrainedTokenizer,
 
 from light_vllm.envs import VLLM_USE_MODELSCOPE
 from light_vllm.logger import init_logger
-from light_vllm.wde.core.schema.sequence import (Logprob, SamplingParams,
-                                                 Sequence, SequenceGroup)
+from light_vllm.wde.decoding.schema.sequence import (Logprob, SamplingParams,
+                                                     Sequence, SequenceGroup)
 
 logger = init_logger(__name__)
 

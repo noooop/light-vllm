@@ -1,3 +1,6 @@
+from typing import Dict
+
+
 class Workflow:
     EngineArgs: str
     Scheduler: str
@@ -13,3 +16,7 @@ class Workflow:
     @classmethod
     def from_engine(cls, engine):
         return cls()
+
+    @classmethod
+    def from_engine_args(cls, engine_args: Dict):
+        return cls

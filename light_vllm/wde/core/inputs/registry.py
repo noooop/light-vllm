@@ -83,7 +83,7 @@ class InputRegistry:
             :data:`InputProcessor` is not applied to the dummy data.
         """
         # Avoid circular import
-        from light_vllm.wde.core.schema.sequence import SequenceData
+        from light_vllm.wde.decoding.schema.sequence import SequenceData
 
         dummy_seq_data = SequenceData([0] * seq_len)
         dummy_multi_modal_data = None

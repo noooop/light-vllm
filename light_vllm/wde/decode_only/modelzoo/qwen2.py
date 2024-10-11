@@ -34,11 +34,8 @@ from light_vllm.layers.activation import SiluAndMul
 from light_vllm.layers.layernorm import RMSNorm
 from light_vllm.layers.linear import (MergedColumnParallelLinear,
                                       QKVParallelLinear, RowParallelLinear)
-from light_vllm.layers.logits_processor import LogitsProcessor
 from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.rotary_embedding import get_rope
-from light_vllm.layers.sampler import Sampler, SamplerOutput
-from light_vllm.layers.sampling_metadata import SamplingMetadata
 from light_vllm.layers.vocab_embedding import (ParallelLMHead,
                                                VocabParallelEmbedding)
 from light_vllm.models.utils import is_pp_missing_parameter, make_layers
@@ -48,6 +45,9 @@ from light_vllm.wde.core.layers.attention import (Attention, AttentionBackend,
 from light_vllm.wde.core.loader.weight_utils import (default_weight_loader,
                                                      maybe_remap_kv_scale_name)
 from light_vllm.wde.core.schema.execute_io import IntermediateTensors
+from light_vllm.wde.decoding.layers.logits_processor import LogitsProcessor
+from light_vllm.wde.decoding.layers.sampler import Sampler, SamplerOutput
+from light_vllm.wde.decoding.layers.sampling_metadata import SamplingMetadata
 
 
 class Qwen2MLP(nn.Module):

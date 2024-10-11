@@ -93,12 +93,8 @@ class LLMEngine:
                                engine_args.get("code_revision", None))
 
         workflow_cls_str = get_model_workflow(hf_config)
-        workflow_cls = lazy_import(workflow_cls_str)
-
-        if hasattr(workflow_cls, "workflow_cls_from_engine_args"):
-            workflow_cls = workflow_cls.workflow_cls_from_engine_args(
-                engine_args)
-
+        workflow_cls = lazy_import(workflow_cls_str).from_engine_args(
+            engine_args)
         engine_args = lazy_import(workflow_cls.EngineArgs)(**engine_args)
 
         engine_config = engine_args.create_engine_config()

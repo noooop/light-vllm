@@ -19,9 +19,9 @@ from light_vllm.layers.quantization.base_config import QuantizationConfig
 from light_vllm.layers.utils import set_weight_attrs
 from light_vllm.logger import init_logger
 from light_vllm.utils import is_pin_memory_available
-from light_vllm.wde.chat.config import (CacheConfig, ModelConfig,
+from light_vllm.wde.core.config import (CacheConfig, DeviceConfig, LoadConfig,
+                                        LoadFormat, ModelConfig,
                                         SchedulerConfig)
-from light_vllm.wde.core.config import DeviceConfig, LoadConfig, LoadFormat
 from light_vllm.wde.core.layers.attention.abstract import AttentionBackend
 from light_vllm.wde.core.loader.utils import (get_model_architecture,
                                               set_default_torch_dtype)

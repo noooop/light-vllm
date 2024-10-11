@@ -3,14 +3,14 @@ from typing import List, Optional, Sequence, Union, cast
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
-from light_vllm.layers.sampling_params import SamplingParams
 from light_vllm.logger import init_logger
 from light_vllm.utils import Counter
-from light_vllm.wde.chat.schema.engine_io import ChatModelRequestOutput
 from light_vllm.wde.core.inputs.tokenizer import get_cached_tokenizer
 from light_vllm.wde.core.llm_engine import LLMEngine
 from light_vllm.wde.core.schema.engine_io import Params, RequestOutput
 from light_vllm.wde.core.schema.engine_io import TextOnlyInputs as PromptInputs
+from light_vllm.wde.decoding.layers.sampling_params import SamplingParams
+from light_vllm.wde.decoding.schema.engine_io import ChatModelRequestOutput
 from light_vllm.wde.reranker.schema.engine_io import RerankerInputs
 
 logger = init_logger(__name__)
