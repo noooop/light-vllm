@@ -49,6 +49,7 @@ class Request:
 @dataclass
 class TextRequest(Request):
     inputs: Dict
+    params: Optional[Params]
 
 
 class ValidationError(ValueError):
@@ -65,6 +66,7 @@ class SchedulableRequest(Request):
 @dataclass
 class TextSchedulableRequest(SchedulableRequest):
     inputs: TextOnlyInputs
+    params: Optional[Params]
 
     @property
     def num_new_tokens(self):

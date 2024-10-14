@@ -3,8 +3,8 @@ from light_vllm.core.workflow import Workflow
 
 class DecodeDecodingOnlyWorkflow(Workflow):
     EngineArgs: str = "light_vllm.decoding.arg_utils:ChatEngineArgs"
-    InputProcessor: str = ("light_vllm.decoding.processor.input_processor:"
-                           "ChatModelInputProcessor")
+    InputProcessor: str = ("light_vllm.core.processor."
+                           "input_processor:TextInputProcessor")
     RequestProcessor: str = ("light_vllm.decoding.processor.input_processor:"
                              "ChatModelRequestProcessor")
     OutputProcessor: str = ("light_vllm.decoding.processor.output_processor:"

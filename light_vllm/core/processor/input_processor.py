@@ -71,6 +71,7 @@ class TextInputProcessor(InputProcessor):
             arrival_time = time.time()
         request = TextRequest(request_id=str(request_id),
                               inputs=inputs,
+                              params=params,
                               arrival_time=arrival_time)
         return request
 
@@ -117,6 +118,7 @@ class TextRequestProcessor(RequestProcessor):
             request_id=request.request_id,
             inputs=TextOnlyInputs(prompt_token_ids=prompt_token_ids,
                                   prompt=inputs.get("prompt")),
+            params=request.params,
             arrival_time=request.arrival_time)
 
         return schedulable_request

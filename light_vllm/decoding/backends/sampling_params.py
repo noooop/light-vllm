@@ -41,11 +41,6 @@ class SamplingParams:
 
     Args:
         n: Number of output sequences to return for the given prompt.
-        best_of: Number of output sequences that are generated from the prompt.
-            From these `best_of` sequences, the top `n` sequences are returned.
-            `best_of` must be greater than or equal to `n`. This is treated as
-            the beam width when `use_beam_search` is True. By default, `best_of`
-            is set to `n`.
         presence_penalty: Float that penalizes new tokens based on whether they
             appear in the generated text so far. Values > 0 encourage the model
             to use new tokens, while values < 0 encourage the model to repeat
@@ -69,7 +64,6 @@ class SamplingParams:
             considered, relative to the probability of the most likely token.
             Must be in [0, 1]. Set to 0 to disable this.
         seed: Random seed to use for the generation.
-        use_beam_search: Whether to use beam search instead of sampling.
         length_penalty: Float that penalizes sequences based on their length.
             Used in beam search.
         early_stopping: Controls the stopping condition for beam search. It
@@ -114,7 +108,6 @@ class SamplingParams:
     def __init__(
         self,
         n: int = 1,
-        best_of: Optional[int] = None,
         presence_penalty: float = 0.0,
         frequency_penalty: float = 0.0,
         repetition_penalty: float = 1.0,
@@ -123,7 +116,6 @@ class SamplingParams:
         top_k: int = -1,
         min_p: float = 0.0,
         seed: Optional[int] = None,
-        use_beam_search: bool = False,
         length_penalty: float = 1.0,
         early_stopping: Union[bool, str] = False,
         stop: Optional[Union[str, List[str]]] = None,
@@ -141,7 +133,6 @@ class SamplingParams:
         truncate_prompt_tokens: Optional[Annotated[int, Field(ge=1)]] = None,
     ) -> None:
         self.n = n
-        self.best_of = best_of if best_of is not None else n
         self.presence_penalty = presence_penalty
         self.frequency_penalty = frequency_penalty
         self.repetition_penalty = repetition_penalty
@@ -153,7 +144,6 @@ class SamplingParams:
             self.seed = None
         else:
             self.seed = seed
-        self.use_beam_search = use_beam_search
         self.length_penalty = length_penalty
         self.early_stopping = early_stopping
         if stop is None:
@@ -188,25 +178,18 @@ class SamplingParams:
             self.output_text_buffer_length = 0
 
         self._verify_args()
-        if self.use_beam_search:
-            self._verify_beam_search()
-        else:
-            self._verify_non_beam_search()
-            if self.temperature < _SAMPLING_EPS:
-                # Zero temperature means greedy sampling.
-                self.top_p = 1.0
-                self.top_k = -1
-                self.min_p = 0.0
-                self._verify_greedy_sampling()
+        self._verify_non_beam_search()
+        if self.temperature < _SAMPLING_EPS:
+            # Zero temperature means greedy sampling.
+            self.top_p = 1.0
+            self.top_k = -1
+            self.min_p = 0.0
         # eos_token_id is added to this by the engine
         self.all_stop_token_ids = set(self.stop_token_ids)
 
     def _verify_args(self) -> None:
         if self.n < 1:
             raise ValueError(f"n must be at least 1, got {self.n}.")
-        if self.best_of < self.n:
-            raise ValueError(f"best_of must be greater than or equal to n, "
-                             f"got n={self.n} and best_of={self.best_of}.")
         if not -2.0 <= self.presence_penalty <= 2.0:
             raise ValueError("presence_penalty must be in [-2, 2], got "
                              f"{self.presence_penalty}.")
@@ -254,21 +237,6 @@ class SamplingParams:
                 "stop strings are only supported when detokenize is True. "
                 "Set detokenize=True to use stop.")
 
-    def _verify_beam_search(self) -> None:
-        if self.best_of == 1:
-            raise ValueError("best_of must be greater than 1 when using beam "
-                             f"search. Got {self.best_of}.")
-        if self.temperature > _SAMPLING_EPS:
-            raise ValueError("temperature must be 0 when using beam search.")
-        if self.top_p < 1.0 - _SAMPLING_EPS:
-            raise ValueError("top_p must be 1 when using beam search.")
-        if self.top_k != -1:
-            raise ValueError("top_k must be -1 when using beam search.")
-        if self.early_stopping not in [True, False, "never"]:
-            raise ValueError(
-                f"early_stopping must be True, False, or 'never', "
-                f"got {self.early_stopping}.")
-
     def _verify_non_beam_search(self) -> None:
         if self.early_stopping is not False:
             raise ValueError("early_stopping is not effective and must be "
@@ -278,11 +246,6 @@ class SamplingParams:
             raise ValueError(
                 "length_penalty is not effective and must be the "
                 "default value of 1.0 when not using beam search.")
-
-    def _verify_greedy_sampling(self) -> None:
-        if self.best_of > 1:
-            raise ValueError("best_of must be 1 when using greedy sampling."
-                             f"Got {self.best_of}.")
 
     def update_from_generation_config(
             self,
@@ -312,8 +275,6 @@ class SamplingParams:
 
     @cached_property
     def sampling_type(self) -> SamplingType:
-        if self.use_beam_search:
-            return SamplingType.BEAM
         if self.temperature < _SAMPLING_EPS:
             return SamplingType.GREEDY
         if self.seed is not None:
@@ -337,7 +298,6 @@ class SamplingParams:
     def __repr__(self) -> str:
         return (
             f"SamplingParams(n={self.n}, "
-            f"best_of={self.best_of}, "
             f"presence_penalty={self.presence_penalty}, "
             f"frequency_penalty={self.frequency_penalty}, "
             f"repetition_penalty={self.repetition_penalty}, "
@@ -346,7 +306,6 @@ class SamplingParams:
             f"top_k={self.top_k}, "
             f"min_p={self.min_p}, "
             f"seed={self.seed}, "
-            f"use_beam_search={self.use_beam_search}, "
             f"length_penalty={self.length_penalty}, "
             f"early_stopping={self.early_stopping}, "
             f"stop={self.stop}, "
