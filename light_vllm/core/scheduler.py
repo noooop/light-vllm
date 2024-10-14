@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
 from collections import deque
-from typing import Deque, Iterable, List, Union
+from typing import Deque, Iterable, List, Set, Union
 
 from light_vllm.core.config import SchedulerConfig
-from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.processor.input_processor import RequestProcessor
 from light_vllm.core.schema.engine_io import (Request, RequestOutput,
                                               SchedulerOutput)
@@ -13,7 +12,7 @@ logger = init_logger(__name__)
 
 
 class Scheduler(ABC):
-    support_scheduling = []
+    support_scheduling: List[str] = []
 
     def __init__(
         self,
@@ -25,11 +24,11 @@ class Scheduler(ABC):
 
         self.waiting: Deque[Request] = deque()
 
-        self.requests = set()
-        self.aborted_requests = set()
+        self.requests: Set[str] = set()
+        self.aborted_requests: Set[str] = set()
 
     @classmethod
-    def from_engine(cls, engine: LLMEngine) -> "Scheduler":
+    def from_engine(cls, engine) -> "Scheduler":
         raise NotImplementedError
 
     def add_request(self, request: Request) -> None:
@@ -47,7 +46,7 @@ class Scheduler(ABC):
         request_ids = set(request_id)
 
         self.requests -= request_ids
-        self.aborted_requests += request_ids
+        self.aborted_requests |= request_ids
 
     def remove_abort_request(
             self, request_outputs: List[RequestOutput]) -> List[RequestOutput]:

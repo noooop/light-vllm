@@ -3,6 +3,7 @@ import torch.nn as nn
 
 from light_vllm.backends.attention import AttentionBackend
 from light_vllm.core.config import DeviceConfig, LoadConfig, ModelConfig
+from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.logger import init_logger
 from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
 from light_vllm.prefill_only.schema.execute_io import ModelInputForGPU
@@ -56,5 +57,5 @@ class ModelRunner:
     def execute_model(
         self,
         model_input: ModelInputForGPU,
-    ):
+    ) -> ExecuteOutput:
         return self.model(**model_input.to_dict())

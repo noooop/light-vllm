@@ -4,7 +4,7 @@ from light_vllm.encode_only.workflow import EncodeOnlyWorkflow
 
 class RetrieverEncodeOnlyWorkflow(EncodeOnlyWorkflow):
     OutputProcessor: str = ("light_vllm.retriever.processor."
-                            "output_processor:RetrieverModelOutputProcessor")
+                            "output_processor:RetrieverOutputProcessor")
 
 
 class RetrieverDecodeOnlyWorkflow(DecodeOnlyWorkflow):

@@ -23,7 +23,7 @@ class DecodeOnlyHiddenStatesOutputProcessor(OutputProcessor):
 
         request_outputs = []
         offset = 0
-        for request in scheduler_output.requests:
+        for request in scheduler_output.scheduled_requests:
             prompt_token_ids = request.inputs.prompt_token_ids
             n_tokens = len(prompt_token_ids)
             request_outputs.append(

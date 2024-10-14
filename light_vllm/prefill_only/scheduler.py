@@ -1,19 +1,18 @@
 from dataclasses import dataclass, field
-from typing import Set
+from typing import Set, cast
 
+from light_vllm.core.processor.input_processor import RequestProcessor
 from light_vllm.core.scheduler import Scheduler
-from light_vllm.core.schema.engine_io import SchedulableRequest
 from light_vllm.logger import init_logger
 from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
-from light_vllm.prefill_only.processor.input_processor import (
-    PrefillOnlyModelRequestProcessor)
-from light_vllm.prefill_only.schema.engine_io import PrefillOnlySchedulerOutput
+from light_vllm.prefill_only.schema.engine_io import (
+    PrefillOnlySchedulerOutput, SchedulableRequest)
 
 logger = init_logger(__name__)
 
 
 @dataclass
-class SchedulingBudget:
+class PrefillOnlySchedulingBudget:
     token_budget: int
     max_num_requests: int
     _curr_requests: Set[str] = field(default_factory=set)
@@ -48,7 +47,7 @@ class PrefillOnlyScheduler(Scheduler):
     def __init__(
         self,
         scheduler_config: PrefillOnlySchedulerConfig,
-        request_processor: PrefillOnlyModelRequestProcessor,
+        request_processor: RequestProcessor,
     ) -> None:
         super().__init__(scheduler_config, request_processor)
 
@@ -57,17 +56,19 @@ class PrefillOnlyScheduler(Scheduler):
         return cls(engine.engine_config.scheduler_config,
                    engine.request_processor)
 
-    def schedule(self):
-        budget = SchedulingBudget(
+    def schedule(self) -> PrefillOnlySchedulerOutput:
+        budget = PrefillOnlySchedulingBudget(
             token_budget=self.scheduler_config.max_num_batched_tokens,
-            max_num_requests=self.scheduler_config.max_num_requests,
+            max_num_requests=self.scheduler_config.max_num_seqs,
         )
 
         waiting_queue = self.waiting
 
-        scheduler_outputs = []
+        scheduled_requests = []
+        ignored_requests = []
         while waiting_queue:
             request = waiting_queue[0]
+
             if request.request_id in self.aborted_requests:
                 self.aborted_requests.remove(request.request_id)
                 waiting_queue.popleft()
@@ -77,13 +78,23 @@ class PrefillOnlyScheduler(Scheduler):
                 request = self.request_processor(request)
                 waiting_queue[0] = request
 
+            request = cast(SchedulableRequest, request)
+
             num_new_tokens = request.num_new_tokens
+
+            if num_new_tokens > self.scheduler_config.max_model_len:
+                self.requests.remove(request.request_id)
+                waiting_queue.popleft()
+                ignored_requests.append(request)
+                continue
 
             if not budget.can_schedule(num_new_tokens=num_new_tokens):
                 break
 
             budget.add_num_batched_tokens(request.request_id, num_new_tokens)
             waiting_queue.popleft()
-            scheduler_outputs.append(request)
+            scheduled_requests.append(request)
 
-        return PrefillOnlySchedulerOutput(requests=scheduler_outputs)
+        return PrefillOnlySchedulerOutput(
+            scheduled_requests=scheduled_requests,
+            ignored_requests=ignored_requests)

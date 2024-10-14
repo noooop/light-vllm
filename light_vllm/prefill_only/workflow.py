@@ -3,13 +3,10 @@ from light_vllm.core.workflow import Workflow
 
 class PrefillOnlyWorkflow(Workflow):
 
-    InputProcessor: str = ("light_vllm.prefill_only.processor."
-                           "input_processor:PrefillOnlyModelInputProcessor")
-    RequestProcessor: str = (
-        "light_vllm.prefill_only.processor."
-        "input_processor:PrefillOnlyModelRequestProcessor")
-    OutputProcessor: str = ("light_vllm.prefill_only.processor."
-                            "output_processor:PrefillOnlyModelOutputProcessor")
+    InputProcessor: str = ("light_vllm.core.processor."
+                           "input_processor:TextInputProcessor")
+    RequestProcessor: str = ("light_vllm.core.processor."
+                             "input_processor:TextRequestProcessor")
     ModelInputBuilder: str = (
         "light_vllm.prefill_only.processor."
         "model_input_builder:PrefillOnlyModelInputBuilder")

@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List, Optional, Union
+from typing import Dict, List, Optional, Union
 
 
 class Params:
@@ -8,12 +8,6 @@ class Params:
 
 class Inputs:
     pass
-
-
-@dataclass
-class Request:
-    request_id: str
-    arrival_time: float
 
 
 @dataclass
@@ -32,22 +26,49 @@ class TokensPrompt(Inputs):
     """A list of token IDs to pass to the model."""
 
 
-PromptInput = Union[str, TextPrompt, TokensPrompt]
-
-
 @dataclass
 class TextOnlyInputs(Inputs):
     prompt_token_ids: List[int]
     """The token IDs of the prompt."""
 
-    prompt: Optional[str]
+    prompt: Optional[str] = None
     """
     The original prompt text corresponding to the token IDs, if available.
     """
 
 
-class SchedulableRequest(Request):
+PromptInput = Union[str, Dict, TextPrompt, TokensPrompt, TextOnlyInputs]
+
+
+@dataclass
+class Request:
+    request_id: str
+    arrival_time: float
+
+
+@dataclass
+class TextRequest(Request):
+    inputs: Dict
+
+
+class ValidationError(ValueError):
     pass
+
+
+class SchedulableRequest(Request):
+
+    @property
+    def num_new_tokens(self):
+        raise NotImplementedError
+
+
+@dataclass
+class TextSchedulableRequest(SchedulableRequest):
+    inputs: TextOnlyInputs
+
+    @property
+    def num_new_tokens(self):
+        return len(self.inputs.prompt_token_ids)
 
 
 @dataclass
@@ -55,9 +76,6 @@ class SchedulerOutput:
     pass
 
 
+@dataclass
 class RequestOutput(Request):
     finished: bool
-
-
-class ValidationError(ValueError):
-    pass

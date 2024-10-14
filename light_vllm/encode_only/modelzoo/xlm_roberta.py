@@ -33,6 +33,7 @@ from light_vllm.core.loader.weight_utils import (default_weight_loader,
                                                  maybe_remap_kv_scale_name)
 from light_vllm.core.models.utils import is_pp_missing_parameter
 from light_vllm.core.schema.execute_io import IntermediateTensors
+from light_vllm.encode_only.schema.execute_io import EncodeOnlyExecuteOutput
 
 logger = logging.get_logger(__name__)
 
@@ -375,7 +376,12 @@ class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
         "roberta.pooler.dense.weight",
         "roberta.pooler.dense.bias",
         # token_type_embeddings is all zero
-        "roberta.embeddings.token_type_embeddings.weight"
+        "roberta.embeddings.token_type_embeddings.weight",
+
+        # We only need last_hidden_states to verify correctness
+        # lm_head is too slow to calculate
+        "lm_head.dense.weight",
+        "lm_head.layer_norm.weight"
     ]
 
     def __init__(self,
@@ -389,7 +395,6 @@ class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
         self.quant_config = quant_config
 
         self.roberta = XLMRobertaModel(config, attn_backend, quant_config)
-        self.lm_head = XLMRobertaLMHead(config, quant_config)
 
     def forward(
         self,
@@ -398,20 +403,16 @@ class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
         kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors] = None,
-    ) -> torch.Tensor:
+    ) -> EncodeOnlyExecuteOutput:
         assert kv_caches is None
         sequence_output = self.roberta(
             input_ids,
             positions,
             attn_metadata,
         )
-        logits = self.lm_head(sequence_output)
-        return logits
 
-    def tie_weights(self):
-        self.lm_head.decoder.weight = (
-            self.roberta.embeddings.word_embeddings.weight)
-        self.lm_head.decoder.bias.zero_()
+        return EncodeOnlyExecuteOutput(last_hidden_states=sequence_output,
+                                       pooled_output=None)
 
 
 class XLMRobertaClassificationHead(nn.Module):

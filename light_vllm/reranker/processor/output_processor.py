@@ -21,7 +21,7 @@ class RerankerOutputProcessor(OutputProcessor):
                  execute_output: torch.Tensor) -> List[RerankerRequestOutput]:
         execute_output = execute_output.view(-1, ).cpu().numpy().tolist()
         request_outputs = []
-        for i, request in enumerate(scheduler_output.requests):
+        for i, request in enumerate(scheduler_output.scheduled_requests):
             prompt_token_ids = request.inputs.prompt_token_ids
             request_outputs.append(
                 RerankerRequestOutput(request_id=request.request_id,

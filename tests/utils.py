@@ -98,19 +98,15 @@ class HfRunner:
         )
 
     @torch.inference_mode
-    def encode(self, prompts: List[str]) -> List[List[torch.Tensor]]:
+    def encode(self, prompts: List[str]) -> torch.Tensor:
         encoded_input = self.tokenizer(prompts,
                                        padding=True,
                                        truncation=True,
                                        return_tensors="pt").to("cuda")
 
-        logits = self.model(**encoded_input).logits
-        seq_len = encoded_input.attention_mask.sum(axis=1)
-
-        logits_list = []
-        for e, s in zip(logits, seq_len):
-            logits_list.append(e[:s])
-        return logits_list
+        last_hidden_states = self.model(
+            **encoded_input, output_hidden_states=True).hidden_states
+        return last_hidden_states[-1][:, 0]
 
     def __enter__(self):
         return self
@@ -139,7 +135,8 @@ class SentenceTransformersRunner(HfRunner):
                                 device="cpu",
                                 trust_remote_code=True).to(dtype=torch_dtype))
 
-    def encode(self, prompts: List[str]) -> List[List[torch.Tensor]]:
+    @torch.inference_mode
+    def encode(self, prompts: List[str]) -> torch.Tensor:
         return self.model.encode(prompts,
                                  convert_to_numpy=False,
                                  normalize_embeddings=False)

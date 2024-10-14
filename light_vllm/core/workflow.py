@@ -4,7 +4,7 @@ from typing import Dict
 class Workflow:
     EngineArgs: str
     Scheduler: str
-    GetAttnBackend: str
+    AttnBackend: str
     Tokenizer: str = "light_vllm.core.inputs.tokenizer:Tokenizer"
     InputProcessor: str
     RequestProcessor: str

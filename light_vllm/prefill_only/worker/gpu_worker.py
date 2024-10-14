@@ -6,6 +6,7 @@ from light_vllm.backends.attention import AttentionBackend
 from light_vllm.backends.utils import set_random_seed
 from light_vllm.core.config import (DeviceConfig, EngineConfig, LoadConfig,
                                     ModelConfig)
+from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.core.worker import WorkerBase
 from light_vllm.platforms import current_platform
 from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
@@ -66,7 +67,8 @@ class Worker(WorkerBase):
         self.model_runner.load_model()
 
     @torch.inference_mode
-    def __call__(self, execute_input: PrefillOnlyExecuteInput):
+    def __call__(self,
+                 execute_input: PrefillOnlyExecuteInput) -> ExecuteOutput:
         output = self.model_runner.execute_model(execute_input.model_input)
         return output
 

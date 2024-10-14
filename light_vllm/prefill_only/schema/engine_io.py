@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Iterable, List
+from typing import List
 
 import torch
 
@@ -30,10 +30,11 @@ class PrefillOnlySchedulableRequest(SchedulableRequest):
 
 @dataclass
 class PrefillOnlySchedulerOutput(SchedulerOutput):
-    requests: Iterable[PrefillOnlyRequest]
+    scheduled_requests: List[SchedulableRequest]
+    ignored_requests: List[SchedulableRequest]
 
     def is_empty(self) -> bool:
-        return not self.requests
+        return not self.scheduled_requests
 
 
 class PrefillOnlyRequestOutput(RequestOutput):

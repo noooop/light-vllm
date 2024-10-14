@@ -29,10 +29,12 @@ from light_vllm.backends.attention import (Attention, AttentionBackend,
 from light_vllm.backends.linear import (ColumnParallelLinear,
                                         QKVParallelLinear, RowParallelLinear)
 from light_vllm.backends.quantization import QuantizationConfig
+from light_vllm.backends.vocab_embedding import VocabParallelEmbedding
 from light_vllm.core.loader.weight_utils import (default_weight_loader,
                                                  maybe_remap_kv_scale_name)
 from light_vllm.core.models.utils import is_pp_missing_parameter
 from light_vllm.core.schema.execute_io import IntermediateTensors
+from light_vllm.encode_only.schema.execute_io import EncodeOnlyExecuteOutput
 
 logger = logging.get_logger(__name__)
 
@@ -106,7 +108,7 @@ class LoadWeightsMixin:
 
 class BertEmbeddings(nn.Module):
 
-    def __init__(self, config: BertConfig):
+    def __init__(self, config: BertConfig, quant_config: QuantizationConfig):
         super().__init__()
         self.config = config
         self.position_embedding_type = getattr(config,
@@ -114,14 +116,13 @@ class BertEmbeddings(nn.Module):
                                                "absolute")
         assert self.position_embedding_type == "absolute"
 
-        self.word_embeddings = nn.Embedding(config.vocab_size,
-                                            config.hidden_size,
-                                            padding_idx=config.pad_token_id)
+        self.word_embeddings = VocabParallelEmbedding(
+            config.vocab_size, config.hidden_size, quant_config=quant_config)
         self.token_type_embeddings0 = None
-        self.position_embeddings = nn.Embedding(
+        self.position_embeddings = VocabParallelEmbedding(
             config.max_position_embeddings,
             config.hidden_size,
-            padding_idx=config.pad_token_id)
+            quant_config=quant_config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size,
                                       eps=config.layer_norm_eps)
 
@@ -348,7 +349,7 @@ class BertModel(nn.Module):
                  quant_config: Optional[QuantizationConfig] = None):
         super().__init__()
         self.config = config
-        self.embeddings = BertEmbeddings(config)
+        self.embeddings = BertEmbeddings(config, quant_config)
         self.encoder = BertEncoder(config, attn_backend, quant_config)
         self.pooler = BertPooler(config) if add_pooling_layer else None
 
@@ -398,7 +399,7 @@ class BertForMaskedLM(nn.Module, LoadWeightsMixin):
         kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors] = None,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> EncodeOnlyExecuteOutput:
         assert kv_caches is None
 
         sequence_output, pooled_output = self.bert(
@@ -407,4 +408,5 @@ class BertForMaskedLM(nn.Module, LoadWeightsMixin):
             attn_metadata,
         )
 
-        return sequence_output, pooled_output
+        return EncodeOnlyExecuteOutput(last_hidden_states=sequence_output,
+                                       pooled_output=pooled_output)

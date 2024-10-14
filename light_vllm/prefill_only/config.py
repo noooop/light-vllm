@@ -58,6 +58,10 @@ class PrefillOnlySchedulerConfig(SchedulerConfig):
             raise ValueError(f"scheduling {self.scheduling} must "
                              f"in sync, async double_buffer")
 
+    @property
+    def max_num_seqs(self) -> int:
+        return self.max_num_requests
+
 
 class PrefillOnlyParallelConfig(ParallelConfig):
 
