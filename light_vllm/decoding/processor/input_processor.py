@@ -102,7 +102,6 @@ class ChatModelRequestProcessor(TextRequestProcessor):
         schedulable_request = TextRequestProcessor.__call__(self, request)
 
         seq_group = self.sequence_processor(schedulable_request)
-        print(seq_group)
         return ChatSchedulableRequest(request_id=request.request_id,
                                       seq_group=seq_group,
                                       arrival_time=request.arrival_time)

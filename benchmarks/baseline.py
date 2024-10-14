@@ -47,9 +47,8 @@ def benchmark(args):
         inputs = prompt
         sampling_params = SamplingParams(
             n=args.n,
-            temperature=0.0 if args.use_beam_search else 1.0,
+            temperature=1.0,
             top_p=1.0,
-            use_beam_search=args.use_beam_search,
             ignore_eos=True,
             max_tokens=output_len,
         )
@@ -101,7 +100,6 @@ if __name__ == '__main__':
     args.tensor_parallel_size = 1
     args.seed = 0
     args.n = 1
-    args.use_beam_search = False
     args.num_prompts = 1000
     args.dtype = 'auto'
     args.max_model_len = 5000
