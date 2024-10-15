@@ -88,6 +88,7 @@ class ChatModelPreProcessor(ModelInputBuilder):
                                                      model_input.query_lens,
                                                      self.device,
                                                      self.pin_memory)
+        sampling_metadata.skip_sampler_cpu_output = True
 
         is_prompt = (seq_group_metadata_list[0].is_prompt
                      if seq_group_metadata_list else None)

@@ -1,17 +1,16 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union
 
+import msgspec
 import torch
 
 from light_vllm.core.schema.execute_io import (ExecuteInput, ExecuteOutput,
                                                ModelInput, WorkerInput)
+from light_vllm.decoding.backends.sampling_metadata import (
+    SamplingMetadata, SequenceGroupToSample)
 from light_vllm.decoding.schema.sequence import (Logprob, PromptLogprobs,
                                                  SequenceGroupMetadata)
-
-if TYPE_CHECKING:
-    from light_vllm.core.backends.attention import AttentionMetadata
-    from light_vllm.decoding.backends.sampling_metadata import SamplingMetadata
 
 
 @dataclass
@@ -152,8 +151,51 @@ class CompletionSequenceGroupOutput(SequenceGroupOutput):
                 and self.prompt_logprobs == other.prompt_logprobs)
 
 
+from light_vllm.decoding.backends.sampling_params import SamplingType
+
+# (num_token_ids, num_parent_ids) per sequence group.
+SampleResultType = List[Tuple[List[int], List[int]]]
+
+# Types of temporary data structures used for
+# computing sample_result
+SampleMetadataType = Dict[SamplingType, Tuple[List[int],
+                                              List[SequenceGroupToSample]]]
+MultinomialSamplesType = Dict[SamplingType, torch.Tensor]
+SampleResultsDictType = Dict[int, Tuple[List[int], List[int]]]
+
+
+# Encapsulates temporary data structures for computing
+# sample_result.
+#
+# * For multi-step scheduling: must be returned
+#   by `Sampler.forward()` and used later to compute the pythonized
+#   sample_result
+#
+# * For single-step scheduling: consumed immediately
+#   inside `Sampler.forward()` to compute pythonized sample_result.
 @dataclass
-class SamplerOutput(ExecuteOutput):
+class SampleResultArgsType:
+    sample_metadata: SampleMetadataType
+    multinomial_samples: MultinomialSamplesType
+    sample_results_dict: SampleResultsDictType
+    sampling_metadata: SamplingMetadata
+    greedy_samples: Optional[torch.Tensor]
+    beam_search_logprobs: Optional[torch.Tensor]
+
+
+# Union of non-deferred (single-step scheduling)
+# vs deferred (multi-step scheduling)
+# sample result types
+MaybeDeferredSampleResultType = Union[SampleResultType, SampleResultArgsType]
+
+# Abbreviation of the _sample() return type
+SampleReturnType = Tuple[MaybeDeferredSampleResultType, Optional[torch.Tensor]]
+
+
+class SamplerOutput(
+        msgspec.Struct,
+        omit_defaults=True,  # type: ignore[call-arg]
+        array_like=True):  # type: ignore[call-arg]
     """For each sequence group, we generate a list of SequenceOutput object,
     each of which contains one possible candidate for the next token.
 
@@ -169,14 +211,31 @@ class SamplerOutput(ExecuteOutput):
     # On-device tensor containing the logprobs of each token.
     logprobs: Optional["torch.Tensor"] = None
 
+    # Holds either (1) the pythonized sampler result (single-step scheduling)
+    # or (2) what will be arguments for later deferred pythonization of the
+    # sampler result (muliti-step scheduling)
+    deferred_sample_results_args: Optional[SampleResultArgsType] = None
+
     # On-device tensor containing the sampled token ids.
     sampled_token_ids: Optional[torch.Tensor] = None
-
-    # Spec decode metrics populated by workers.
-    spec_decode_worker_metrics: Optional["SpecDecodeWorkerMetrics"] = None
+    # CPU tensor containing the sampled token ids. Used during multi-step to
+    # return the sampled token ids from last rank to AsyncLLMEngine to be
+    # 'broadcasted' to all other PP ranks for next step.
+    sampled_token_ids_cpu: Optional[torch.Tensor] = None
 
     # Optional last hidden states from the model.
     hidden_states: Optional[torch.Tensor] = None
+
+    # Optional prefill hidden states from the model
+    # (used for models like EAGLE).
+    prefill_hidden_states: Optional[torch.Tensor] = None
+
+    # Time taken in the forward pass for this across all workers
+    model_forward_time: Optional[float] = None
+
+    # Time taken in the model execute function. This will include model forward,
+    # block/sync across workers, cpu-gpu sync time and sampling time.
+    model_execute_time: Optional[float] = None
 
     def __getitem__(self, idx: int):
         return self.outputs[idx]
@@ -198,11 +257,9 @@ class SamplerOutput(ExecuteOutput):
                                     else self.sampled_token_probs.shape)
         sampled_token_ids_repr = ("None" if self.sampled_token_ids is None else
                                   self.sampled_token_ids.shape)
-        return (
-            f"SamplerOutput(outputs={self.outputs}, "
-            f"sampled_token_probs={sampled_token_probs_repr}, "
-            f"sampled_token_ids={sampled_token_ids_repr}, "
-            f"spec_decode_worker_metrics={self.spec_decode_worker_metrics})")
+        return (f"SamplerOutput(outputs={self.outputs}, "
+                f"sampled_token_probs={sampled_token_probs_repr}, "
+                f"sampled_token_ids={sampled_token_ids_repr}.")
 
 
 @dataclass

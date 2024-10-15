@@ -15,7 +15,7 @@ from light_vllm.decoding.config import (CacheConfig, ModelConfig,
 from light_vllm.decoding.inputs import INPUT_REGISTRY
 from light_vllm.decoding.runner.cuda_graph_util import CUDAGraph
 from light_vllm.decoding.schema.execute_io import (
-    DecodingModelInputForGPUWithSamplingMetadata)
+    DecodingModelInputForGPUWithSamplingMetadata, SamplerOutput)
 from light_vllm.decoding.schema.sequence import SequenceGroupMetadata
 from light_vllm.logger import init_logger
 from light_vllm.utils import (DeviceMemoryProfiler, is_hip,
@@ -168,7 +168,7 @@ class GPUModelRunner:
         self,
         model_input: DecodingModelInputForGPUWithSamplingMetadata,
         kv_caches: List[torch.Tensor],
-    ) -> Optional[List[ExecuteOutput]]:
+    ) -> SamplerOutput:
 
         # Currently cuda graph is only supported by the decode phase.
         assert model_input.attn_metadata is not None
@@ -189,9 +189,8 @@ class GPUModelRunner:
                                            model_input.sampling_metadata)
 
         # Sample the next token.
-        output: ExecuteOutput = self.model.sample(
+        output = self.model.sample(
             logits=logits,
             sampling_metadata=model_input.sampling_metadata,
         )
-
-        return [output]
+        return output
