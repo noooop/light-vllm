@@ -1,10 +1,10 @@
 import time
 from typing import Optional, Sequence
 
-from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.processor.input_processor import (InputProcessor,
                                                        RequestProcessor)
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.core.schema.engine_io import Params, ValidationError
 from light_vllm.prefill_only.schema.engine_io import (
     PrefillOnlyInput, PrefillOnlySchedulableRequest)
