@@ -11,23 +11,24 @@ import tempfile
 import threading
 import uuid
 import warnings
-from collections import defaultdict
 from functools import lru_cache, partial, wraps
 from platform import uname
+from random import random
 from typing import (Any, AsyncIterator, Awaitable, Callable, Dict, Generic,
-                    Hashable, List, Optional, OrderedDict, Set, Tuple, TypeVar,
-                    Union, overload)
+                    Hashable, List, Literal, Optional, OrderedDict, Set, Tuple,
+                    Type, TypeVar, Union, assert_never, overload)
 
 import numpy as np
 import numpy.typing as npt
 import psutil
 import torch
 import torch.types
-from typing_extensions import ParamSpec
+from typing_extensions import ParamSpec, TypeIs
 
 import light_vllm.envs as envs
 from light_vllm.backends import _custom_ops as ops
 from light_vllm.logger import enable_trace_function_call, init_logger
+from light_vllm.platforms import current_platform
 
 logger = init_logger(__name__)
 
@@ -177,6 +178,44 @@ class LRUCache(Generic[T]):
         self.cache.clear()
 
 
+class PyObjectCache:
+    """Used to cache python objects to avoid object allocations
+    across scheduler iterations.
+    """
+
+    def __init__(self, obj_builder):
+        self._obj_builder = obj_builder
+        self._index = 0
+
+        self._obj_cache = []
+        for _ in range(128):
+            self._obj_cache.append(self._obj_builder())
+
+    def _grow_cache(self):
+        # Double the size of the cache
+        num_objs = len(self._obj_cache)
+        for _ in range(num_objs):
+            self._obj_cache.append(self._obj_builder())
+
+    def get_object(self):
+        """Returns a pre-allocated cached object. If there is not enough
+        objects, then the cache size will double.
+        """
+        if self._index >= len(self._obj_cache):
+            self._grow_cache()
+            assert self._index < len(self._obj_cache)
+
+        obj = self._obj_cache[self._index]
+        self._index += 1
+
+        return obj
+
+    def reset(self):
+        """Makes all cached-objects available for the next scheduler iteration.
+        """
+        self._index = 0
+
+
 def is_hip() -> bool:
     return torch.version.hip is not None
 
@@ -236,6 +275,22 @@ def get_max_shared_memory_bytes(gpu: int = 0) -> int:
 def get_cpu_memory() -> int:
     """Returns the total CPU memory of the node in bytes."""
     return psutil.virtual_memory().total
+
+
+def seed_everything(seed: int) -> None:
+    """
+    Set the seed of each random module.
+
+    Loosely based on: https://github.com/Lightning-AI/pytorch-lightning/blob/2.4.0/src/lightning/fabric/utilities/seed.py#L20
+    """
+    random.seed(seed)
+    np.random.seed(seed)
+
+    if current_platform.is_cuda_alike():
+        torch.cuda.manual_seed_all(seed)
+
+    if is_xpu():
+        torch.xpu.manual_seed_all(seed)
 
 
 def random_uuid() -> str:
@@ -474,9 +529,7 @@ def create_kv_caches_with_random_flash(
     seed: int = 0,
     device: Optional[str] = "cuda",
 ) -> Tuple[List[torch.Tensor], List[torch.Tensor]]:
-    torch.random.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
+    seed_everything(seed)
 
     torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
     key_value_cache_shape = (num_blocks, 2, block_size, num_heads, head_size)
@@ -518,9 +571,7 @@ def create_kv_caches_with_random(
             f"Does not support key cache of type fp8 with head_size {head_size}"
         )
 
-    torch.random.manual_seed(seed)
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed(seed)
+    seed_everything(seed)
 
     torch_dtype = get_kv_cache_torch_dtype(cache_dtype, model_dtype)
 
@@ -560,7 +611,8 @@ def create_kv_caches_with_random(
 
 @lru_cache
 def print_warning_once(msg: str) -> None:
-    logger.warning(msg)
+    # Set the stacklevel to 2 to print the caller's line info
+    logger.warning(msg, stacklevel=2)
 
 
 @lru_cache(maxsize=None)
@@ -583,14 +635,14 @@ def is_pin_memory_available() -> bool:
     return True
 
 
-class CudaMemoryProfiler:
+class DeviceMemoryProfiler:
 
     def __init__(self, device: Optional[torch.types.Device] = None):
         self.device = device
 
     def current_memory_usage(self) -> float:
         # Return the memory usage in bytes.
-        if torch.cuda.is_available():
+        if current_platform.is_cuda_alike():
             torch.cuda.reset_peak_memory_stats(self.device)
             mem = torch.cuda.max_memory_allocated(self.device)
         elif is_xpu():
@@ -609,16 +661,6 @@ class CudaMemoryProfiler:
 
         # Force garbage collection
         gc.collect()
-
-
-def str_to_int_tuple(s: str) -> Tuple[int, ...]:
-    """Convert a string to a tuple of integers."""
-    try:
-        return tuple(map(int, s.split(",")))
-    except ValueError as e:
-        raise ValueError(
-            "String must be a series of integers separated by commas "
-            f"(e.g., 1, 2, 3). Given input: {s}") from e
 
 
 def make_ndarray_with_pad(
@@ -696,21 +738,22 @@ def get_dtype_size(dtype: torch.dtype) -> int:
     return torch.tensor([], dtype=dtype).element_size()
 
 
-def merge_dicts(dict1: Dict[K, List[T]],
-                dict2: Dict[K, List[T]]) -> Dict[K, List[T]]:
-    """Merge 2 dicts that have key -> List of items.
+# `collections` helpers
+def is_list_of(
+    value: object,
+    typ: Type[T],
+    *,
+    check: Literal["first", "all"] = "first",
+) -> TypeIs[List[T]]:
+    if not isinstance(value, list):
+        return False
 
-    When a key conflicts, the values in dict1 is prioritized.
-    """
-    merged_dict: Dict[K, List[T]] = defaultdict(list)
+    if check == "first":
+        return len(value) == 0 or isinstance(value[0], typ)
+    elif check == "all":
+        return all(isinstance(v, typ) for v in value)
 
-    for key, value in dict1.items():
-        merged_dict[key].extend(value)
-
-    for key, value in dict2.items():
-        merged_dict[key].extend(value)
-
-    return dict(merged_dict)
+    assert_never(check)
 
 
 JSONTree = Union[Dict[str, "JSONTree[T]"], List["JSONTree[T]"],
@@ -843,6 +886,7 @@ def enable_trace_function_call_for_thread() -> None:
         enable_trace_function_call(log_path)
 
 
+# `functools` helpers
 def identity(value: T) -> T:
     return value
 
@@ -894,6 +938,7 @@ def _cuda_device_count_stateless(
     # https://github.com/pytorch/pytorch/blob/
     # c1cd946818442aca8c7f812b16d187ce1586c3bc/
     # torch/cuda/__init__.py#L831C1-L831C17
+    import torch.cuda
     import torch.version
 
     if not torch.cuda._is_compiled():
@@ -912,7 +957,7 @@ def _cuda_device_count_stateless(
 def cuda_device_count_stateless() -> int:
     """Get number of CUDA devices, caching based on the value of
     CUDA_VISIBLE_DEVICES at the time of call.
-    
+
     This should be used instead of torch.cuda.device_count()
     unless CUDA_VISIBLE_DEVICES has already been set to the desired
     value."""
@@ -1013,3 +1058,167 @@ async def _run_task_with_lock(task: Callable, lock: asyncio.Lock, *args,
     """Utility function to run async task in a lock"""
     async with lock:
         return await task(*args, **kwargs)
+
+
+def supports_kw(
+    callable: Callable[..., object],
+    kw_name: str,
+    requires_kw_only: bool = False,
+    allow_var_kwargs: bool = True,
+) -> bool:
+    """Check if a keyword is a valid kwarg for a callable; if requires_kw_only
+    disallows kwargs names that can also be positional arguments.
+    """
+    params = inspect.signature(callable).parameters
+    if not params:
+        return False
+
+    param_val = params.get(kw_name)
+
+    # Types where the it may be valid, i.e., explicitly defined & nonvariadic
+    passable_kw_types = set((inspect.Parameter.POSITIONAL_ONLY,
+                             inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                             inspect.Parameter.KEYWORD_ONLY))
+
+    if param_val:
+        is_sig_param = param_val.kind in passable_kw_types
+        # We want kwargs only, but this is passable as a positional arg
+        if (requires_kw_only and is_sig_param
+                and param_val.kind != inspect.Parameter.KEYWORD_ONLY):
+            return False
+        if ((requires_kw_only
+             and param_val.kind == inspect.Parameter.KEYWORD_ONLY)
+                or (not requires_kw_only and is_sig_param)):
+            return True
+
+    # If we're okay with var-kwargs, it's supported as long as
+    # the kw_name isn't something like *args, **kwargs
+    if allow_var_kwargs:
+        # Get the last param; type is ignored here because params is a proxy
+        # mapping, but it wraps an ordered dict, and they appear in order.
+        # Ref: https://docs.python.org/3/library/inspect.html#inspect.Signature.parameters
+        last_param = params[next(reversed(params))]  # type: ignore
+        return (last_param.kind == inspect.Parameter.VAR_KEYWORD
+                and last_param.name != kw_name)
+    return False
+
+
+def resolve_mm_processor_kwargs(
+    init_kwargs: Optional[Dict[str, Any]],
+    inference_kwargs: Optional[Dict[str, Any]],
+    callable: Callable[..., object],
+    allow_var_kwargs: bool = False,
+) -> Dict[str, Any]:
+    """Applies filtering to eliminate invalid mm_processor_kwargs, i.e.,
+    those who are not explicit keywords to the given callable (of one is
+    given; otherwise no filtering is done), then merges the kwarg dicts,
+    giving priority to inference_kwargs if there are any collisions.
+
+    In the case that no kwarg overrides are provided, returns an empty
+    dict so that it can still be kwarg expanded into the callable later on.
+
+    If allow_var_kwargs=True, allows for things that can be expanded into
+    kwargs as long as they aren't naming collision for var_kwargs or potential
+    positional arguments.
+    """
+    # Filter inference time multimodal processor kwargs provided
+    runtime_mm_kwargs = get_allowed_kwarg_only_overrides(
+        callable,
+        overrides=inference_kwargs,
+        allow_var_kwargs=allow_var_kwargs)
+
+    # Filter init time multimodal processor kwargs provided
+    init_mm_kwargs = get_allowed_kwarg_only_overrides(
+        callable, overrides=init_kwargs, allow_var_kwargs=allow_var_kwargs)
+
+    # Merge the final processor kwargs, prioritizing inference
+    # time values over the initialization time values.
+    mm_processor_kwargs = {**init_mm_kwargs, **runtime_mm_kwargs}
+    return mm_processor_kwargs
+
+
+def get_allowed_kwarg_only_overrides(
+    callable: Callable[..., object],
+    overrides: Optional[Dict[str, Any]],
+    allow_var_kwargs: bool = False,
+) -> Dict[str, Any]:
+    """
+    Given a callable which has one or more keyword only params and a dict
+    mapping param names to values, drop values that can be not be kwarg
+    expanded to overwrite one or more keyword-only args. This is used in a
+    few places to handle custom processor overrides for multimodal models,
+    e.g., for profiling when processor options provided by the user
+    may affect the number of mm tokens per instance.
+
+    Args:
+        callable: Callable which takes 0 or more keyword only arguments.
+                  If None is provided, all overrides names are allowed.
+        overrides: Potential overrides to be used when invoking the callable.
+        allow_var_kwargs: Allows overrides that are expandable for var kwargs.
+
+    Returns:
+        Dictionary containing the kwargs to be leveraged which may be used
+        to overwrite one or more keyword only arguments when invoking the
+        callable.
+    """
+    if not overrides:
+        return {}
+
+    # Drop any mm_processor_kwargs provided by the user that
+    # are not kwargs, unless it can fit it var_kwargs param
+    filtered_overrides = {
+        kwarg_name: val
+        for kwarg_name, val in overrides.items()
+        if supports_kw(callable,
+                       kwarg_name,
+                       requires_kw_only=True,
+                       allow_var_kwargs=allow_var_kwargs)
+    }
+
+    # If anything is dropped, log a warning
+    dropped_keys = overrides.keys() - filtered_overrides.keys()
+    if dropped_keys:
+        logger.warning(
+            "The following intended overrides are not keyword-only args "
+            "and and will be dropped: %s", dropped_keys)
+
+    return filtered_overrides
+
+
+# Using dynamo with vLLM doesn't really work well with PyTorch versions < 2.4.0.
+# In particular, the FakeScalarType is not supported for earlier versions of
+# PyTorch which breaks dynamo for any ops registered using ScalarType.
+def supports_dynamo() -> bool:
+    base_torch_version = Version(Version(torch.__version__).base_version)
+    return base_torch_version >= Version("2.4.0")
+
+
+# Some backends use pytorch version < 2.4.0 which doesn't
+# support `torch.library.custom_op`.
+def supports_custom_op() -> bool:
+    return hasattr(torch.library, "custom_op")
+
+
+class AtomicCounter:
+    """An atomic, thread-safe counter"""
+
+    def __init__(self, initial=0):
+        """Initialize a new atomic counter to given initial value"""
+        self._value = initial
+        self._lock = threading.Lock()
+
+    def inc(self, num=1):
+        """Atomically increment the counter by num and return the new value"""
+        with self._lock:
+            self._value += num
+            return self._value
+
+    def dec(self, num=1):
+        """Atomically decrement the counter by num and return the new value"""
+        with self._lock:
+            self._value -= num
+            return self._value
+
+    @property
+    def value(self):
+        return self._value

@@ -3,8 +3,8 @@ from typing import List, Optional, Sequence, Union, cast
 from tqdm import tqdm
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerFast
 
-from light_vllm.core.inputs.tokenizer import get_cached_tokenizer
 from light_vllm.core.llm_engine import LLMEngine
+from light_vllm.core.processor.tokenizer import get_cached_tokenizer
 from light_vllm.core.schema.engine_io import Params, RequestOutput
 from light_vllm.core.schema.engine_io import TextOnlyInputs as PromptInputs
 from light_vllm.decoding.backends.sampling_params import SamplingParams

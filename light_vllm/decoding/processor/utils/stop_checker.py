@@ -1,6 +1,6 @@
 from typing import Optional
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.schema.sequence import Sequence, SequenceStatus
 

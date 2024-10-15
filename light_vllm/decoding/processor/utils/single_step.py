@@ -1,6 +1,6 @@
 from typing import List, Tuple
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.decoding.processor.utils.interfaces import (
     SequenceGroupOutputProcessor)
 from light_vllm.decoding.processor.utils.stop_checker import StopChecker

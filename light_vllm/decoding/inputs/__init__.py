@@ -9,4 +9,8 @@ See also:
     :ref:`input_processing_pipeline`
 """
 
-__all__ = ["INPUT_REGISTRY", "InputContext", "InputRegistry"]
+__all__ = [
+    "INPUT_REGISTRY",
+    "InputContext",
+    "InputRegistry",
+]

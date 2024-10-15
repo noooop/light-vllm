@@ -2,7 +2,7 @@ import time
 from abc import ABC, abstractmethod
 from typing import Any, Dict, Optional, cast
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.core.schema.engine_io import (Params, PromptInput, Request,
                                               SchedulableRequest,
                                               TextOnlyInputs, TextPrompt,

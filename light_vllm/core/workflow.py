@@ -5,7 +5,7 @@ class Workflow:
     EngineArgs: str
     Scheduler: str
     AttnBackend: str
-    Tokenizer: str = "light_vllm.core.inputs.tokenizer:Tokenizer"
+    Tokenizer: str = "light_vllm.core.processor.tokenizer:Tokenizer"
     InputProcessor: str
     RequestProcessor: str
     OutputProcessor: str

@@ -7,7 +7,7 @@ from light_vllm.prefill_only.backends.attention.backends.abstract import (
     PrefillOnlyAttentionBackend)
 from light_vllm.prefill_only.backends.attention.selector import (
     AttentionImpls, AttentionType, AttnBackend, _Backend)
-from light_vllm.utils import CudaMemoryProfiler
+from light_vllm.utils import DeviceMemoryProfiler
 
 MODELS = ["google-bert/bert-base-uncased"]
 
@@ -38,7 +38,7 @@ def load_model(model_config: ModelConfig, load_config: LoadConfig,
                device_config: DeviceConfig,
                attn_backend: PrefillOnlyAttentionBackend):
 
-    with CudaMemoryProfiler() as m:
+    with DeviceMemoryProfiler() as m:
         loader = get_model_loader(load_config)
         model = initialize_model(model_config=model_config,
                                  load_config=load_config,

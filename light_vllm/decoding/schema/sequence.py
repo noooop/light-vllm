@@ -3,9 +3,14 @@ import enum
 import math
 from array import array
 from dataclasses import dataclass
+from functools import reduce
 from typing import Dict, List, Mapping, Optional, Tuple, Union
 
 from light_vllm.decoding.backends.sampling_params import SamplingParams
+
+VLLM_TOKEN_ID_ARRAY_TYPE = "l"
+
+VLLM_INVALID_TOKEN_ID = -1
 
 
 @dataclass
@@ -117,6 +122,18 @@ class SequenceData:
         self._stage: SequenceStage = SequenceStage.PREFILL
 
         self._update_cached_all_tokens()
+
+    @staticmethod
+    def from_token_counts(*token_counts: Tuple[int, int]) -> "SequenceData":
+        if len(token_counts) == 0:
+            return SequenceData.from_seqs([])
+
+        arrs = [
+            array(VLLM_TOKEN_ID_ARRAY_TYPE, [token_id]) * count
+            for token_id, count in token_counts
+        ]
+
+        return SequenceData(reduce(array.__add__, arrs))
 
     def _update_cached_all_tokens(self):
         self._cached_all_token_ids: List[int] = list(self._prompt_token_ids +

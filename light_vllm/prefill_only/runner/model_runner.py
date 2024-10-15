@@ -7,7 +7,7 @@ from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.logger import init_logger
 from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
 from light_vllm.prefill_only.schema.execute_io import ModelInputForGPU
-from light_vllm.utils import CudaMemoryProfiler, is_pin_memory_available
+from light_vllm.utils import DeviceMemoryProfiler, is_pin_memory_available
 
 logger = init_logger(__name__)
 
@@ -38,7 +38,7 @@ class ModelRunner:
                                                    initialize_model)
 
         logger.info("Starting to load model %s...", self.model_config.model)
-        with CudaMemoryProfiler() as m:
+        with DeviceMemoryProfiler() as m:
             loader = get_model_loader(self.load_config)
             self.model = initialize_model(model_config=self.model_config,
                                           load_config=self.load_config,

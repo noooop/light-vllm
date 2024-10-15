@@ -17,7 +17,8 @@ class TestRequestProcessor(RequestProcessor):
         return TextSchedulableRequest(**request.__dict__,
                                       inputs=TextOnlyInputs(
                                           prompt_token_ids=[0] *
-                                          self.num_new_tokens))
+                                          self.num_new_tokens),
+                                      params=None)
 
     def from_engine(cls, engine):
         pass

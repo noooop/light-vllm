@@ -1,6 +1,6 @@
 import pytest
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.core.processor.input_processor import (TextInputProcessor,
                                                        TextRequestProcessor)
 from light_vllm.core.schema.engine_io import TextOnlyInputs, TokensPrompt

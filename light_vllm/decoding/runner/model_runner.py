@@ -5,38 +5,39 @@ import torch
 import torch.distributed
 import torch.nn as nn
 
-import light_vllm.envs as envs
 from light_vllm.core.config import DeviceConfig, LoadConfig
-from light_vllm.core.inputs import INPUT_REGISTRY
 from light_vllm.core.models.utils import set_cpu_offload_max_bytes
 from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.decoding.backends.attention import DecodeOnlyAttentionBackend
 from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,
                                         SchedulerConfig)
+from light_vllm.decoding.inputs import INPUT_REGISTRY
 from light_vllm.decoding.runner.cuda_graph_util import CUDAGraph
 from light_vllm.decoding.schema.execute_io import (
     DecodingModelInputForGPUWithSamplingMetadata)
 from light_vllm.decoding.schema.sequence import SequenceGroupMetadata
 from light_vllm.logger import init_logger
-from light_vllm.utils import (CudaMemoryProfiler, is_hip,
+from light_vllm.utils import (DeviceMemoryProfiler, is_hip,
                               is_pin_memory_available)
 
 logger = init_logger(__name__)
 
 
+class MultiModalRegistry:
+    pass
+
+
 class GPUModelRunner:
 
-    def __init__(
-        self,
-        model_config: ModelConfig,
-        scheduler_config: SchedulerConfig,
-        device_config: DeviceConfig,
-        cache_config: CacheConfig,
-        load_config: LoadConfig,
-        attn_backend: DecodeOnlyAttentionBackend,
-        kv_cache_dtype: Optional[str] = "auto",
-    ):
+    def __init__(self,
+                 model_config: ModelConfig,
+                 scheduler_config: SchedulerConfig,
+                 device_config: DeviceConfig,
+                 cache_config: CacheConfig,
+                 load_config: LoadConfig,
+                 attn_backend: DecodeOnlyAttentionBackend,
+                 kv_cache_dtype: Optional[str] = "auto"):
         self.model_config = model_config
         self.scheduler_config = scheduler_config
         self.device_config = device_config
@@ -64,7 +65,7 @@ class GPUModelRunner:
                                                    initialize_model)
 
         logger.info("Starting to load model %s...", self.model_config.model)
-        with CudaMemoryProfiler() as m:
+        with DeviceMemoryProfiler() as m:
             loader = get_model_loader(self.load_config)
             self.model = initialize_model(model_config=self.model_config,
                                           load_config=self.load_config,
@@ -107,11 +108,6 @@ class GPUModelRunner:
                     "provided. Defaulting to scaling factors of 1.0. "
                     "This may lead to less accurate results!")
 
-        if envs.VLLM_TEST_DYNAMO_GRAPH_CAPTURE:
-            self.model = torch.compile(self.model,
-                                       fullgraph=True,
-                                       backend="eager")
-
     @torch.inference_mode()
     def profile_run(self) -> None:
         # Enable top-k sampling to reflect the accurate memory usage.
@@ -137,8 +133,8 @@ class GPUModelRunner:
                        (group_id < max_num_batched_tokens % max_num_seqs))
             batch_size += seq_len
 
-            seq_data, dummy_multi_modal_data = INPUT_REGISTRY \
-                .dummy_data_for_profiling(model_config, seq_len)
+            seq_data = INPUT_REGISTRY.dummy_data_for_profiling(
+                self.model_config, seq_len)
 
             # Having more tokens is over-conservative but otherwise fine
             assert len(seq_data.prompt_token_ids) >= seq_len, (

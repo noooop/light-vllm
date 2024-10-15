@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import List
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.decoding.config import SchedulerConfig
 from light_vllm.decoding.processor.utils.stop_checker import StopChecker
 from light_vllm.decoding.schema.execute_io import SequenceGroupOutput

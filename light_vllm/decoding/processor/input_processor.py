@@ -1,7 +1,7 @@
 from typing import Any, Dict
 
-from light_vllm.core.inputs.tokenizer import Tokenizer
 from light_vllm.core.processor.input_processor import TextRequestProcessor
+from light_vllm.core.processor.tokenizer import Tokenizer
 from light_vllm.core.schema.engine_io import (TextRequest,
                                               TextSchedulableRequest)
 from light_vllm.decoding.config import CacheConfig, ModelConfig
