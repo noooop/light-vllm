@@ -9,7 +9,6 @@ from light_vllm.core.config import (DeviceConfig, EngineConfig, LoadConfig,
 from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.core.worker import WorkerBase
 from light_vllm.platforms import current_platform
-from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
 from light_vllm.prefill_only.runner.model_runner import ModelRunner
 from light_vllm.prefill_only.schema.execute_io import PrefillOnlyExecuteInput
 
@@ -22,8 +21,7 @@ class Worker(WorkerBase):
         attn_backend: AttentionBackend,
     ) -> None:
         self.model_config: ModelConfig = engine_config.model_config
-        self.scheduler_config: PrefillOnlySchedulerConfig = (
-            engine_config.scheduler_config)
+        self.scheduler_config = engine_config.scheduler_config
         self.device_config: DeviceConfig = engine_config.device_config
         self.load_config: LoadConfig = engine_config.load_config
         self.device = self.device_config.device
@@ -71,6 +69,12 @@ class Worker(WorkerBase):
                  execute_input: PrefillOnlyExecuteInput) -> ExecuteOutput:
         output = self.model_runner.execute_model(execute_input.model_input)
         return output
+
+    def non_blocking_h2d(self, execute_input: PrefillOnlyExecuteInput):
+        execute_input.model_input.to(self.device, non_blocking=True)
+
+    def non_blocking_d2h(self, execute_output: ExecuteOutput):
+        execute_output.to("cpu", non_blocking=True)
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):

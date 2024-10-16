@@ -3,14 +3,13 @@ from queue import Queue
 from threading import Thread
 from typing import List, Optional
 
-from light_vllm.core.backends.attention import AttentionBackend
+from light_vllm.backends.attention import AttentionBackend
 from light_vllm.core.config import EngineConfig
 from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.worker import WorkerBase, create_worker
 from light_vllm.core.workflow import Workflow
 from light_vllm.logger import init_logger
-from light_vllm.prefill_only.executor.gpu_executor import (
-    double_buffer_execute_loop, simple_execute_loop)
+from light_vllm.prefill_only.executor.gpu_executor import Executor
 
 logger = init_logger(__name__)
 
@@ -49,14 +48,14 @@ class GPUDataParallelismExecutor:
         worker = create_worker(**worker_kwargs)
         worker.init_device()
         worker.load_model()
+        executor = Executor(worker)
 
         if self.engine_config.scheduler_config.scheduling == "double_buffer":
-            execute_loop = double_buffer_execute_loop
+            execute_loop = executor.double_buffer_execute_loop
         else:
-            execute_loop = simple_execute_loop
+            execute_loop = executor.simple_execute_loop
 
-        execute_loop(worker, self.executor_in, self.executor_out,
-                     self.output_to_cpu)
+        execute_loop(self.executor_in, self.executor_out)
 
     def ensure_start_execute_loop(self):
         if self.workers is None:

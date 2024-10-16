@@ -144,7 +144,7 @@ class SentenceTransformersRunner(HfRunner):
 
 def compare_embeddings(embeddings1, embeddings2):
     similarities = [
-        F.cosine_similarity(e1, e2, dim=0)
+        F.cosine_similarity(e1.to("cuda"), e2.to("cuda"), dim=0)
         for e1, e2 in zip(embeddings1, embeddings2)
     ]
     return similarities

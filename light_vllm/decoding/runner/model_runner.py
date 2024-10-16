@@ -7,7 +7,6 @@ import torch.nn as nn
 
 from light_vllm.core.config import DeviceConfig, LoadConfig
 from light_vllm.core.models.utils import set_cpu_offload_max_bytes
-from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.decoding.backends.attention import DecodeOnlyAttentionBackend
 from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,

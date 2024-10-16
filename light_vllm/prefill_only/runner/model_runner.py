@@ -5,7 +5,7 @@ from light_vllm.backends.attention import AttentionBackend
 from light_vllm.core.config import DeviceConfig, LoadConfig, ModelConfig
 from light_vllm.core.schema.execute_io import ExecuteOutput
 from light_vllm.logger import init_logger
-from light_vllm.prefill_only.config import PrefillOnlySchedulerConfig
+from light_vllm.prefill_only.config import SchedulerConfig
 from light_vllm.prefill_only.schema.execute_io import ModelInputForGPU
 from light_vllm.utils import DeviceMemoryProfiler, is_pin_memory_available
 
@@ -17,7 +17,7 @@ class ModelRunner:
     def __init__(
         self,
         model_config: ModelConfig,
-        scheduler_config: PrefillOnlySchedulerConfig,
+        scheduler_config: SchedulerConfig,
         device_config: DeviceConfig,
         load_config: LoadConfig,
         attn_backend: AttentionBackend,

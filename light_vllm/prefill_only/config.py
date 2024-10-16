@@ -15,8 +15,11 @@ class PrefillOnlySchedulerConfig(SchedulerConfig):
                  max_num_batched_tokens: Optional[int] = None,
                  max_num_requests: Optional[int] = None,
                  max_num_seqs: Optional[int] = None,
-                 max_num_on_the_fly: Optional[int] = 3,
-                 scheduling: str = "sync") -> None:
+                 max_num_on_the_fly: Optional[int] = 2,
+                 scheduling: str = "sync",
+                 *args,
+                 **kwargs) -> None:
+        super().__init__(*args, **kwargs)
         self.max_model_len = max_model_len
         self.max_num_requests: int = 0
         self.max_num_batched_tokens: int = 0

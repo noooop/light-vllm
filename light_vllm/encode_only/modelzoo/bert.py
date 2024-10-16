@@ -408,5 +408,8 @@ class BertForMaskedLM(nn.Module, LoadWeightsMixin):
             attn_metadata,
         )
 
-        return EncodeOnlyExecuteOutput(last_hidden_states=sequence_output,
+        seq_start_loc = attn_metadata.seq_start_loc
+        last_hidden_states = sequence_output[seq_start_loc[:-1]]
+
+        return EncodeOnlyExecuteOutput(last_hidden_states=last_hidden_states,
                                        pooled_output=pooled_output)

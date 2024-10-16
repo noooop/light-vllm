@@ -21,8 +21,15 @@ class ExecuteInput:
     model_input: Optional[ModelInput]
 
 
+@dataclass
 class ExecuteOutput:
-    pass
+
+    def to(self, target_device, non_blocking=False):
+        for k in self.__dict__:
+            if not hasattr(self.__dict__[k], "to"):
+                continue
+            self.__dict__[k] = self.__dict__[k].to(device=target_device,
+                                                   non_blocking=non_blocking)
 
 
 class IntermediateTensors(

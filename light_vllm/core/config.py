@@ -497,7 +497,16 @@ class ModelConfig:
 
 
 class SchedulerConfig:
-    pass
+    supported_async_thread = ["thread", "gevent"]
+
+    def __init__(self, async_thread="thread"):
+        self.async_thread = async_thread
+        self._verify_async_thread()
+
+    def _verify_async_thread(self):
+        if self.async_thread not in self.supported_async_thread:
+            raise ValueError(f"Async thread ({self.async_thread}) "
+                             f"must in {self.supported_async_thread}")
 
 
 class ParallelConfig:

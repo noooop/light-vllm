@@ -22,28 +22,25 @@ class EncodeOnlyOutputProcessor(OutputProcessor):
             execute_output: EncodeOnlyExecuteOutput) -> List[RequestOutput]:
         if execute_output.pooled_output is not None:
             request_outputs = []
-            for request, outputs in zip(scheduler_output.scheduled_requests,
-                                        execute_output.pooled_output):
+            for i, request in enumerate(scheduler_output.scheduled_requests):
                 prompt_token_ids = request.inputs.prompt_token_ids
-                request_outputs.append(
-                    EncodeOnlyRequestOutput(request_id=request.request_id,
-                                            arrival_time=request.arrival_time,
-                                            prompt_token_ids=prompt_token_ids,
-                                            finished=True,
-                                            outputs=outputs))
-            return request_outputs
-        else:
-            request_outputs = []
-            offset = 0
-            for request in scheduler_output.scheduled_requests:
-                prompt_token_ids = request.inputs.prompt_token_ids
-                n_tokens = len(prompt_token_ids)
                 request_outputs.append(
                     EncodeOnlyRequestOutput(
                         request_id=request.request_id,
                         arrival_time=request.arrival_time,
                         prompt_token_ids=prompt_token_ids,
                         finished=True,
-                        outputs=execute_output.last_hidden_states[offset]))
-                offset += n_tokens
+                        outputs=execute_output.pooled_output[i]))
+            return request_outputs
+        else:
+            request_outputs = []
+            for i, request in enumerate(scheduler_output.scheduled_requests):
+                prompt_token_ids = request.inputs.prompt_token_ids
+                request_outputs.append(
+                    EncodeOnlyRequestOutput(
+                        request_id=request.request_id,
+                        arrival_time=request.arrival_time,
+                        prompt_token_ids=prompt_token_ids,
+                        finished=True,
+                        outputs=execute_output.last_hidden_states[i]))
             return request_outputs

@@ -34,6 +34,7 @@ from light_vllm.core.loader.weight_utils import (default_weight_loader,
 from light_vllm.core.models.utils import is_pp_missing_parameter
 from light_vllm.core.schema.execute_io import IntermediateTensors
 from light_vllm.encode_only.schema.execute_io import EncodeOnlyExecuteOutput
+from light_vllm.reranker.schema.execute_io import RerankerExecuteOutput
 
 logger = logging.get_logger(__name__)
 
@@ -411,7 +412,10 @@ class XLMRobertaForMaskedLM(nn.Module, LoadWeightsMixin):
             attn_metadata,
         )
 
-        return EncodeOnlyExecuteOutput(last_hidden_states=sequence_output,
+        seq_start_loc = attn_metadata.seq_start_loc
+        last_hidden_states = sequence_output[seq_start_loc[:-1]]
+
+        return EncodeOnlyExecuteOutput(last_hidden_states=last_hidden_states,
                                        pooled_output=None)
 
 
@@ -461,7 +465,7 @@ class XLMRobertaForSequenceClassification(nn.Module, LoadWeightsMixin):
         kv_caches: Optional[List[torch.Tensor]],
         attn_metadata: AttentionMetadata,
         intermediate_tensors: Optional[IntermediateTensors] = None,
-    ) -> torch.Tensor:
+    ) -> RerankerExecuteOutput:
         assert kv_caches is None
 
         sequence_output = self.roberta(
@@ -475,5 +479,5 @@ class XLMRobertaForSequenceClassification(nn.Module, LoadWeightsMixin):
         # take <s> token (equiv. to [CLS])
         cls_features = sequence_output[seq_start_loc[:-1]]
 
-        logits = self.classifier(cls_features)
-        return logits
+        scores = self.classifier(cls_features)
+        return RerankerExecuteOutput(scores=scores)

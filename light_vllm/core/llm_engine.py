@@ -1,4 +1,4 @@
-from queue import Empty, Queue
+from queue import Empty
 from typing import Dict, Iterable, List, Optional, Type, Union
 
 from light_vllm.core.arg_utils import EngineArgs
@@ -67,8 +67,14 @@ class LLMEngine:
                                f"Not compatible")
 
         if self.use_async_scheduling:
+            if self.engine_config.scheduler_config.async_thread == "gevent":
+                from gevent.queue import Queue
+            else:
+                from queue import Queue
+
             self.executor_in = Queue()
             self.executor_out = Queue()
+
             self.max_num_on_the_fly = (
                 self.engine_config.scheduler_config.max_num_on_the_fly)
             self.num_on_the_fly = 0

@@ -3,7 +3,7 @@ import os
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Optional, Type
 
-from light_vllm.core.schema.execute_io import ExecuteInput
+from light_vllm.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.logger import init_logger
 from light_vllm.utils import (enable_trace_function_call_for_thread,
                               update_environment_variables)
@@ -15,6 +15,14 @@ class WorkerBase(ABC):
 
     @abstractmethod
     def __call__(self, execute_input: ExecuteInput):
+        raise NotImplementedError
+
+    @abstractmethod
+    def non_blocking_h2d(self, execute_input: ExecuteInput):
+        raise NotImplementedError
+
+    @abstractmethod
+    def non_blocking_d2h(self, execute_output: ExecuteOutput):
         raise NotImplementedError
 
 
@@ -44,7 +52,7 @@ class WorkerWrapperBase:
         self.worker: Optional[WorkerBase] = None
         if trust_remote_code:
             # note: lazy import to avoid importing torch before initializing
-            from vllm.utils import init_cached_hf_modules
+            from light_vllm.utils import init_cached_hf_modules
             init_cached_hf_modules()
 
     @staticmethod

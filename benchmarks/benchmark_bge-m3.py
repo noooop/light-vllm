@@ -53,7 +53,8 @@ def benchmark_vllm(args):
                              max_model_len=args.max_model_len,
                              device=args.device,
                              max_num_seqs=32,
-                             scheduling=args.scheduling)
+                             scheduling=args.scheduling,
+                             async_thread=args.async_thread)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -106,14 +107,16 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_hf, args)
             f.result()
 
-    run_hf(args)
+    #run_hf(args)
 
     def run_vllm(args):
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    for scheduling in ["sync", "async", "double_buffer"]:
-        print(scheduling)
-        args.scheduling = scheduling
-        run_vllm(args)
+    for async_thread in ["gevent", "thread"]:
+        for scheduling in ["sync", "async", "double_buffer"]:
+            print(f"async_thread: {async_thread}, scheduling: {scheduling}")
+            args.scheduling = scheduling
+            args.async_thread = async_thread
+            run_vllm(args)

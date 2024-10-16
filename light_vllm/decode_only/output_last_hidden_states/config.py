@@ -36,7 +36,8 @@ class DecodeOnlyModelConfig(ModelConfig):
 
 class DecodeOnlySchedulerConfig(SchedulerConfig):
 
-    def __init__(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.output_last_hidden_states = False
 
 
@@ -48,7 +49,7 @@ class DecodeOnlyEmbeddingSchedulerConfig(DecodeOnlySchedulerConfig,
                  max_num_batched_tokens: Optional[int] = None,
                  max_num_requests: Optional[int] = None,
                  max_num_seqs: Optional[int] = None,
-                 max_num_on_the_fly: Optional[int] = 3,
+                 max_num_on_the_fly: Optional[int] = 2,
                  scheduling: str = "sync") -> None:
         PrefillOnlySchedulerConfig.__init__(self, max_model_len,
                                             max_num_batched_tokens,
@@ -78,12 +79,16 @@ class DecodeOnlyEngineConfig(EngineConfig):
                 "trust_remote_code=%s, dtype=%s, max_seq_len=%d, "
                 "download_dir=%r, load_format=%s, "
                 "device_config=%s, served_model_name=%s, "
-                "max_num_on_the_fly=%d, scheduling=%s)", VLLM_VERSION,
-                self.model_config.model, self.model_config.tokenizer,
+                "max_num_on_the_fly=%d, scheduling=%s, async_thread=%s)",
+                VLLM_VERSION, self.model_config.model, self.model_config.tokenizer,
                 self.model_config.tokenizer_mode,
                 self.model_config.trust_remote_code, self.model_config.dtype,
                 self.model_config.max_model_len, self.load_config.download_dir,
                 self.load_config.load_format, self.device_config.device,
                 self.model_config.served_model_name,
                 self.scheduler_config.max_num_on_the_fly,
-                self.scheduler_config.scheduling)
+                self.scheduler_config.scheduling,
+                self.scheduler_config.async_thread)
+            if self.parallel_config is not None:
+                logger.info("Parallel config: data_parallel_size=%d",
+                            self.parallel_config.data_parallel_size)

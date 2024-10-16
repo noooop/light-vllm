@@ -1,7 +1,6 @@
 import atexit
 import queue
 from queue import Queue
-from threading import Thread
 from typing import Optional
 
 import torch
@@ -29,8 +28,8 @@ class GPUExecutor:
         self.engine_config = engine_config
         self.workflow = workflow
         self.attn_backend = attn_backend
-        self.output_to_cpu = False
         self._init_executor()
+        self.executor = Executor(self.worker)
 
     @classmethod
     def from_engine(cls, engine: LLMEngine):
@@ -53,33 +52,32 @@ class GPUExecutor:
         self.worker.load_model()
 
     def execute_model(self,
-                      executor_input: ExecuteInput) -> Optional[ExecuteOutput]:
-        executor_input.model_input.to(self.worker.device)
-        output = self.worker(executor_input)
-        if self.output_to_cpu:
-            output.to("cpu")
-        return output
+                      execute_input: ExecuteInput) -> Optional[ExecuteOutput]:
+        return self.executor.execute_model(execute_input)
 
     def shutdown_execute_loop(self):
         pass
 
 
-class GPUAsyncExecutor(GPUExecutor):
+class GPUThreadAsyncExecutor(GPUExecutor):
     support_scheduling = ["async_scheduling"]
 
     def __init__(self, engine_config: EngineConfig, workflow: Workflow,
                  attn_backend: AttentionBackend, executor_in: Queue,
                  executor_out: Queue) -> None:
         super().__init__(engine_config, workflow, attn_backend)
+        from threading import Thread
+
+        self.Thread = Thread
         self.executor_in = executor_in
         self.executor_out = executor_out
 
         self.executor_thread: Optional[Thread] = None
 
         if self.engine_config.scheduler_config.scheduling == "double_buffer":
-            self.execute_loop = double_buffer_execute_loop
+            self.execute_loop = self.executor.double_buffer_execute_loop
         else:
-            self.execute_loop = simple_execute_loop
+            self.execute_loop = self.executor.simple_execute_loop
 
     @classmethod
     def from_engine(cls, engine: LLMEngine):
@@ -91,11 +89,10 @@ class GPUAsyncExecutor(GPUExecutor):
 
     def ensure_start_execute_loop(self):
         if self.executor_thread is None or not self.executor_thread.is_alive():
-            self.executor_thread = Thread(target=self.execute_loop,
-                                          args=(self.worker, self.executor_in,
-                                                self.executor_out,
-                                                self.output_to_cpu),
-                                          daemon=True)
+            self.executor_thread = self.Thread(target=self.execute_loop,
+                                               args=(self.executor_in,
+                                                     self.executor_out),
+                                               daemon=True)
             self.executor_thread.start()
             atexit.register(self.shutdown_execute_loop)
 
@@ -106,109 +103,167 @@ class GPUAsyncExecutor(GPUExecutor):
             atexit.unregister(self.shutdown_execute_loop)
 
 
-def simple_execute_loop(worker: WorkerBase,
-                        executor_in: Queue,
-                        executor_out: Queue,
-                        output_to_cpu: bool = False):
+class GPUGeventAsyncExecutor(GPUExecutor):
+    support_scheduling = ["async_scheduling"]
 
-    def execute_model(executor_input: ExecuteInput) -> Optional[ExecuteOutput]:
-        executor_input.model_input.to(worker.device)
-        output = worker(executor_input)
-        if output_to_cpu:
-            output.to("cpu")
-        return output
+    def __init__(self, engine_config: EngineConfig, workflow: Workflow,
+                 attn_backend: AttentionBackend, executor_in: Queue,
+                 executor_out: Queue) -> None:
+        super().__init__(engine_config, workflow, attn_backend)
+        from gevent import Greenlet
 
-    try:
-        while True:
-            o = executor_in.get()
-            if o is None:
-                break
+        self.Greenlet = Greenlet
 
-            scheduler_output, executor_input = o
-            executor_output = execute_model(executor_input)
-            if output_to_cpu:
-                executor_output.to("cpu")
-            executor_out.put((scheduler_output, executor_output))
-    except Exception as e:
-        executor_out.put(e)
+        self.executor_in = executor_in
+        self.executor_out = executor_out
+
+        self.executor_thread: Optional[Greenlet] = None
+
+        if self.engine_config.scheduler_config.scheduling == "double_buffer":
+            self.execute_loop = self.executor.double_buffer_execute_loop
+        else:
+            self.execute_loop = self.executor.simple_execute_loop
+
+    @classmethod
+    def from_engine(cls, engine: LLMEngine):
+        return cls(engine_config=engine.engine_config,
+                   workflow=engine.workflow,
+                   attn_backend=engine.attn_backend,
+                   executor_in=engine.executor_in,
+                   executor_out=engine.executor_out)
+
+    def ensure_start_execute_loop(self):
+        if self.executor_thread is None or self.executor_thread.dead:
+            self.executor_thread = self.Greenlet.spawn(self.execute_loop,
+                                                       self.executor_in,
+                                                       self.executor_out)
+            atexit.register(self.shutdown_execute_loop)
+
+    def shutdown_execute_loop(self):
+        if self.executor_thread is not None and not self.executor_thread.dead:
+            self.executor_in.put(None)
+            self.executor_thread.join()
+            atexit.unregister(self.shutdown_execute_loop)
 
 
-def double_buffer_execute_loop(worker: WorkerBase,
-                               executor_in: Queue,
-                               executor_out: Queue,
-                               output_to_cpu: bool = False):
-    from dataclasses import dataclass
+class Executor:
 
-    from light_vllm.core.schema.engine_io import SchedulerOutput
+    def __init__(self, worker: WorkerBase):
+        self.h2d_stream = torch.cuda.Stream()
+        self.compute_stream = torch.cuda.Stream()
+        self.d2h_stream = torch.cuda.Stream()
+        self.worker = worker
 
-    @dataclass
-    class Task:
-        scheduler_output: SchedulerOutput
-        executor_input: ExecuteInput
-        executor_output: Optional[ExecuteOutput]
+    def execute_model(self, execute_input: ExecuteInput) -> ExecuteOutput:
+        with torch.cuda.stream(self.h2d_stream):
+            self.worker.non_blocking_h2d(execute_input)
 
-        @classmethod
-        def get(cls, block):
-            o = executor_in.get(block)
-            if o is None:
-                return None
+        self.compute_stream.wait_stream(self.h2d_stream)
+        with torch.cuda.stream(self.compute_stream):
+            execute_output = self.worker(execute_input)
 
-            scheduler_output, executor_input = o
+        self.d2h_stream.wait_stream(self.compute_stream)
+        with torch.cuda.stream(self.d2h_stream):
+            self.worker.non_blocking_d2h(execute_output)
 
-            task = cls(scheduler_output=scheduler_output,
-                       executor_input=executor_input,
-                       executor_output=None)
-            return task
+        self.d2h_stream.synchronize()
 
-    current_task: Optional[Task] = None
-    next_task: Optional[Task] = None
-    compute_stream = torch.cuda.Stream()
-    io_stream = torch.cuda.Stream()
-    go_on = True
+        return execute_output
 
-    try:
-        while go_on:
-            if current_task is None:
-                current_task = Task.get(block=True)
-                if current_task is None:
+    def simple_execute_loop(self, executor_in: Queue, executor_out: Queue):
+        try:
+            while True:
+                o = executor_in.get()
+                if o is None:
                     break
 
-                with torch.cuda.stream(compute_stream):
-                    current_task.executor_input.model_input.to(
-                        worker.device, non_blocking=True)
-                    current_task.executor_output = worker(
-                        current_task.executor_input)
-                    end_compute = torch.cuda.Event()
-            else:
-                with torch.cuda.stream(compute_stream):
-                    end_compute = torch.cuda.Event()
+                scheduler_output, execute_input = o
+                execute_output = self.execute_model(execute_input)
+                executor_out.put((scheduler_output, execute_output))
+        except Exception as e:
+            executor_out.put(e)
 
-            try:
-                next_task = Task.get(block=False)
-                if next_task is None:
-                    go_on = False
-                else:
-                    with torch.cuda.stream(io_stream):
-                        next_task.executor_input.model_input.to(
-                            worker.device, non_blocking=True)
+    def double_buffer_execute_loop(self, executor_in: Queue,
+                                   executor_out: Queue):
 
-                    compute_stream.wait_stream(io_stream)
+        from dataclasses import dataclass
 
+        from light_vllm.core.schema.engine_io import SchedulerOutput
+
+        h2d_stream = self.h2d_stream
+        compute_stream = self.compute_stream
+        d2h_stream = self.d2h_stream
+        worker = self.worker
+
+        @dataclass
+        class Task:
+            scheduler_output: SchedulerOutput
+            execute_input: ExecuteInput
+            execute_output: Optional[ExecuteOutput]
+
+            @classmethod
+            def get(cls, block=True, timeout=None):
+                o = executor_in.get(block, timeout)
+                if o is None:
+                    return None
+
+                scheduler_output, execute_input = o
+
+                task = cls(scheduler_output=scheduler_output,
+                           execute_input=execute_input,
+                           execute_output=None)
+                return task
+
+        current_task: Optional[Task] = None
+        next_task: Optional[Task] = None
+
+        go_on = True
+
+        try:
+            while go_on:
+                if current_task is None:
+                    current_task = Task.get(block=True)
+                    if current_task is None:
+                        break
+
+                    with torch.cuda.stream(h2d_stream):
+                        worker.non_blocking_h2d(current_task.execute_input)
+
+                    compute_stream.wait_stream(h2d_stream)
                     with torch.cuda.stream(compute_stream):
-                        next_task.executor_output = worker(
-                            next_task.executor_input)
-            except queue.Empty:
-                pass
+                        current_task.execute_output = worker(
+                            current_task.execute_input)
 
-            end_compute.wait()
-            if output_to_cpu:
-                with torch.cuda.stream(io_stream):
-                    current_task.executor_output.to("cpu", non_blocking=True)
-                    io_stream.synchronize()
-            executor_out.put(
-                (current_task.scheduler_output, current_task.executor_output))
+                # Is there any way to achieve
+                # poller = epoll.register(compute_stream, executor_in)
+                # poller.poll()
 
-            current_task = next_task
-            next_task = None
-    except Exception as e:
-        executor_out.put(e)
+                try:
+                    next_task = Task.get(timeout=0.001)
+                    if next_task is None:
+                        go_on = False
+                    else:
+                        with torch.cuda.stream(h2d_stream):
+                            worker.non_blocking_h2d(next_task.execute_input)
+
+                        compute_stream.wait_stream(h2d_stream)
+
+                        with torch.cuda.stream(compute_stream):
+                            next_task.execute_output = worker(
+                                next_task.execute_input)
+                except queue.Empty:
+                    pass
+
+                d2h_stream.wait_stream(compute_stream)
+                with torch.cuda.stream(d2h_stream):
+                    assert current_task.execute_output is not None
+                    worker.non_blocking_d2h(current_task.execute_output)
+
+                d2h_stream.synchronize()
+                executor_out.put((current_task.scheduler_output,
+                                  current_task.execute_output))
+
+                current_task = next_task
+                next_task = None
+        except Exception as e:
+            executor_out.put(e)
