@@ -32,16 +32,15 @@ class EncodeOnlyEngineConfig(EngineConfig):
             "trust_remote_code=%s, dtype=%s, max_seq_len=%d, "
             "download_dir=%r, load_format=%s, "
             "device_config=%s, served_model_name=%s, "
-            "max_num_on_the_fly=%d, scheduling=%s, async_thread=%s)",
-            VLLM_VERSION, self.model_config.model, self.model_config.tokenizer,
+            "max_num_on_the_fly=%d, scheduling=%s)", VLLM_VERSION,
+            self.model_config.model, self.model_config.tokenizer,
             self.model_config.tokenizer_mode,
             self.model_config.trust_remote_code, self.model_config.dtype,
             self.model_config.max_model_len, self.load_config.download_dir,
             self.load_config.load_format, self.device_config.device,
             self.model_config.served_model_name,
             self.scheduler_config.max_num_on_the_fly,
-            self.scheduler_config.scheduling,
-            self.scheduler_config.async_thread)
+            self.scheduler_config.scheduling)
         if self.parallel_config is not None:
             logger.info("Parallel config: data_parallel_size=%d",
                         self.parallel_config.data_parallel_size)

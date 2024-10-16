@@ -1,5 +1,6 @@
 import atexit
 import queue
+from concurrent.futures import ThreadPoolExecutor
 from queue import Queue
 from typing import Optional
 
@@ -59,7 +60,7 @@ class GPUExecutor:
         pass
 
 
-class GPUThreadAsyncExecutor(GPUExecutor):
+class GPUAsyncExecutor(GPUExecutor):
     support_scheduling = ["async_scheduling"]
 
     def __init__(self, engine_config: EngineConfig, workflow: Workflow,
@@ -103,49 +104,6 @@ class GPUThreadAsyncExecutor(GPUExecutor):
             atexit.unregister(self.shutdown_execute_loop)
 
 
-class GPUGeventAsyncExecutor(GPUExecutor):
-    support_scheduling = ["async_scheduling"]
-
-    def __init__(self, engine_config: EngineConfig, workflow: Workflow,
-                 attn_backend: AttentionBackend, executor_in: Queue,
-                 executor_out: Queue) -> None:
-        super().__init__(engine_config, workflow, attn_backend)
-        from gevent import Greenlet
-
-        self.Greenlet = Greenlet
-
-        self.executor_in = executor_in
-        self.executor_out = executor_out
-
-        self.executor_thread: Optional[Greenlet] = None
-
-        if self.engine_config.scheduler_config.scheduling == "double_buffer":
-            self.execute_loop = self.executor.double_buffer_execute_loop
-        else:
-            self.execute_loop = self.executor.simple_execute_loop
-
-    @classmethod
-    def from_engine(cls, engine: LLMEngine):
-        return cls(engine_config=engine.engine_config,
-                   workflow=engine.workflow,
-                   attn_backend=engine.attn_backend,
-                   executor_in=engine.executor_in,
-                   executor_out=engine.executor_out)
-
-    def ensure_start_execute_loop(self):
-        if self.executor_thread is None or self.executor_thread.dead:
-            self.executor_thread = self.Greenlet.spawn(self.execute_loop,
-                                                       self.executor_in,
-                                                       self.executor_out)
-            atexit.register(self.shutdown_execute_loop)
-
-    def shutdown_execute_loop(self):
-        if self.executor_thread is not None and not self.executor_thread.dead:
-            self.executor_in.put(None)
-            self.executor_thread.join()
-            atexit.unregister(self.shutdown_execute_loop)
-
-
 class Executor:
 
     def __init__(self, worker: WorkerBase):
@@ -171,6 +129,15 @@ class Executor:
         return execute_output
 
     def simple_execute_loop(self, executor_in: Queue, executor_out: Queue):
+        put_thread = ThreadPoolExecutor(1)
+
+        def _put(scheduler_output, execute_output):
+            self.d2h_stream.wait_stream(self.compute_stream)
+            with torch.cuda.stream(self.d2h_stream):
+                self.worker.non_blocking_d2h(execute_output)
+                self.d2h_stream.synchronize()
+            executor_out.put((scheduler_output, execute_output))
+
         try:
             while True:
                 o = executor_in.get()
@@ -178,10 +145,18 @@ class Executor:
                     break
 
                 scheduler_output, execute_input = o
-                execute_output = self.execute_model(execute_input)
-                executor_out.put((scheduler_output, execute_output))
+
+                with torch.cuda.stream(self.h2d_stream):
+                    self.worker.non_blocking_h2d(execute_input)
+
+                self.compute_stream.wait_stream(self.h2d_stream)
+                with torch.cuda.stream(self.compute_stream):
+                    execute_output = self.worker(execute_input)
+
+                put_thread.submit(_put, scheduler_output, execute_output)
         except Exception as e:
             executor_out.put(e)
+        put_thread.shutdown()
 
     def double_buffer_execute_loop(self, executor_in: Queue,
                                    executor_out: Queue):
@@ -194,6 +169,15 @@ class Executor:
         compute_stream = self.compute_stream
         d2h_stream = self.d2h_stream
         worker = self.worker
+        put_thread = ThreadPoolExecutor(1)
+
+        # Is there a better way to do it asynchronously?
+        def _put(scheduler_output, execute_output):
+            self.d2h_stream.wait_stream(self.compute_stream)
+            with torch.cuda.stream(self.d2h_stream):
+                self.worker.non_blocking_d2h(execute_output)
+                self.d2h_stream.synchronize()
+            executor_out.put((scheduler_output, execute_output))
 
         @dataclass
         class Task:
@@ -234,12 +218,11 @@ class Executor:
                         current_task.execute_output = worker(
                             current_task.execute_input)
 
-                # Is there any way to achieve
-                # poller = epoll.register(compute_stream, executor_in)
-                # poller.poll()
-
                 try:
-                    next_task = Task.get(timeout=0.001)
+                    # Is there any way to achieve
+                    # poller = epoll.register(compute_stream, executor_in)
+                    # poller.poll()
+                    next_task = Task.get(timeout=0.002)
                     if next_task is None:
                         go_on = False
                     else:
@@ -254,16 +237,10 @@ class Executor:
                 except queue.Empty:
                     pass
 
-                d2h_stream.wait_stream(compute_stream)
-                with torch.cuda.stream(d2h_stream):
-                    assert current_task.execute_output is not None
-                    worker.non_blocking_d2h(current_task.execute_output)
-
-                d2h_stream.synchronize()
-                executor_out.put((current_task.scheduler_output,
-                                  current_task.execute_output))
-
+                put_thread.submit(_put, current_task.scheduler_output,
+                                  current_task.execute_output)
                 current_task = next_task
                 next_task = None
         except Exception as e:
             executor_out.put(e)
+        put_thread.shutdown()

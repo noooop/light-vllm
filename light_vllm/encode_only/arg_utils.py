@@ -41,7 +41,6 @@ class EncodeOnlyEngineArgs(EngineArgs):
     max_num_seqs: int = 256
     max_num_on_the_fly: int = 3
     scheduling: str = "async"
-    async_thread: str = "thread"
 
     data_parallel_size: int = 0
 
@@ -87,8 +86,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
             max_num_seqs=self.max_num_seqs,
             max_model_len=model_config.max_model_len,
             max_num_on_the_fly=self.max_num_on_the_fly,
-            scheduling=self.scheduling,
-            async_thread=self.async_thread)
+            scheduling=self.scheduling)
 
         load_config = LoadConfig(
             load_format=self.load_format,

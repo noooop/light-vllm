@@ -25,8 +25,7 @@ def benchmark_vllm(args):
         quantization_param_path=args.quantization_param_path,
         device=args.device,
         max_num_seqs=32,
-        scheduling=args.scheduling,
-        async_thread=args.async_thread)
+        scheduling=args.scheduling)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -79,7 +78,6 @@ if __name__ == '__main__':
     args.quantization_param_path = None
     args.max_model_len = None
 
-    args.async_thread = "gevent"
     args.dtype = "half"
     args.device = "cuda"
     args.batchsize = [4]

@@ -27,18 +27,12 @@ class PrefillOnlyWorkflow(Workflow):
             elif engine.engine_config.scheduler_config.scheduling in [
                     "async", "double_buffer"
             ]:
-                if (engine.engine_config.scheduler_config.async_thread ==
-                        "gevent"):
-                    workflow.Executor += ":GPUGeventAsyncExecutor"
-                else:
-                    workflow.Executor += ":GPUThreadAsyncExecutor"
+                workflow.Executor += ":GPUAsyncExecutor"
         else:
             assert engine.engine_config.parallel_config.data_parallel_size > 0
             assert engine.engine_config.scheduler_config.scheduling in [
                 "async", "double_buffer"
             ]
-            assert (
-                engine.engine_config.scheduler_config.async_thread == "thread")
 
             engine.engine_config.scheduler_config.max_num_on_the_fly *= (
                 engine.engine_config.parallel_config.data_parallel_size)
