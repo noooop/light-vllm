@@ -89,7 +89,7 @@ if __name__ == '__main__':
             f = executor.submit(benchmark_vllm, args)
             f.result()
 
-    for scheduling in ["sync", "async", "double_buffer"]:
+    for scheduling in ["sync", "simple_async", "async", "double_buffer"]:
         print(scheduling)
         args.scheduling = scheduling
         run_vllm(args)

@@ -77,8 +77,10 @@ class GPUAsyncExecutor(GPUExecutor):
 
         if self.engine_config.scheduler_config.scheduling == "double_buffer":
             self.execute_loop = self.executor.double_buffer_execute_loop
+        elif self.engine_config.scheduler_config.scheduling == "simple_async":
+            self.execute_loop = self.executor.simple_async_execute_loop
         else:
-            self.execute_loop = self.executor.simple_execute_loop
+            self.execute_loop = self.executor.async_execute_loop
 
     @classmethod
     def from_engine(cls, engine: LLMEngine):
@@ -128,7 +130,21 @@ class Executor:
 
         return execute_output
 
-    def simple_execute_loop(self, executor_in: Queue, executor_out: Queue):
+    def simple_async_execute_loop(self, executor_in: Queue,
+                                  executor_out: Queue):
+        try:
+            while True:
+                o = executor_in.get()
+                if o is None:
+                    break
+
+                scheduler_output, execute_input = o
+                execute_output = self.execute_model(execute_input)
+                executor_out.put((scheduler_output, execute_output))
+        except Exception as e:
+            executor_out.put(e)
+
+    def async_execute_loop(self, executor_in: Queue, executor_out: Queue):
         put_thread = ThreadPoolExecutor(1)
 
         def _put(scheduler_output, execute_output):
@@ -173,10 +189,10 @@ class Executor:
 
         # Is there a better way to do it asynchronously?
         def _put(scheduler_output, execute_output):
-            self.d2h_stream.wait_stream(self.compute_stream)
-            with torch.cuda.stream(self.d2h_stream):
-                self.worker.non_blocking_d2h(execute_output)
-                self.d2h_stream.synchronize()
+            d2h_stream.wait_stream(compute_stream)
+            with torch.cuda.stream(d2h_stream):
+                worker.non_blocking_d2h(execute_output)
+                d2h_stream.synchronize()
             executor_out.put((scheduler_output, execute_output))
 
         @dataclass

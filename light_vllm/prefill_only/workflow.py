@@ -25,7 +25,7 @@ class PrefillOnlyWorkflow(Workflow):
             if engine.engine_config.scheduler_config.scheduling in ["sync"]:
                 workflow.Executor += ":GPUExecutor"
             elif engine.engine_config.scheduler_config.scheduling in [
-                    "async", "double_buffer"
+                    "simple_async", "async", "double_buffer"
             ]:
                 workflow.Executor += ":GPUAsyncExecutor"
         else:

@@ -6,7 +6,7 @@ from typing import List, Optional
 from light_vllm.backends.attention import AttentionBackend
 from light_vllm.core.config import EngineConfig
 from light_vllm.core.llm_engine import LLMEngine
-from light_vllm.core.worker import WorkerBase, create_worker
+from light_vllm.core.worker import create_worker
 from light_vllm.core.workflow import Workflow
 from light_vllm.logger import init_logger
 from light_vllm.prefill_only.executor.gpu_executor import Executor
@@ -28,7 +28,7 @@ class GPUDataParallelismExecutor:
         self.executor_in = executor_in
         self.executor_out = executor_out
 
-        self.workers: Optional[List[WorkerBase]] = None
+        self.threads: Optional[List[Thread]] = None
 
     @classmethod
     def from_engine(cls, engine: LLMEngine):
@@ -52,28 +52,30 @@ class GPUDataParallelismExecutor:
 
         if self.engine_config.scheduler_config.scheduling == "double_buffer":
             execute_loop = executor.double_buffer_execute_loop
+        elif self.engine_config.scheduler_config.scheduling == "simple_async":
+            execute_loop = executor.simple_async_execute_loop
         else:
-            execute_loop = executor.simple_execute_loop
+            execute_loop = executor.async_execute_loop
 
         execute_loop(self.executor_in, self.executor_out)
 
     def ensure_start_execute_loop(self):
-        if self.workers is None:
-            self.workers = []
+        if self.threads is None:
+            self.threads = []
             for rank in range(
                     self.engine_config.parallel_config.data_parallel_size):
-                worker = Thread(target=self.thread_target,
+                thread = Thread(target=self.thread_target,
                                 args=(rank, ),
                                 daemon=True)
-                worker.start()
-                self.workers.append(worker)
+                thread.start()
+                self.threads.append(thread)
             atexit.register(self.shutdown_execute_loop)
 
     def shutdown_execute_loop(self):
-        if self.workers is not None:
-            for worker in self.workers:
+        if self.threads is not None:
+            for thread in self.threads:
                 self.executor_in.put(None)
-            for worker in self.workers:
-                worker.join()
-            self.workers = None
+            for thread in self.threads:
+                thread.join()
+            self.threads = None
             atexit.unregister(self.shutdown_execute_loop)

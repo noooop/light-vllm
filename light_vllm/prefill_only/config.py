@@ -9,6 +9,7 @@ _GB = 1 << 30
 
 
 class PrefillOnlySchedulerConfig(SchedulerConfig):
+    supported_scheduling = ["sync", "simple_async", "async", "double_buffer"]
 
     def __init__(self,
                  max_model_len: int,
@@ -57,9 +58,9 @@ class PrefillOnlySchedulerConfig(SchedulerConfig):
                 f"max_num_on_the_fly {self.max_num_on_the_fly} must "
                 "be greater than 1")
 
-        if self.scheduling not in ["sync", "async", "double_buffer"]:
+        if self.scheduling not in self.supported_scheduling:
             raise ValueError(f"scheduling {self.scheduling} must "
-                             f"in sync, async double_buffer")
+                             f"in {self.supported_scheduling}")
 
     @property
     def max_num_seqs(self) -> int:
