@@ -49,8 +49,8 @@ class DecodeOnlyEmbeddingSchedulerConfig(DecodeOnlySchedulerConfig,
                  max_num_batched_tokens: Optional[int] = None,
                  max_num_requests: Optional[int] = None,
                  max_num_seqs: Optional[int] = None,
-                 max_num_on_the_fly: Optional[int] = 2,
-                 scheduling: str = "sync") -> None:
+                 max_num_on_the_fly: Optional[int] = None,
+                 scheduling: str = "async") -> None:
         PrefillOnlySchedulerConfig.__init__(self, max_model_len,
                                             max_num_batched_tokens,
                                             max_num_requests, max_num_seqs,

@@ -43,7 +43,7 @@ class DecodeOnlyOutputLastHiddenStatesEngineArgs(EngineArgs):
     enable_bidirectional: bool = False
 
     max_num_seqs: int = 256
-    max_num_on_the_fly: int = 2
+    max_num_on_the_fly: Optional[int] = None
     scheduling: str = "async"
 
     data_parallel_size: int = 0

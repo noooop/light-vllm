@@ -39,7 +39,7 @@ class EncodeOnlyEngineArgs(EngineArgs):
     max_model_len: Optional[int] = None
     max_num_batched_tokens: Optional[int] = None
     max_num_seqs: int = 256
-    max_num_on_the_fly: int = 3
+    max_num_on_the_fly: Optional[int] = None
     scheduling: str = "async"
 
     data_parallel_size: int = 0
