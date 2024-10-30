@@ -134,7 +134,7 @@ class SamplingMetadata:
         selected_token_indices: torch.Tensor,
         categorized_sample_indices: Dict[SamplingType, torch.Tensor],
         num_prompts: int,
-        skip_sampler_cpu_output: bool = False,
+        skip_sampler_cpu_output: bool = True,
         reuse_sampling_tensors: bool = False,
     ) -> None:
         self.seq_groups = seq_groups

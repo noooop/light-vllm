@@ -1,5 +1,7 @@
 from typing import Optional, Tuple
 
+import torch
+
 from light_vllm.core.config import EngineConfig
 from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.schema.execute_io import ExecuteInput, ExecuteOutput
@@ -35,6 +37,9 @@ class GPUExecutor:
         self.attn_backend = attn_backend
         self._init_executor()
 
+        self.h2d_stream = torch.cuda.Stream()
+        self.d2h_stream = torch.cuda.Stream()
+
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         return cls(engine_config=engine.engine_config,
@@ -51,15 +56,15 @@ class GPUExecutor:
         )
         worker_kwargs.update(module=self.workflow.Worker)
 
-        self.driver_worker = create_worker(**worker_kwargs)
-        self.driver_worker.init_device()
-        self.driver_worker.load_model()
+        self.worker = create_worker(**worker_kwargs)
+        self.worker.init_device()
+        self.worker.load_model()
 
     def determine_num_available_blocks(self) -> Tuple[int, int]:
         """Determine the number of available KV blocks by invoking the
         underlying worker.
         """
-        return self.driver_worker.determine_num_available_blocks()
+        return self.worker.determine_num_available_blocks()
 
     def initialize_cache(self, num_gpu_blocks: int, num_cpu_blocks) -> None:
         """Initialize the KV cache by invoking the underlying worker.
@@ -70,12 +75,24 @@ class GPUExecutor:
         logger.info("# GPU blocks: %d, # CPU blocks: %d", num_gpu_blocks,
                     num_cpu_blocks)
 
-        self.driver_worker.initialize_cache(num_gpu_blocks, num_cpu_blocks)
+        self.worker.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
     def execute_model(self,
                       execute_input: ExecuteInput) -> Optional[ExecuteOutput]:
-        output = self.driver_worker(execute_input)
-        return output
+
+        with torch.cuda.stream(self.h2d_stream):
+            self.worker.non_blocking_h2d(execute_input)
+
+        self.h2d_stream.synchronize()
+
+        execute_output = self.worker(execute_input)
+
+        with torch.cuda.stream(self.d2h_stream):
+            self.worker.non_blocking_d2h(execute_output)
+
+        self.d2h_stream.synchronize()
+
+        return execute_output
 
     def initialize_kv_caches(self, engine: LLMEngine) -> None:
         """Initialize the KV cache in the worker(s).
@@ -83,7 +100,7 @@ class GPUExecutor:
         The workers will determine the number of blocks in both the GPU cache
         and the swap CPU cache.
         """
-        self.driver_worker.model_runner.prepare_model_input = engine.model_inputs_builder.prepare_model_input
+        self.worker.model_runner.prepare_model_input = engine.model_inputs_builder.prepare_model_input
 
         num_gpu_blocks, num_cpu_blocks = (
             self.determine_num_available_blocks())
@@ -101,7 +118,7 @@ class GPUExecutor:
 
         self.initialize_cache(num_gpu_blocks, num_cpu_blocks)
 
-        del self.driver_worker.model_runner.prepare_model_input
+        del self.worker.model_runner.prepare_model_input
 
     def shutdown_execute_loop(self):
         pass

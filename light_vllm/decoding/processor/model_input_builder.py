@@ -45,9 +45,8 @@ class ChatModelPreProcessor(ModelInputBuilder):
             engine.engine_config.model_config,
             engine.engine_config.scheduler_config,
             engine.engine_config.cache_config,
-            attn_backend=engine.executor.driver_worker.model_runner.
-            attn_backend,
-            cuda_graph=engine.executor.driver_worker.model_runner.cuda_graph)
+            attn_backend=engine.executor.worker.model_runner.attn_backend,
+            cuda_graph=engine.executor.worker.model_runner.cuda_graph)
 
     def _prepare_model_input_tensors(
         self, seq_group_metadata_list: List[SequenceGroupMetadata]
@@ -88,7 +87,6 @@ class ChatModelPreProcessor(ModelInputBuilder):
                                                      model_input.query_lens,
                                                      self.device,
                                                      self.pin_memory)
-        sampling_metadata.skip_sampler_cpu_output = True
 
         is_prompt = (seq_group_metadata_list[0].is_prompt
                      if seq_group_metadata_list else None)

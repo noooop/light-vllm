@@ -8,6 +8,9 @@ import torch.nn as nn
 from light_vllm.core.config import DeviceConfig, LoadConfig
 from light_vllm.core.models.utils import set_cpu_offload_max_bytes
 from light_vllm.decoding.backends.attention import DecodeOnlyAttentionBackend
+from light_vllm.decoding.backends.logits_processor import LogitsProcessor
+from light_vllm.decoding.backends.sampler import Sampler
+from light_vllm.decoding.backends.sampling_metadata import SamplingMetadata
 from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,
                                         SchedulerConfig)
@@ -58,6 +61,14 @@ class GPUModelRunner:
 
         set_cpu_offload_max_bytes(
             int(self.cache_config.cpu_offload_gb * 1024**3))
+
+        self.logits_processor = LogitsProcessor(
+            self.model_config.hf_config.vocab_size)
+        self.sampler = Sampler()
+
+        self.sampler_stream = torch.cuda.Stream()
+        self.logits_processor_stream = torch.cuda.Stream()
+        self.compute_stream = torch.cuda.Stream()
 
     def load_model(self) -> None:
         from light_vllm.core.loader.loader import (get_model_loader,
@@ -162,6 +173,23 @@ class GPUModelRunner:
     def vocab_size(self) -> int:
         return self.model_config.get_vocab_size()
 
+    def compute_logits(
+        self,
+        hidden_states: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> Optional[torch.Tensor]:
+        logits = self.logits_processor(self.model.lm_head, hidden_states,
+                                       sampling_metadata)
+        return logits
+
+    def sample(
+        self,
+        logits: torch.Tensor,
+        sampling_metadata: SamplingMetadata,
+    ) -> Optional[SamplerOutput]:
+        next_tokens = self.sampler(logits, sampling_metadata)
+        return next_tokens
+
     @torch.inference_mode()
     def execute_model(
         self,
@@ -178,18 +206,26 @@ class GPUModelRunner:
         else:
             model_executable = self.model
 
-        hidden_states = model_executable(
-            input_ids=model_input.input_tokens,
-            positions=model_input.input_positions,
-            kv_caches=kv_caches,
-            attn_metadata=model_input.attn_metadata)
+        with torch.cuda.stream(self.compute_stream):
+            hidden_states = model_executable(
+                input_ids=model_input.input_tokens,
+                positions=model_input.input_positions,
+                kv_caches=kv_caches,
+                attn_metadata=model_input.attn_metadata)
 
-        logits = self.model.compute_logits(hidden_states,
-                                           model_input.sampling_metadata)
+        self.logits_processor_stream.wait_stream(self.compute_stream)
 
-        # Sample the next token.
-        output = self.model.sample(
-            logits=logits,
-            sampling_metadata=model_input.sampling_metadata,
-        )
+        with torch.cuda.stream(self.logits_processor_stream):
+            logits = self.compute_logits(hidden_states,
+                                         model_input.sampling_metadata)
+
+        self.sampler_stream.wait_stream(self.logits_processor_stream)
+
+        with torch.cuda.stream(self.sampler_stream):
+            output = self.sample(
+                logits=logits,
+                sampling_metadata=model_input.sampling_metadata,
+            )
+        self.sampler_stream.synchronize()
+
         return output

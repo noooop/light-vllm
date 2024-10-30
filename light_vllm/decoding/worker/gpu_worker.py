@@ -7,13 +7,13 @@ import torch
 
 from light_vllm.backends.utils import set_random_seed
 from light_vllm.core.config import DeviceConfig, LoadConfig
+from light_vllm.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.decoding.backends.attention import DecodeOnlyAttentionBackend
 from light_vllm.decoding.config import (CacheConfig, ChatEngineConfig,
                                         ModelConfig, SchedulerConfig)
 from light_vllm.decoding.runner.model_runner import GPUModelRunner
 from light_vllm.decoding.schema.execute_io import (DecodingExecuteInput,
-                                                   DecodingExecuteOutput,
-                                                   DecodingWorkerInputForGPU)
+                                                   SamplerOutput)
 from light_vllm.decoding.worker.cache_engine import CacheEngine
 from light_vllm.platforms import current_platform
 
@@ -165,18 +165,6 @@ class Worker:
     def kv_cache(self) -> Optional[List[torch.Tensor]]:
         return self.gpu_cache
 
-    @torch.inference_mode()
-    def execute_worker(self, worker_input: DecodingWorkerInputForGPU) -> None:
-        if (worker_input.blocks_to_swap_in is not None
-                and worker_input.blocks_to_swap_in.numel() > 0):
-            self.cache_engine.swap_in(worker_input.blocks_to_swap_in)
-        if (worker_input.blocks_to_swap_out is not None
-                and worker_input.blocks_to_swap_out.numel() > 0):
-            self.cache_engine.swap_out(worker_input.blocks_to_swap_out)
-        if (worker_input.blocks_to_copy is not None
-                and worker_input.blocks_to_copy.numel() > 0):
-            self.cache_engine.copy(worker_input.blocks_to_copy)
-
     @property
     def max_model_len(self) -> int:
         return self.model_config.max_model_len
@@ -195,21 +183,22 @@ class Worker:
     def __call__(
         self,
         execute_input: Optional[DecodingExecuteInput] = None
-    ) -> Optional[List[DecodingExecuteOutput]]:
-        """Executes at least one model step on the given sequences, unless no
-        sequences are provided."""
+    ) -> Optional[SamplerOutput]:
 
-        self.execute_worker(execute_input.worker_input)
-
-        # If there is no input, we don't need to execute the model.
         if execute_input.worker_input.num_seq_groups == 0:
-            return []
+            return
 
         output = self.model_runner.execute_model(
             execute_input.model_input,
             self.kv_cache if self.kv_cache is not None else None)
 
         return output
+
+    def non_blocking_h2d(self, execute_input: ExecuteInput):
+        return
+
+    def non_blocking_d2h(self, execute_output: ExecuteOutput):
+        execute_output.to("cpu", non_blocking=True)
 
 
 def _check_if_gpu_supports_dtype(torch_dtype: torch.dtype):

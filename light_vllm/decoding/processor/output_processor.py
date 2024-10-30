@@ -33,33 +33,22 @@ class ChatModelOutputProcessor(OutputProcessor):
         return cls(engine.engine_config.scheduler_config, engine.scheduler,
                    engine.tokenizer, engine.seq_counter)
 
-    def __call__(
-            self, scheduler_output: SchedulerOutput,
-            execute_output: SamplerOutput) -> List[ChatModelRequestOutput]:
-        now = time.time()
+    def get_sampler_output(self, execute_output: SamplerOutput):
 
-        scheduled_seq_groups = scheduler_output.scheduled_seq_groups
-        ignored_seq_groups = scheduler_output.ignored_seq_groups
-        seq_group_metadata_list = scheduler_output.seq_group_metadata_list
-
-        # sampler GPU -> CPU & pythonized
-        deferred_sample_results_args = execute_output.deferred_sample_results_args
-        sampled_token_ids_tensor = execute_output.sampled_token_ids
-        sampling_metadata = deferred_sample_results_args.sampling_metadata
+        sampling_metadata = execute_output.sampling_metadata
         logprobs = execute_output.logprobs
 
-        maybe_deferred_sample_results, maybe_sampled_tokens_tensor = get_pythonized_sample_results(
-            deferred_sample_results_args), sampled_token_ids_tensor
+        sample_results = get_pythonized_sample_results(execute_output)
 
         prompt_logprobs, sample_logprobs = get_logprobs(
-            logprobs, sampling_metadata, maybe_deferred_sample_results)
+            logprobs, sampling_metadata, sample_results)
 
         sampler_output: List[List[CompletionSequenceGroupOutput]] = []
 
         for (seq_group, sample_result, group_prompt_logprobs,
              group_sample_logprobs) in zip(sampling_metadata.seq_groups,
-                                           maybe_deferred_sample_results,
-                                           prompt_logprobs, sample_logprobs):
+                                           sample_results, prompt_logprobs,
+                                           sample_logprobs):
             seq_ids = seq_group.seq_ids
             next_token_ids, parent_ids = sample_result
             seq_outputs: List[SequenceOutput] = []
@@ -73,9 +62,19 @@ class ChatModelOutputProcessor(OutputProcessor):
                                               group_prompt_logprobs)
             ])
 
-        # sampler GPU -> CPU & pythonized end
+        return sampler_output
 
-        # Update the scheduled sequence groups with the model outputs.
+    def __call__(
+            self, scheduler_output: SchedulerOutput,
+            execute_output: SamplerOutput) -> List[ChatModelRequestOutput]:
+        now = time.time()
+
+        scheduled_seq_groups = scheduler_output.scheduled_seq_groups
+        ignored_seq_groups = scheduler_output.ignored_seq_groups
+        seq_group_metadata_list = scheduler_output.seq_group_metadata_list
+
+        sampler_output = self.get_sampler_output(execute_output)
+
         for scheduled_seq_group, outputs, seq_group_meta in zip(
                 scheduled_seq_groups, sampler_output, seq_group_metadata_list):
             seq_group = scheduled_seq_group.seq_group

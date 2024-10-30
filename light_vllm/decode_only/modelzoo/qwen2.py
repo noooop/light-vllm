@@ -43,9 +43,6 @@ from light_vllm.core.loader.weight_utils import (default_weight_loader,
                                                  maybe_remap_kv_scale_name)
 from light_vllm.core.models.utils import is_pp_missing_parameter, make_layers
 from light_vllm.core.schema.execute_io import IntermediateTensors
-from light_vllm.decoding.backends.logits_processor import LogitsProcessor
-from light_vllm.decoding.backends.sampler import Sampler, SamplerOutput
-from light_vllm.decoding.backends.sampling_metadata import SamplingMetadata
 from light_vllm.distributed import (get_pp_group,
                                     get_tensor_model_parallel_world_size)
 
@@ -352,9 +349,6 @@ class Qwen2ForCausalLM(nn.Module):
                                           config.hidden_size,
                                           quant_config=quant_config)
 
-        self.logits_processor = LogitsProcessor(config.vocab_size)
-        self.sampler = Sampler()
-
     def forward(
         self,
         input_ids: torch.Tensor,
@@ -366,15 +360,6 @@ class Qwen2ForCausalLM(nn.Module):
         hidden_states = self.model(input_ids, positions, kv_caches,
                                    attn_metadata, intermediate_tensors)
         return hidden_states
-
-    def compute_logits(
-        self,
-        hidden_states: torch.Tensor,
-        sampling_metadata: SamplingMetadata,
-    ) -> Optional[torch.Tensor]:
-        logits = self.logits_processor(self.lm_head, hidden_states,
-                                       sampling_metadata)
-        return logits
 
     def make_empty_intermediate_tensors(
             self, batch_size: int, dtype: torch.dtype,
@@ -389,14 +374,6 @@ class Qwen2ForCausalLM(nn.Module):
                         dtype=dtype,
                         device=device),
         })
-
-    def sample(
-        self,
-        logits: torch.Tensor,
-        sampling_metadata: SamplingMetadata,
-    ) -> Optional[SamplerOutput]:
-        next_tokens = self.sampler(logits, sampling_metadata)
-        return next_tokens
 
     def load_weights(self, weights: Iterable[Tuple[str, torch.Tensor]]):
         stacked_params_mapping = [
