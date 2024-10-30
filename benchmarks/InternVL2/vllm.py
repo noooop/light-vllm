@@ -1,4 +1,3 @@
-import base64
 import os
 import time
 from pathlib import Path
@@ -7,11 +6,8 @@ from typing import List, NamedTuple, Optional
 import PIL
 import torch
 from PIL.Image import Image
-from transformers import AutoProcessor, AutoTokenizer
-
+from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
-from vllm.multimodal.utils import fetch_image
-
 
 home = Path(os.path.abspath(__file__)).parent
 
@@ -96,7 +92,6 @@ for i in range(3):
 
 torch.cuda.synchronize()
 
-
 N = 10
 start = time.perf_counter()
 
@@ -109,10 +104,7 @@ end = time.perf_counter()
 elapsed_time = end - start
 print("single-image single-round conversation", elapsed_time / N)
 
-
-
 ###########################################
-
 
 question = 'Describe the two images in detail.'
 image_urls = [str(home / '001.jpg'), str(home / '002.jpg')]
@@ -145,7 +137,6 @@ for i in range(3):
 
 torch.cuda.synchronize()
 
-
 N = 10
 start = time.perf_counter()
 
@@ -157,6 +148,5 @@ end = time.perf_counter()
 
 elapsed_time = end - start
 print("multi-image single-round conversation", elapsed_time / N)
-
 
 ###########################################

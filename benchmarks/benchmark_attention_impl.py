@@ -73,13 +73,14 @@ if __name__ == '__main__':
     args.scheduling = "async"
 
     from concurrent.futures import ProcessPoolExecutor
-    from light_vllm.prefill_only.backends.attention.selector import AttentionImpls
+
+    from light_vllm.prefill_only.backends.attention.selector import (
+        AttentionImpls)
 
     def run_vllm(args):
         with ProcessPoolExecutor(1) as executor:
             f = executor.submit(benchmark_vllm, args)
             f.result()
-
 
     for dtype, attention_impls in AttentionImpls.items():
         print("dtype:", dtype)
