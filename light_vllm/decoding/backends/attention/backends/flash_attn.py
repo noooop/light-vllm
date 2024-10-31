@@ -12,6 +12,9 @@ from light_vllm.decoding.backends.attention.backends.abstract import (
 from light_vllm.decoding.backends.attention.backends.utils import (
     compute_slot_mapping, compute_slot_mapping_start_idx,
     is_block_tables_empty)
+from light_vllm.utils import is_pin_memory_available
+
+pin_memory = is_pin_memory_available()
 
 
 class DecodeOnlyFlashAttentionBackend(DecodeOnlyAttentionBackend):
@@ -193,6 +196,15 @@ class DecodeOnlyFlashAttentionMetadata(DecodeOnlyAttentionMetadata):
         )
         return self._cached_decode_metadata
 
+    def to(self, device, non_blocking=True):
+        for k in self.__dict__:
+            if not hasattr(self.__dict__[k], "to"):
+                continue
+            self.__dict__[k] = self.__dict__[k].to(device=device,
+                                                   non_blocking=non_blocking)
+
+        return self
+
 
 class DecodeOnlyFlashAttentionMetadataBuilder(
         DecodeOnlyAttentionMetadataBuilder[DecodeOnlyFlashAttentionMetadata]):
@@ -303,19 +315,24 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
 
         context_lens_tensor = torch.tensor(self.context_lens,
                                            dtype=torch.int,
-                                           device=device)
+                                           device="cpu",
+                                           pin_memory=pin_memory)
         seq_lens_tensor = torch.tensor(seq_lens,
                                        dtype=torch.int,
-                                       device=device)
+                                       device="cpu",
+                                       pin_memory=pin_memory)
         query_lens_tensor = torch.tensor(query_lens,
                                          dtype=torch.long,
-                                         device=device)
+                                         device="cpu",
+                                         pin_memory=pin_memory)
         query_start_loc = torch.zeros(query_lens_tensor.shape[0] + 1,
                                       dtype=torch.int32,
-                                      device=device)
+                                      device="cpu",
+                                      pin_memory=pin_memory)
         seq_start_loc = torch.zeros(seq_lens_tensor.shape[0] + 1,
                                     dtype=torch.int32,
-                                    device=device)
+                                    device="cpu",
+                                    pin_memory=pin_memory)
         torch.cumsum(seq_lens_tensor,
                      dim=0,
                      dtype=seq_start_loc.dtype,
@@ -327,7 +344,8 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
 
         slot_mapping_tensor = torch.tensor(self.slot_mapping,
                                            dtype=torch.long,
-                                           device=device)
+                                           device="cpu",
+                                           pin_memory=pin_memory)
 
         return DecodeOnlyFlashAttentionMetadata(
             num_prefills=self.num_prefills,

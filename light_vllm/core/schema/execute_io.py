@@ -24,12 +24,13 @@ class ExecuteInput:
 @dataclass
 class ExecuteOutput:
 
-    def to(self, target_device, non_blocking=False):
+    def to(self, device, non_blocking=True):
         for k in self.__dict__:
             if not hasattr(self.__dict__[k], "to"):
                 continue
-            self.__dict__[k] = self.__dict__[k].to(device=target_device,
+            self.__dict__[k] = self.__dict__[k].to(device=device,
                                                    non_blocking=non_blocking)
+        return self
 
 
 class IntermediateTensors(

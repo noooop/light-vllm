@@ -185,7 +185,7 @@ class Worker:
         execute_input: Optional[DecodingExecuteInput] = None
     ) -> Optional[SamplerOutput]:
 
-        if execute_input.worker_input.num_seq_groups == 0:
+        if execute_input.worker_input.num_requests == 0:
             return
 
         output = self.model_runner.execute_model(
@@ -195,7 +195,21 @@ class Worker:
         return output
 
     def non_blocking_h2d(self, execute_input: ExecuteInput):
-        return
+        # worker_input
+        worker_input = execute_input.worker_input
+        if (worker_input.blocks_to_swap_in is not None
+                and worker_input.blocks_to_swap_in.numel() > 0):
+            self.cache_engine.swap_in(worker_input.blocks_to_swap_in)
+        if (worker_input.blocks_to_swap_out is not None
+                and worker_input.blocks_to_swap_out.numel() > 0):
+            self.cache_engine.swap_out(worker_input.blocks_to_swap_out)
+        if (worker_input.blocks_to_copy is not None
+                and worker_input.blocks_to_copy.numel() > 0):
+            self.cache_engine.copy(worker_input.blocks_to_copy)
+
+        # model_input
+        model_input = execute_input.model_input
+        model_input.to("cuda", non_blocking=True)
 
     def non_blocking_d2h(self, execute_output: ExecuteOutput):
         execute_output.to("cpu", non_blocking=True)

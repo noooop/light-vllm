@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
@@ -9,32 +9,7 @@ from light_vllm.core.schema.execute_io import (ExecuteInput, ExecuteOutput,
 from light_vllm.decoding.backends.sampling_metadata import (
     SamplingMetadata, SequenceGroupToSample)
 from light_vllm.decoding.backends.sampling_params import SamplingType
-from light_vllm.decoding.schema.sequence import (Logprob, PromptLogprobs,
-                                                 SequenceGroupMetadata)
-
-
-@dataclass
-class DecodingExecuteModelInput:
-    """The model execution request, containing CPU metadata only. The LLM
-    engine should create an instance of this class for each request batch."""
-    # The sequence group metadata list.
-    seq_group_metadata_list: List[SequenceGroupMetadata]
-    # Blocks to swap in. List of CPU -> GPU block number.
-    blocks_to_swap_in: List[Tuple[int, int]] = field(default_factory=list)
-    # Blocks to swap out. List of GPU -> CPU block number.
-    blocks_to_swap_out: List[Tuple[int, int]] = field(default_factory=list)
-    # Blocks to copy. Source to dest block.
-    blocks_to_copy: List[Tuple[int, int]] = field(default_factory=list)
-
-    def clone(
-        self, seq_group_metadata_list: List[SequenceGroupMetadata]
-    ) -> "DecodingExecuteModelInput":
-        """Clone the request with a new sequence group metadata list."""
-        return DecodingExecuteModelInput(
-            seq_group_metadata_list=seq_group_metadata_list,
-            blocks_to_swap_in=self.blocks_to_swap_in.copy(),
-            blocks_to_swap_out=self.blocks_to_swap_out.copy(),
-            blocks_to_copy=self.blocks_to_copy.copy())
+from light_vllm.decoding.schema.sequence import Logprob, PromptLogprobs
 
 
 @dataclass
@@ -51,6 +26,14 @@ class DecodingModelInputForGPU(ModelInput):
     query_lens: Optional[List[int]] = None
     attn_metadata: Optional["AttentionMetadata"] = None
 
+    def to(self, device, non_blocking=True):
+        for k in self.__dict__:
+            if not hasattr(self.__dict__[k], "to"):
+                continue
+            self.__dict__[k] = self.__dict__[k].to(device=device,
+                                                   non_blocking=non_blocking)
+        return self
+
 
 @dataclass
 class DecodingModelInputForGPUWithSamplingMetadata(DecodingModelInputForGPU):
@@ -65,11 +48,7 @@ class DecodingModelInputForGPUWithSamplingMetadata(DecodingModelInputForGPU):
 
 @dataclass
 class DecodingWorkerInputForGPU(WorkerInput):
-    """Local inputs to each worker. May contain device-specific data. These
-    fields should be broadcastable to other workers.
-    """
-
-    num_seq_groups: Optional[int] = None
+    num_requests: int = 0
     blocks_to_swap_in: Optional[torch.Tensor] = None
     blocks_to_swap_out: Optional[torch.Tensor] = None
     blocks_to_copy: Optional[torch.Tensor] = None
@@ -190,7 +169,7 @@ class SamplerOutput(ExecuteOutput):
     sampling_metadata: SamplingMetadata
     greedy_samples: Optional[torch.Tensor]
 
-    def to(self, target_device, non_blocking=False):
+    def to(self, target_device, non_blocking=True):
         for k in self.multinomial_samples:
             self.multinomial_samples[k] = self.multinomial_samples[k].to(
                 device=target_device, non_blocking=non_blocking)
@@ -198,3 +177,4 @@ class SamplerOutput(ExecuteOutput):
         if isinstance(self.greedy_samples, torch.Tensor):
             self.greedy_samples = self.greedy_samples.to(
                 device=target_device, non_blocking=non_blocking)
+        return self

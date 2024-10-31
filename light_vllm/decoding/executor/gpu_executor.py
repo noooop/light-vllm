@@ -37,9 +37,6 @@ class GPUExecutor:
         self.attn_backend = attn_backend
         self._init_executor()
 
-        self.h2d_stream = torch.cuda.Stream()
-        self.d2h_stream = torch.cuda.Stream()
-
     @classmethod
     def from_engine(cls, engine: LLMEngine):
         return cls(engine_config=engine.engine_config,
@@ -80,17 +77,11 @@ class GPUExecutor:
     def execute_model(self,
                       execute_input: ExecuteInput) -> Optional[ExecuteOutput]:
 
-        with torch.cuda.stream(self.h2d_stream):
-            self.worker.non_blocking_h2d(execute_input)
-
-        self.h2d_stream.synchronize()
-
+        self.worker.non_blocking_h2d(execute_input)
         execute_output = self.worker(execute_input)
+        self.worker.non_blocking_d2h(execute_output)
 
-        with torch.cuda.stream(self.d2h_stream):
-            self.worker.non_blocking_d2h(execute_output)
-
-        self.d2h_stream.synchronize()
+        torch.cuda.synchronize()
 
         return execute_output
 

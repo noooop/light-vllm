@@ -10,7 +10,9 @@ import torch.nn as nn
 
 from light_vllm.decoding.backends.attention import DecodeOnlyAttentionMetadata
 from light_vllm.logger import init_logger
-from light_vllm.utils import make_tensor_with_pad
+from light_vllm.utils import is_pin_memory_available, make_tensor_with_pad
+
+pin_memory = is_pin_memory_available()
 
 logger = init_logger(__name__)
 
@@ -90,15 +92,17 @@ class CUDAGraph:
         input_positions.extend([0] * cuda_graph_pad_size)
         input_tokens_tensor = torch.tensor(input_tokens,
                                            dtype=torch.long,
-                                           device=builder.device)
+                                           device="cpu")
         input_positions_tensor = torch.tensor(input_positions,
                                               dtype=torch.long,
-                                              device=builder.device)
+                                              device="cpu")
 
         # Sequence and query lengths.
         seq_lens.extend([1] * cuda_graph_pad_size)
 
-        return input_tokens, input_positions, input_tokens_tensor, input_positions_tensor, seq_lens, cuda_graph_pad_size, batch_size
+        return (input_tokens, input_positions, input_tokens_tensor,
+                input_positions_tensor, seq_lens, cuda_graph_pad_size,
+                batch_size)
 
     def attention_metadata_builder_maybe_pad(self, builder,
                                              cuda_graph_pad_size,
@@ -117,14 +121,14 @@ class CUDAGraph:
             for i, block_table in enumerate(builder.block_tables):
                 if block_table:
                     input_block_tables[i, :len(block_table)] = block_table
-            block_tables = torch.tensor(input_block_tables, device=device)
+            block_tables = torch.tensor(input_block_tables,
+                                        device="cpu").pin_memory()
         else:
-            block_tables = make_tensor_with_pad(
-                builder.block_tables,
-                pad=0,
-                dtype=torch.int,
-                device=device,
-            )
+            block_tables = make_tensor_with_pad(builder.block_tables,
+                                                pad=0,
+                                                dtype=torch.int,
+                                                device="cpu",
+                                                pin_memory=pin_memory)
         return num_decode_tokens, block_tables
 
     def get_graph_runner(self, model_input):

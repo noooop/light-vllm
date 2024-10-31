@@ -66,10 +66,6 @@ class GPUModelRunner:
             self.model_config.hf_config.vocab_size)
         self.sampler = Sampler()
 
-        self.sampler_stream = torch.cuda.Stream()
-        self.logits_processor_stream = torch.cuda.Stream()
-        self.compute_stream = torch.cuda.Stream()
-
     def load_model(self) -> None:
         from light_vllm.core.loader.loader import (get_model_loader,
                                                    initialize_model)
@@ -162,6 +158,7 @@ class GPUModelRunner:
         num_layers = self.model_config.get_num_layers()
         kv_caches = [None] * num_layers
         model_input = self.prepare_model_input(seqs)
+        model_input.to("cuda")
         self.execute_model(model_input, kv_caches)
         torch.cuda.synchronize()
         return
@@ -206,26 +203,18 @@ class GPUModelRunner:
         else:
             model_executable = self.model
 
-        with torch.cuda.stream(self.compute_stream):
-            hidden_states = model_executable(
-                input_ids=model_input.input_tokens,
-                positions=model_input.input_positions,
-                kv_caches=kv_caches,
-                attn_metadata=model_input.attn_metadata)
+        hidden_states = model_executable(
+            input_ids=model_input.input_tokens,
+            positions=model_input.input_positions,
+            kv_caches=kv_caches,
+            attn_metadata=model_input.attn_metadata)
 
-        self.logits_processor_stream.wait_stream(self.compute_stream)
+        logits = self.compute_logits(hidden_states,
+                                     model_input.sampling_metadata)
 
-        with torch.cuda.stream(self.logits_processor_stream):
-            logits = self.compute_logits(hidden_states,
-                                         model_input.sampling_metadata)
-
-        self.sampler_stream.wait_stream(self.logits_processor_stream)
-
-        with torch.cuda.stream(self.sampler_stream):
-            output = self.sample(
-                logits=logits,
-                sampling_metadata=model_input.sampling_metadata,
-            )
-        self.sampler_stream.synchronize()
+        output = self.sample(
+            logits=logits,
+            sampling_metadata=model_input.sampling_metadata,
+        )
 
         return output

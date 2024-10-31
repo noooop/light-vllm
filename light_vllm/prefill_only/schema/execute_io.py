@@ -12,12 +12,13 @@ class ModelInputForGPU(ModelInput):
     positions: torch.Tensor
     attn_metadata: AttentionMetadata
 
-    def to(self, target_device, non_blocking=False):
+    def to(self, target_device, non_blocking=True):
         for k in self.__dict__:
             if not hasattr(self.__dict__[k], "to"):
                 continue
             self.__dict__[k] = self.__dict__[k].to(device=target_device,
                                                    non_blocking=non_blocking)
+        return self
 
     def to_dict(self):
         out = self.__dict__

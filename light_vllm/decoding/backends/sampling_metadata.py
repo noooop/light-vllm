@@ -9,8 +9,8 @@ from light_vllm.decoding.backends.sampling_params import (SamplingParams,
 from light_vllm.decoding.schema.sequence import (VLLM_TOKEN_ID_ARRAY_TYPE,
                                                  SequenceData,
                                                  SequenceGroupMetadata)
-from light_vllm.utils import (PyObjectCache, async_tensor_h2d,
-                              is_pin_memory_available, make_tensor_with_pad)
+from light_vllm.utils import (PyObjectCache, is_pin_memory_available,
+                              make_tensor_with_pad)
 
 _SAMPLING_EPS = 1e-5
 
@@ -149,7 +149,6 @@ class SamplingMetadata:
         seq_group_metadata_list: List[SequenceGroupMetadata],
         seq_lens: List[int],
         query_lens: List[int],
-        device: str,
         pin_memory: bool,
         generators: Optional[Dict[str, torch.Generator]] = None,
         cache: Optional[SamplingMetadataCache] = None,
@@ -160,19 +159,20 @@ class SamplingMetadata:
             categorized_sample_indices,
             num_prompts,
         ) = _prepare_seq_groups(seq_group_metadata_list, seq_lens, query_lens,
-                                device, generators, cache)
-        selected_token_indices = async_tensor_h2d(
+                                generators, cache)
+
+        selected_token_indices = torch.tensor(
             selected_token_indices,
             dtype=torch.long,
-            target_device=device,
+            device="cpu",
             pin_memory=pin_memory,
         )
         categorized_sample_indices = {
             t:
-            async_tensor_h2d(
+            torch.tensor(
                 seq_ids,
                 dtype=torch.int,
-                target_device=device,
+                device="cpu",
                 pin_memory=pin_memory,
             )
             for t, seq_ids in categorized_sample_indices.items()
@@ -193,12 +193,21 @@ class SamplingMetadata:
             f"selected_token_indices={self.selected_token_indices}, "
             f"categorized_sample_indices={self.categorized_sample_indices}), ")
 
+    def to(self, device, non_blocking=True):
+        self.selected_token_indices = self.selected_token_indices.to(
+            device=device, non_blocking=non_blocking)
+        for k in self.categorized_sample_indices:
+            self.categorized_sample_indices[
+                k] = self.categorized_sample_indices[k].to(
+                    device=device, non_blocking=non_blocking)
+
+        return self
+
 
 def _prepare_seq_groups(
     seq_group_metadata_list: List[SequenceGroupMetadata],
     seq_lens: List[int],
     query_lens: List[int],
-    device: str,
     generators: Optional[Dict[str, torch.Generator]] = None,
     cache: Optional[SamplingMetadataCache] = None,
 ) -> Tuple[
@@ -273,7 +282,7 @@ def _prepare_seq_groups(
 
         if seq_group_metadata.is_prompt:
             if sampling_params.seed is not None:
-                generator = torch.Generator(device=device).manual_seed(
+                generator = torch.Generator(device="cuda:0").manual_seed(
                     sampling_params.seed)
                 if generators is not None:
                     generators[seq_group_metadata.request_id] = generator
@@ -579,16 +588,21 @@ class SamplingTensors:
         # transfer to device.
 
         return cls(
-            temperatures=temperatures_t.to(device=device, non_blocking=True),
-            top_ps=top_ps_t.to(device=device, non_blocking=True),
-            top_ks=top_ks_t.to(device=device, non_blocking=True),
-            min_ps=min_ps_t.to(device=device, non_blocking=True),
-            presence_penalties=presence_penalties_t.to(device=device,
-                                                       non_blocking=True),
-            frequency_penalties=frequency_penalties_t.to(device=device,
-                                                         non_blocking=True),
-            repetition_penalties=repetition_penalties_t.to(device=device,
-                                                           non_blocking=True),
-            prompt_tokens=prompt_t.to(device=device, non_blocking=True),
-            output_tokens=output_t.to(device=device, non_blocking=True),
+            temperatures=temperatures_t,
+            top_ps=top_ps_t,
+            top_ks=top_ks_t,
+            min_ps=min_ps_t,
+            presence_penalties=presence_penalties_t,
+            frequency_penalties=frequency_penalties_t,
+            repetition_penalties=repetition_penalties_t,
+            prompt_tokens=prompt_t,
+            output_tokens=output_t,
         )
+
+    def to(self, device, non_blocking=True):
+        for k in self.__dict__:
+            if not hasattr(self.__dict__[k], "to"):
+                continue
+            self.__dict__[k] = self.__dict__[k].to(device=device,
+                                                   non_blocking=non_blocking)
+        return self

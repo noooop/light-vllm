@@ -179,7 +179,8 @@ class DecodeOnlyCommonMetadataBuilder(
             for i, block_table in enumerate(self.block_tables):
                 if block_table:
                     input_block_tables[i, :len(block_table)] = block_table
-            block_tables = torch.tensor(input_block_tables, device=device)
+            block_tables = torch.tensor(input_block_tables,
+                                        device=device).pin_memory()
         else:
             block_tables = make_tensor_with_pad(
                 self.block_tables,

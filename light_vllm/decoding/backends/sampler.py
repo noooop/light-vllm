@@ -129,6 +129,8 @@ class Sampler(nn.Module):
         do_top_p_top_k = self._do_top_p_top_k
         do_min_p = self._do_min_p
 
+        sampling_tensors.to("cuda:0", non_blocking=True)
+
         logits = _apply_min_tokens_penalty(logits, sampling_metadata)
 
         # Apply presence and frequency penalties.
