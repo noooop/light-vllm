@@ -1,8 +1,7 @@
 from typing import Optional, Tuple
 
-import torch
-
 from light_vllm.core.config import EngineConfig
+from light_vllm.core.executor import FrierenExecutor
 from light_vllm.core.llm_engine import LLMEngine
 from light_vllm.core.schema.execute_io import ExecuteInput, ExecuteOutput
 from light_vllm.core.worker import WorkerWrapperBase
@@ -36,6 +35,7 @@ class GPUExecutor:
         self.workflow = workflow
         self.attn_backend = attn_backend
         self._init_executor()
+        self.executor = FrierenExecutor(self.worker)
 
     @classmethod
     def from_engine(cls, engine: LLMEngine):
@@ -76,14 +76,7 @@ class GPUExecutor:
 
     def execute_model(self,
                       execute_input: ExecuteInput) -> Optional[ExecuteOutput]:
-
-        self.worker.non_blocking_h2d(execute_input)
-        execute_output = self.worker(execute_input)
-        self.worker.non_blocking_d2h(execute_output)
-
-        torch.cuda.synchronize()
-
-        return execute_output
+        return self.executor.execute_model(execute_input)
 
     def initialize_kv_caches(self, engine: LLMEngine) -> None:
         """Initialize the KV cache in the worker(s).
