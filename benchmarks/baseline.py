@@ -18,13 +18,11 @@ def benchmark(args):
         model=args.model,
         tokenizer=args.tokenizer,
         quantization=args.quantization,
-        tensor_parallel_size=args.tensor_parallel_size,
         seed=args.seed,
         trust_remote_code=args.trust_remote_code,
         dtype=args.dtype,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
-        enforce_eager=args.enforce_eager,
         kv_cache_dtype=args.kv_cache_dtype,
         quantization_param_path=args.quantization_param_path,
         device=args.device,
@@ -32,9 +30,7 @@ def benchmark(args):
         download_dir=args.download_dir,
         enable_chunked_prefill=args.enable_chunked_prefill,
         max_num_batched_tokens=args.max_num_batched_tokens,
-        max_num_seqs=args.max_num_seqs,
-        distributed_executor_backend=args.distributed_executor_backend,
-        disable_log_stats=True)
+        max_num_seqs=args.max_num_seqs)
 
     engine = LLMEngine.from_engine_args(engine_args)
 
@@ -97,19 +93,17 @@ if __name__ == '__main__':
     args.tokenizer = args.model
     args.quantization = None
     args.quantization_param_path = None
-    args.tensor_parallel_size = 1
     args.seed = 0
     args.n = 1
     args.num_prompts = 1000
     args.dtype = 'auto'
     args.max_model_len = 5000
-    args.enforce_eager = True
+
     args.kv_cache_dtype = "auto"
     args.device = "cuda"
     args.enable_prefix_caching = False
     args.gpu_memory_utilization = 0.9
     args.output_json = None
-    args.distributed_executor_backend = None
     args.download_dir = None
 
     import sys
