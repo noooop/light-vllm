@@ -14,10 +14,10 @@ from light_vllm.decoding.backends.sampling_metadata import SamplingMetadata
 from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,
                                         SchedulerConfig)
-from light_vllm.decoding.inputs import INPUT_REGISTRY
 from light_vllm.decoding.schema.execute_io import (
     DecodingModelInputForGPUWithSamplingMetadata, SamplerOutput)
-from light_vllm.decoding.schema.sequence import SequenceGroupMetadata
+from light_vllm.decoding.schema.sequence import (SequenceData,
+                                                 SequenceGroupMetadata)
 from light_vllm.logger import init_logger
 from light_vllm.utils import (DeviceMemoryProfiler, is_hip,
                               is_pin_memory_available)
@@ -80,10 +80,6 @@ class GPUModelRunner:
                               model_config=self.model_config,
                               device_config=self.device_config)
 
-        self.model_memory_usage = m.consumed_memory
-        logger.info("Loading model weights took %.4f GB",
-                    self.model_memory_usage / float(2**30))
-
         if self.kv_cache_dtype == "fp8" and is_hip():
             # Currently only ROCm accepts kv-cache scaling factors
             # via quantization_param_path and this will be deprecated
@@ -117,27 +113,15 @@ class GPUModelRunner:
         sampling_params = SamplingParams(top_p=0.99, top_k=self.vocab_size - 1)
         max_num_batched_tokens = self.scheduler_config.max_num_batched_tokens
         max_num_seqs = self.scheduler_config.max_num_seqs
-        # This represents the maximum number of different requests
 
-        # Profile memory usage with max_num_sequences sequences and the total
-        # number of tokens equal to max_num_batched_tokens.
         seqs: List[SequenceGroupMetadata] = []
-        # Additional GPU memory may be needed for vision encoding, which needs
-        # to be accounted for when calculating the GPU blocks for
-        # vLLM blocker manager.
-        # To exercise the worst scenario for GPU memory consumption,
-        # the number of seqs (batch_size) is chosen to maximize the number
-        # of images processed.
-        model_config = self.model_config
-
         batch_size = 0
         for group_id in range(max_num_seqs):
             seq_len = (max_num_batched_tokens // max_num_seqs +
                        (group_id < max_num_batched_tokens % max_num_seqs))
             batch_size += seq_len
 
-            seq_data = INPUT_REGISTRY.dummy_data_for_profiling(
-                self.model_config, seq_len)
+            seq_data = SequenceData.from_token_counts((0, seq_len))
 
             # Having more tokens is over-conservative but otherwise fine
             assert len(seq_data.prompt_token_ids) >= seq_len, (
