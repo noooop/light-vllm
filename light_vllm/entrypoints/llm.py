@@ -24,7 +24,6 @@ class LLM:
         tokenizer_mode: str = "auto",
         skip_tokenizer_init: bool = False,
         trust_remote_code: bool = False,
-        tensor_parallel_size: int = 1,
         dtype: str = "auto",
         quantization: Optional[str] = None,
         revision: Optional[str] = None,
@@ -33,14 +32,8 @@ class LLM:
         gpu_memory_utilization: float = 0.9,
         swap_space: int = 4,
         cpu_offload_gb: float = 0,
-        enforce_eager: bool = False,
-        max_context_len_to_capture: Optional[int] = None,
-        max_seq_len_to_capture: int = 8192,
-        disable_custom_all_reduce: bool = False,
         **kwargs,
     ) -> None:
-        if "disable_log_stats" not in kwargs:
-            kwargs["disable_log_stats"] = True
         removed_vision_keys = ("image_token_id", "image_feature_size",
                                "image_input_shape", "image_input_type")
         if any(k in kwargs for k in removed_vision_keys):
@@ -52,7 +45,6 @@ class LLM:
             tokenizer_mode=tokenizer_mode,
             skip_tokenizer_init=skip_tokenizer_init,
             trust_remote_code=trust_remote_code,
-            tensor_parallel_size=tensor_parallel_size,
             dtype=dtype,
             quantization=quantization,
             revision=revision,
@@ -61,10 +53,6 @@ class LLM:
             gpu_memory_utilization=gpu_memory_utilization,
             swap_space=swap_space,
             cpu_offload_gb=cpu_offload_gb,
-            enforce_eager=enforce_eager,
-            max_context_len_to_capture=max_context_len_to_capture,
-            max_seq_len_to_capture=max_seq_len_to_capture,
-            disable_custom_all_reduce=disable_custom_all_reduce,
             **kwargs,
         )
         self.llm_engine = LLMEngine.from_engine_args(engine_args)

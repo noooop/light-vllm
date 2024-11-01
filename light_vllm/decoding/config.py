@@ -102,9 +102,6 @@ class ChatModelConfig(ModelConfig):
         max_model_len: Optional[int] = None,
         quantization: Optional[str] = None,
         quantization_param_path: Optional[str] = None,
-        enforce_eager: bool = True,
-        max_context_len_to_capture: Optional[int] = None,
-        max_seq_len_to_capture: Optional[int] = None,
         max_logprobs: int = 20,
         disable_sliding_window: bool = False,
         skip_tokenizer_init: bool = False,
@@ -117,20 +114,6 @@ class ChatModelConfig(ModelConfig):
                          disable_sliding_window, skip_tokenizer_init,
                          served_model_name)
         self.max_logprobs = max_logprobs
-        self.enforce_eager = enforce_eager
-        if max_context_len_to_capture is not None:
-            raise ValueError("`max_context_len_to_capture` is deprecated. "
-                             "Use `max_seq_len_to_capture` instead.")
-        self.max_seq_len_to_capture = max_seq_len_to_capture
-        self.max_logprobs = max_logprobs
-
-        self._verify_cuda_graph()
-
-    def _verify_cuda_graph(self) -> None:
-        if self.max_seq_len_to_capture is None:
-            self.max_seq_len_to_capture = self.max_model_len
-        self.max_seq_len_to_capture = min(self.max_seq_len_to_capture,
-                                          self.max_model_len)
 
 
 class SchedulerConfig:
@@ -243,8 +226,7 @@ class ChatEngineConfig(EngineConfig):
             "rope_scaling=%r, rope_theta=%r, tokenizer_revision=%s, "
             "trust_remote_code=%s, dtype=%s, max_seq_len=%d, "
             "download_dir=%r, load_format=%s, "
-            "quantization=%s, "
-            "enforce_eager=%s, kv_cache_dtype=%s, "
+            "quantization=%s, kv_cache_dtype=%s, "
             "quantization_param_path=%s, device_config=%s, "
             "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
             "enable_prefix_caching=%s)",
@@ -263,7 +245,6 @@ class ChatEngineConfig(EngineConfig):
             self.load_config.download_dir,
             self.load_config.load_format,
             self.model_config.quantization,
-            self.model_config.enforce_eager,
             self.cache_config.cache_dtype,
             self.model_config.quantization_param_path,
             self.device_config.device,

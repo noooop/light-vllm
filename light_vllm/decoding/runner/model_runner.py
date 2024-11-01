@@ -15,7 +15,6 @@ from light_vllm.decoding.backends.sampling_params import SamplingParams
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,
                                         SchedulerConfig)
 from light_vllm.decoding.inputs import INPUT_REGISTRY
-from light_vllm.decoding.runner.cuda_graph_util import CUDAGraph
 from light_vllm.decoding.schema.execute_io import (
     DecodingModelInputForGPUWithSamplingMetadata, SamplerOutput)
 from light_vllm.decoding.schema.sequence import SequenceGroupMetadata
@@ -53,8 +52,6 @@ class GPUModelRunner:
         self.kv_cache_dtype = kv_cache_dtype
         self.sliding_window = model_config.get_sliding_window()
         self.block_size = cache_config.block_size
-        self.cuda_graph = CUDAGraph(model_config, cache_config,
-                                    scheduler_config)
 
         # Lazy initialization
         self.model: nn.Module  # Set after load_model
@@ -163,9 +160,6 @@ class GPUModelRunner:
         torch.cuda.synchronize()
         return
 
-    def capture_model(self, kv_caches: List[torch.Tensor]) -> None:
-        self.cuda_graph.capture_model(self.model, self.attn_backend, kv_caches)
-
     @property
     def vocab_size(self) -> int:
         return self.model_config.get_vocab_size()
@@ -193,21 +187,10 @@ class GPUModelRunner:
         model_input: DecodingModelInputForGPUWithSamplingMetadata,
         kv_caches: List[torch.Tensor],
     ) -> SamplerOutput:
-
-        # Currently cuda graph is only supported by the decode phase.
-        assert model_input.attn_metadata is not None
-        prefill_meta = model_input.attn_metadata.prefill_metadata
-        decode_meta = model_input.attn_metadata.decode_metadata
-        if prefill_meta is None and decode_meta.use_cuda_graph:
-            model_executable = self.cuda_graph.get_graph_runner(model_input)
-        else:
-            model_executable = self.model
-
-        hidden_states = model_executable(
-            input_ids=model_input.input_tokens,
-            positions=model_input.input_positions,
-            kv_caches=kv_caches,
-            attn_metadata=model_input.attn_metadata)
+        hidden_states = self.model(input_ids=model_input.input_tokens,
+                                   positions=model_input.input_positions,
+                                   kv_caches=kv_caches,
+                                   attn_metadata=model_input.attn_metadata)
 
         logits = self.compute_logits(hidden_states,
                                      model_input.sampling_metadata)

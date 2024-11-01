@@ -28,7 +28,6 @@ class ChatModelPreProcessor(ModelInputBuilder):
         scheduler_config: SchedulerConfig,
         cache_config: CacheConfig,
         attn_backend,
-        cuda_graph,
     ):
         self.device = device_config.device
 
@@ -36,7 +35,6 @@ class ChatModelPreProcessor(ModelInputBuilder):
         self.scheduler_config = scheduler_config
         self.cache_config = cache_config
         self.attn_backend = attn_backend
-        self.cuda_graph = cuda_graph
 
     @classmethod
     def from_engine(cls, engine):
@@ -45,8 +43,7 @@ class ChatModelPreProcessor(ModelInputBuilder):
             engine.engine_config.model_config,
             engine.engine_config.scheduler_config,
             engine.engine_config.cache_config,
-            attn_backend=engine.executor.worker.model_runner.attn_backend,
-            cuda_graph=engine.executor.worker.model_runner.cuda_graph)
+            attn_backend=engine.executor.worker.model_runner.attn_backend)
 
     def _prepare_model_input_tensors(
         self, seq_group_metadata_list: List[SequenceGroupMetadata]
@@ -56,7 +53,6 @@ class ChatModelPreProcessor(ModelInputBuilder):
             scheduler_config=self.scheduler_config,
             cache_config=self.cache_config,
             attn_backend=self.attn_backend,
-            cuda_graph=self.cuda_graph,
             device=self.device)
         for seq_group_metadata in seq_group_metadata_list:
             builder.add_seq_group(seq_group_metadata)
@@ -177,7 +173,7 @@ class ModelInputForGPUBuilder:
 
     def __init__(self, model_config: ModelConfig,
                  scheduler_config: SchedulerConfig, cache_config: CacheConfig,
-                 attn_backend, cuda_graph, device):
+                 attn_backend, device):
         # Compute functions for each sequence in a sequence group.
         # WARNING: The order of the functions matters!
         self.per_seq_compute_fns = [
@@ -201,7 +197,6 @@ class ModelInputForGPUBuilder:
         # Attention metadata inputs.
         self.attn_metadata_builder = attn_backend.make_metadata_builder(
             weakref.proxy(self))
-        self.cuda_graph = cuda_graph
 
         # Engine/Model configurations.
         self.chunked_prefill_enabled = (
@@ -360,11 +355,15 @@ class ModelInputForGPUBuilder:
         query_lens = flatten_2d_lists(
             [inter_data.query_lens for inter_data in self.inter_data_list])
 
-        (input_tokens, input_positions, input_tokens_tensor,
-         input_positions_tensor, seq_lens, cuda_graph_pad_size,
-         batch_size) = (self.cuda_graph.model_input_for_gpu_builder_maybe_pad(
-             self, input_tokens, input_positions, seq_lens,
-             max_decode_seq_len))
+        batch_size = len(input_tokens)
+        input_tokens_tensor = torch.tensor(input_tokens,
+                                           dtype=torch.long,
+                                           device="cpu")
+        input_positions_tensor = torch.tensor(input_positions,
+                                              dtype=torch.long,
+                                              device="cpu")
+
+        cuda_graph_pad_size = -1
 
         # Attention metadata.
         attn_metadata = self.attn_metadata_builder.build(

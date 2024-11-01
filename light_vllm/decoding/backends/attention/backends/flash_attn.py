@@ -12,7 +12,7 @@ from light_vllm.decoding.backends.attention.backends.abstract import (
 from light_vllm.decoding.backends.attention.backends.utils import (
     compute_slot_mapping, compute_slot_mapping_start_idx,
     is_block_tables_empty)
-from light_vllm.utils import is_pin_memory_available
+from light_vllm.utils import is_pin_memory_available, make_tensor_with_pad
 
 pin_memory = is_pin_memory_available()
 
@@ -298,8 +298,7 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
                                 self.input_builder.chunked_prefill_enabled,
                                 prefix_cache_hit)
 
-        device = self.input_builder.device
-        use_captured_graph = cuda_graph_pad_size != -1
+        use_captured_graph = False
 
         max_query_len = max(query_lens)
         max_prefill_seq_len = max(self.prefill_seq_lens, default=0)
@@ -308,10 +307,11 @@ class DecodeOnlyFlashAttentionMetadataBuilder(
 
         assert max_query_len > 0, ("query_lens: {}".format(query_lens))
 
-        num_decode_tokens, block_tables = (
-            self.input_builder.cuda_graph.attention_metadata_builder_maybe_pad(
-                self, cuda_graph_pad_size, num_decode_tokens, batch_size,
-                device))
+        block_tables = make_tensor_with_pad(self.block_tables,
+                                            pad=0,
+                                            dtype=torch.int,
+                                            device="cpu",
+                                            pin_memory=pin_memory)
 
         context_lens_tensor = torch.tensor(self.context_lens,
                                            dtype=torch.int,
