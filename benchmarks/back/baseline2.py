@@ -1,3 +1,4 @@
+import os
 import random
 import time
 
@@ -7,18 +8,25 @@ import numpy as np
 def benchmark(args):
     random.seed(args.seed)
 
-    from light_vllm import LLMEngine, SamplingParams
-    from light_vllm.decoding.arg_utils import ChatEngineArgs as EngineArgs
+    os.environ["VLLM_LOGGING_LEVEL"] = "ERROR"
+    os.environ["VLLM_NO_USAGE_STATS"] = "True"
+
+    import vllm
+    from vllm import EngineArgs, LLMEngine, SamplingParams, TextPrompt
+
+    print(vllm.__version__)
 
     engine_args = EngineArgs(
         model=args.model,
         tokenizer=args.tokenizer,
         quantization=args.quantization,
+        tensor_parallel_size=args.tensor_parallel_size,
         seed=args.seed,
         trust_remote_code=args.trust_remote_code,
         dtype=args.dtype,
         max_model_len=args.max_model_len,
         gpu_memory_utilization=args.gpu_memory_utilization,
+        enforce_eager=args.enforce_eager,
         kv_cache_dtype=args.kv_cache_dtype,
         quantization_param_path=args.quantization_param_path,
         device=args.device,
@@ -27,8 +35,8 @@ def benchmark(args):
         enable_chunked_prefill=args.enable_chunked_prefill,
         max_num_batched_tokens=args.max_num_batched_tokens,
         max_num_seqs=args.max_num_seqs,
-        scheduling=args.scheduling)
-
+        distributed_executor_backend=args.distributed_executor_backend,
+        disable_log_stats=True)
     engine = LLMEngine.from_engine_args(engine_args)
 
     prompt = "hi" * (args.input_len - 1)
@@ -37,11 +45,12 @@ def benchmark(args):
 
     start = time.perf_counter()
     for request_id, (prompt, _, output_len) in enumerate(requests):
-        inputs = prompt
+        inputs = TextPrompt(prompt=prompt)
         sampling_params = SamplingParams(
             n=args.n,
-            temperature=1.0,
+            temperature=0.0 if args.use_beam_search else 1.0,
             top_p=1.0,
+            use_beam_search=args.use_beam_search,
             ignore_eos=True,
             max_tokens=output_len,
         )
@@ -82,54 +91,44 @@ if __name__ == '__main__':
     args = edict()
 
     args.dataset = None
-    args.input_len = 256
-    args.output_len = 16
+    args.input_len = 512
+    args.output_len = 512
 
-    args.model = "Qwen/Qwen2.5-7B-Instruct-AWQ"
+    args.model = "Qwen/Qwen2-7B-Instruct"
     args.trust_remote_code = False
     args.tokenizer = args.model
     args.quantization = None
     args.quantization_param_path = None
+    args.tensor_parallel_size = 1
     args.seed = 0
     args.n = 1
+    args.use_beam_search = False
     args.num_prompts = 1000
     args.dtype = 'auto'
-    args.max_model_len = 1000
-
+    args.max_model_len = 10000
+    args.enforce_eager = True
     args.kv_cache_dtype = "auto"
     args.device = "cuda"
     args.enable_prefix_caching = False
     args.gpu_memory_utilization = 0.9
     args.output_json = None
+    args.distributed_executor_backend = None
     args.download_dir = None
 
-    import sys
     from concurrent.futures import ProcessPoolExecutor
 
     def run(args):
-        try:
-            with ProcessPoolExecutor(1) as executor:
-                f = executor.submit(benchmark, args)
-                f.result()
-        except Exception:
-            pass
+        with ProcessPoolExecutor(1) as executor:
+            f = executor.submit(benchmark, args)
+            f.result()
 
-    if "full" in sys.argv:
-        max_num_seqs_list1 = [768, 512, 384, 256, 128, 64, 32, 16, 8]
-        max_num_seqs_list2 = [1536, 1024, 768, 512, 384, 256, 128, 64, 32]
-    else:
-        max_num_seqs_list1 = [256, 128]
-        max_num_seqs_list2 = max_num_seqs_list1
+    max_num_seqs_list = [256]
 
-    for scheduling in ["sync", "simple_async", "async", "double_buffer"]:
-        print(f"scheduling: {scheduling}")
-        args.scheduling = scheduling
-
-        print()
-        print("enable_chunked_prefill = True")
-        for max_num_seqs in max_num_seqs_list2:
-            print("max_num_seqs", max_num_seqs)
-            args.enable_chunked_prefill = True
-            args.max_num_seqs = max_num_seqs
-            args.max_num_batched_tokens = max_num_seqs
-            run(args)
+    print()
+    print("enable_chunked_prefill = True")
+    for max_num_seqs in max_num_seqs_list:
+        print("max_num_seqs", max_num_seqs)
+        args.enable_chunked_prefill = True
+        args.max_num_seqs = max_num_seqs
+        args.max_num_batched_tokens = args.max_num_seqs
+        run(args)

@@ -436,6 +436,7 @@ class SequenceGroup:
         self.embeddings = embeddings
         self.encoder_seq = encoder_seq
         self.trace_headers = trace_headers
+        self.busy = False
 
     @property
     def prompt(self) -> Optional[str]:

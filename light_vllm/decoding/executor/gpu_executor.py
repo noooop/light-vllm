@@ -1,3 +1,5 @@
+import atexit
+from queue import Queue
 from typing import Optional, Tuple
 
 from light_vllm.core.config import EngineConfig
@@ -106,3 +108,49 @@ class GPUExecutor:
 
     def shutdown_execute_loop(self):
         pass
+
+
+class GPUAsyncExecutor(GPUExecutor):
+    support_scheduling = ["async_scheduling"]
+
+    def __init__(self, engine_config: EngineConfig, workflow: Workflow,
+                 attn_backend: DecodeOnlyAttentionBackend, executor_in: Queue,
+                 executor_out: Queue) -> None:
+        super().__init__(engine_config, workflow, attn_backend)
+        from threading import Thread
+
+        self.Thread = Thread
+        self.executor_in = executor_in
+        self.executor_out = executor_out
+
+        self.executor_thread: Optional[Thread] = None
+
+        if self.engine_config.scheduler_config.scheduling == "double_buffer":
+            self.execute_loop = self.executor.double_buffer_execute_loop
+        elif self.engine_config.scheduler_config.scheduling == "simple_async":
+            self.execute_loop = self.executor.simple_async_execute_loop
+        else:
+            self.execute_loop = self.executor.async_execute_loop
+
+    @classmethod
+    def from_engine(cls, engine: LLMEngine):
+        return cls(engine_config=engine.engine_config,
+                   workflow=engine.workflow,
+                   attn_backend=engine.attn_backend,
+                   executor_in=engine.executor_in,
+                   executor_out=engine.executor_out)
+
+    def ensure_start_execute_loop(self):
+        if self.executor_thread is None or not self.executor_thread.is_alive():
+            self.executor_thread = self.Thread(target=self.execute_loop,
+                                               args=(self.executor_in,
+                                                     self.executor_out),
+                                               daemon=True)
+            self.executor_thread.start()
+            atexit.register(self.shutdown_execute_loop)
+
+    def shutdown_execute_loop(self):
+        if self.executor_thread.is_alive():
+            self.executor_in.put(None)
+            self.executor_thread.join()
+            atexit.unregister(self.shutdown_execute_loop)

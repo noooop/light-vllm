@@ -110,6 +110,13 @@ class Worker:
         free_gpu_memory, total_gpu_memory = torch.cuda.mem_get_info()
 
         peak_memory = self.init_gpu_memory - free_gpu_memory
+
+        runtime_memory = peak_memory - model_memory_usage
+
+        if self.scheduler_config.scheduling in ["async", "double_buffer"]:
+            peak_memory += runtime_memory
+            runtime_memory *= 2
+
         assert peak_memory > 0, (
             "Error in memory profiling. "
             f"Initial free memory {self.init_gpu_memory}, current free memory"
@@ -120,7 +127,7 @@ class Worker:
             "After profile run: Peak Memory %.4f GB, "
             "of which Runtime Memory %.4f GB, "
             "%.4f GB leave for KV cache", peak_memory / _GB,
-            (peak_memory - model_memory_usage) / _GB,
+            runtime_memory / _GB,
             (total_gpu_memory * self.cache_config.gpu_memory_utilization -
              peak_memory) / _GB)
 

@@ -9,7 +9,7 @@ from light_vllm.core.processor.model_input_builder import ModelInputBuilder
 from light_vllm.decoding.backends.sampling_metadata import SamplingMetadata
 from light_vllm.decoding.config import (CacheConfig, ModelConfig,
                                         SchedulerConfig)
-from light_vllm.decoding.scheduler import SchedulerOutput
+from light_vllm.decoding.scheduler import DecodingSchedulerOutput
 from light_vllm.decoding.schema.execute_io import (
     DecodingModelInputForGPU, DecodingModelInputForGPUWithSamplingMetadata,
     DecodingWorkerInputForGPU, ExecuteInput)
@@ -77,8 +77,8 @@ class ChatModelPreProcessor(ModelInputBuilder):
 
     @torch.inference_mode()
     def prepare_worker_input(
-            self,
-            scheduler_output: SchedulerOutput) -> DecodingWorkerInputForGPU:
+        self, scheduler_output: DecodingSchedulerOutput
+    ) -> DecodingWorkerInputForGPU:
         num_requests = len(scheduler_output.seq_group_metadata_list)
 
         blocks_to_swap_in = torch.tensor(scheduler_output.blocks_to_swap_in,
@@ -100,7 +100,8 @@ class ChatModelPreProcessor(ModelInputBuilder):
                                          blocks_to_swap_out=blocks_to_swap_out,
                                          blocks_to_copy=blocks_to_copy)
 
-    def __call__(self, scheduler_output: SchedulerOutput) -> ExecuteInput:
+    def __call__(self,
+                 scheduler_output: DecodingSchedulerOutput) -> ExecuteInput:
         worker_input = self.prepare_worker_input(scheduler_output)
         model_input = self.prepare_model_input(
             scheduler_output.seq_group_metadata_list)

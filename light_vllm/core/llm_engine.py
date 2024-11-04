@@ -63,7 +63,7 @@ class LLMEngine:
             raise RuntimeError(f"Executor support scheduling: "
                                f"{executor_cls.support_scheduling}."
                                f"Scheduler support scheduling: "
-                               f"{executor_cls.support_scheduling}."
+                               f"{scheduler_cls.support_scheduling}."
                                f"Not compatible")
 
         if self.use_async_scheduling:
@@ -141,8 +141,12 @@ class LLMEngine:
     def _put_as_many_as_possible(self):
         while self.num_on_the_fly < self.max_num_on_the_fly:
             scheduler_output = self.scheduler.schedule()
+            if scheduler_output is None:
+                break
+
             if scheduler_output.is_empty():
                 break
+
             executor_input = self.model_inputs_builder(scheduler_output)
 
             self.executor_in.put((scheduler_output, executor_input))

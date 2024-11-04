@@ -5,7 +5,7 @@ from light_vllm.core.processor.output_processor import OutputProcessor
 from light_vllm.decoding.backends.sampler import (get_logprobs,
                                                   get_pythonized_sample_results
                                                   )
-from light_vllm.decoding.scheduler import SchedulerOutput
+from light_vllm.decoding.scheduler import DecodingSchedulerOutput
 from light_vllm.decoding.schema.engine_io import ChatModelRequestOutput
 from light_vllm.decoding.schema.execute_io import (
     CompletionSequenceGroupOutput, SamplerOutput, SequenceOutput)
@@ -65,7 +65,7 @@ class ChatModelOutputProcessor(OutputProcessor):
         return sampler_output
 
     def __call__(
-            self, scheduler_output: SchedulerOutput,
+            self, scheduler_output: DecodingSchedulerOutput,
             execute_output: SamplerOutput) -> List[ChatModelRequestOutput]:
         now = time.time()
 

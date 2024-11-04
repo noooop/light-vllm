@@ -117,31 +117,7 @@ class ChatModelConfig(ModelConfig):
 
 
 class SchedulerConfig:
-    """Scheduler configuration.
-
-    Args:
-        max_num_batched_tokens: Maximum number of tokens to be processed in
-            a single iteration.
-        max_num_seqs: Maximum number of sequences to be processed in a single
-            iteration.
-        max_model_len: Maximum length of a sequence (including prompt
-            and generated text).
-        use_v2_block_manager: Whether to use the BlockSpaceManagerV2 or not.
-        num_lookahead_slots: The number of slots to allocate per sequence per
-            step, beyond the known token ids. This is used in speculative
-            decoding to store KV activations of tokens which may or may not be
-            accepted.
-        delay_factor: Apply a delay (of delay factor multiplied by previous
-            prompt latency) before scheduling next prompt.
-        enable_chunked_prefill: If True, prefill requests can be chunked based
-            on the remaining max_num_batched_tokens.
-        preemption_mode: Whether to perform preemption by swapping or 
-            recomputation. If not specified, we determine the mode as follows:
-            We use recomputation by default since it incurs lower overhead than
-            swapping. However, when the sequence group has multiple sequences
-            (e.g., beam search), recomputation is not currently supported. In
-            such a case, we use swapping instead.
-    """
+    supported_scheduling = ["sync", "simple_async", "async", "double_buffer"]
 
     def __init__(self,
                  max_num_batched_tokens: Optional[int],
@@ -151,7 +127,9 @@ class SchedulerConfig:
                  num_lookahead_slots: int = 0,
                  delay_factor: float = 0.0,
                  enable_chunked_prefill: bool = False,
-                 preemption_mode: Optional[str] = None) -> None:
+                 preemption_mode: Optional[str] = None,
+                 max_num_on_the_fly: Optional[int] = None,
+                 scheduling: str = "async") -> None:
         if max_num_batched_tokens is not None:
             self.max_num_batched_tokens = max_num_batched_tokens
         else:
@@ -168,6 +146,14 @@ class SchedulerConfig:
                 "Chunked prefill is enabled with max_num_batched_tokens=%d.",
                 self.max_num_batched_tokens)
 
+        if max_num_on_the_fly is None:
+            if scheduling == "double_buffer":
+                self.max_num_on_the_fly = 3
+            else:
+                self.max_num_on_the_fly = 2
+        else:
+            self.max_num_on_the_fly = max_num_on_the_fly
+
         self.max_num_seqs = max_num_seqs
         self.max_model_len = max_model_len
         self.use_v2_block_manager = use_v2_block_manager
@@ -175,6 +161,7 @@ class SchedulerConfig:
         self.delay_factor = delay_factor
         self.chunked_prefill_enabled = enable_chunked_prefill
         self.preemption_mode = preemption_mode
+        self.scheduling = scheduling
         self._verify_args()
 
     def _verify_args(self) -> None:
@@ -199,6 +186,11 @@ class SchedulerConfig:
                 "num_lookahead_slots "
                 f"({self.num_lookahead_slots}) must be greater than or "
                 "equal to 0.")
+
+        if self.max_num_on_the_fly < 2:
+            raise ValueError(
+                f"max_num_on_the_fly {self.max_num_on_the_fly} must "
+                "be greater than 1")
 
 
 @dataclass(frozen=True)
@@ -229,7 +221,7 @@ class ChatEngineConfig(EngineConfig):
             "quantization=%s, kv_cache_dtype=%s, "
             "quantization_param_path=%s, device_config=%s, "
             "seed=%d, served_model_name=%s, use_v2_block_manager=%s, "
-            "enable_prefix_caching=%s)",
+            "enable_prefix_caching=%s, scheduling=%s)",
             VLLM_VERSION,
             self.model_config.model,
             self.model_config.tokenizer,
@@ -252,4 +244,5 @@ class ChatEngineConfig(EngineConfig):
             self.model_config.served_model_name,
             self.scheduler_config.use_v2_block_manager,
             self.cache_config.enable_prefix_caching,
+            self.scheduler_config.scheduling,
         )
