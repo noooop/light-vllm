@@ -76,7 +76,7 @@ class Fp8Config(QuantizationConfig):
 
     def get_quant_method(self, layer: torch.nn.Module,
                          prefix: str) -> Optional["QuantizeMethodBase"]:
-        from light_vllm.attention.layer import (Attention
+        from light_vllm.backends.attention.layer import (Attention
                                                 )  # Avoid circular import
 
         if isinstance(layer, LinearBase):
