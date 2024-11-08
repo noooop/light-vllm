@@ -28,7 +28,8 @@ Does not support multiple machines and multiple GPUs
 # step 6 全部接入Workflow Defined Engine
 将所有东西移入wde文件夹，将所有东西移出wde文件夹，向wde致敬，删除wde文件夹
 
-暂时看起来不错
+# step 7 实现 decoding 模型异步调度
+
 
 # 警告
 这只是我个人实验（写着玩的）项目，快速测试各种想法
