@@ -1,6 +1,11 @@
 # light-vllm
 Does not support multiple machines and multiple GPUs
 
+# 目标圆满完成
+这个项目的目标是实现大语言模型推理异步调度，现在目标圆满完成
+代码已经清理整合到 https://github.com/noooop/wde
+完结撒花
+
 # step 1 Simplify
 大刀阔斧的删除以下模块
 - distributed ray
